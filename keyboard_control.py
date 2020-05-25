@@ -77,28 +77,7 @@ def activate_gripper(gripper_state):
 	except Exception as e:
 		print(e)
 
-if __name__=="__main__":
-	#os.system('source activate py27 && source home/beduffy/all_projects/arm_control_ros/devel/setup.bash && python /home/beduffy/all_projects/arm_control_ros/src/arm_control/control/scripts/rosservice_call_servo_gripper.py -m 700')
-	# subprocess.run("bash -c '/home/beduffy/anaconda/envs/py27/bin /home/beduffy/anaconda/envs/py27 && ... && source deactivate'" shell=True)
-	# subprocess.run("bash -c 'source /home/beduffy/anaconda/envs/py27/bin/activate /home/beduffy/anaconda/envs/py27'", shell=True)
-	# subprocess.run("bash -c 'source /home/beduffy/anaconda/bin/activate /home/beduffy/anaconda/envs/py27' && bash -c 'source /home/beduffy/all_projects/arm_control_ros/devel/setup.bash' && python /home/beduffy/all_projects/arm_control_ros/src/arm_control/control/scripts/rosservice_call_servo_gripper.py -m 1000", shell=True)
-	
-	# subprocess.Popen("./close_gripper.sh", shell=True)
-	# subprocess.Popen("./close_gripper.sh", '1400')
-	# try:
-	# 	subprocess.Popen(["./close_gripper.sh", '-m', '1400'])
-	# except Exception as e:
-	# 	print(e)
-	# subprocess.Popen(["./close_gripper.sh", '-m', '1400'])
-	# os.system("bash -c close_gripper.sh")
-	# sys.exit()
-
-
-	# gripper_servo_service = rospy.ServiceProxy('test_srv', Test)
-	# microsecond_delay = 1000
-	# gripper_servo_service(str(microsecond_delay))
-	# sys.exit()
-	
+if __name__=="__main__":	
 	gripper_state = 0
 	activate_gripper(gripper_state)
 
@@ -108,9 +87,6 @@ if __name__=="__main__":
 	robot.set_toolhead({"x": 80})  # Set gripper tip length for IK
 	mv_scale = 3
 	print(robot.connect())
-
-	trajectory_fp = 'latest_trajectory.json'
-	trajectory = []
 
 	last_time_command_ran = time.time()
 
@@ -180,21 +156,13 @@ if __name__=="__main__":
 					print("Saving position at: {}".format(pos))
 					trajectory.append(pos)
 				elif key == 'y':
-					# trajectory_fp
-					# with open('data.json', 'w') as fp:
-					#     json.dump(data, fp)
-					# print('Running saved trajectory at filepath: {}'.format(trajectory_fp))
-
 					print('Running saved trajectory')
 
 					for xyz_point in trajectory:
-						# import pdb;pdb.set_trace()
-						# xyz_point = xyz_point[:3]
 						command = generate_command(xyz_point, movement=0)
 						print(command)
 						count = 0
 						max_count = 1000
-						# played_command = False
 						if robot._device["state"] == 0:
 							robot.play(command)
 
@@ -207,13 +175,7 @@ if __name__=="__main__":
 							if count < max_count:
 								print('Count below max, iterating to next command')
 								continue
-								# robot.play(command)
-								# played_command = True
 							print('Past while loop, robot state: ', robot._device["state"])
-							# else:
-							# 	# pprint(robot._system["command"])
-							# 	robot.play(command)
-							# 	# played_command = True
 						else:
 							print('Robot busy, no command ran in trajectory')
 							break
