@@ -1,6 +1,6 @@
 #!/bin/bash
 echo $PWD
-echo $1
+echo $2
 source ~/archiconda3/etc/profile.d/conda.sh
 #source /home/beduffy/all_projects/arm_control
 #source activate py27
