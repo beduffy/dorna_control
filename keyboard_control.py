@@ -7,7 +7,8 @@ import sys, select, termios, tty
 import traceback
 import json
 
-# import rospy
+import rospy
+from geometry_msgs.msg import Twist
 # from rosserial_arduino.srv import Test
 from dorna import Dorna
 
@@ -17,7 +18,7 @@ Reading from the keyboard to control Dorna Arm!
 CTRL-C to quit
 """
 
-moveBindings = {
+armMoveBindings = {
 		# x control
 		'q': (1,0,0),
 		'a': (-1,0,0),
@@ -28,6 +29,13 @@ moveBindings = {
 		'e': (0,0,1),
 		'd': (0,0,-1),
 	}
+
+wheelMoveBindings = {
+		'i':(1,0,0,0),
+		'j':(0,0,0,1),
+		'l':(0,0,0,-1),
+		',':(-1,0,0,0)
+}
 
 def getKey():
 	tty.setraw(sys.stdin.fileno())
@@ -54,22 +62,35 @@ def generate_command(move_cmd, movement=1, coord_sys='xyz'):
 	if coord_sys == 'xyz':
 		# cmd =  {"command": "move", "prm": {'path': 'joint', 'movement': movement, 'xyz': [x, y, z, 0, 0]}}
 		cmd =  {"command": "move", "prm": {'path': path_type, 'movement': movement, 'xyz': [x, y, z, w_pitch, w_roll], 'speed': 5000}}
+		# cmd =  {"command": "move", "prm": {'path': path_type, 'movement': movement, 'xyz': [x, y, z, 0, w_roll], 'speed': 5000}}
 		# cmd =  {"command": "move", "prm": {'path': path_type, 'movement': movement, 'xyz': [x, y, z, w_pitch, w_roll]}}
 	elif coord_sys == 'joint':
-		cmd = {"command": "move", "prm": {'path': path_type, 'movement': movement, 'joint': [0, 0, 0, w_pitch, w_roll]}}
+		cmd = {"command": "move", "prm": {'path': path_type, 'movement': movement, 'joint': [x, y, z, w_pitch, w_roll]}}
+		# cmd = {"command": "move", "prm": {'path': path_type, 'movement': movement, 'joint': [0, 0, 0, w_pitch, w_roll]}}
 	else:
 		raise ValueError("Invalid coord sys!")
 	return cmd
 
 def activate_gripper(gripper_state):
+	# if gripper_state == 0:
+	# 	microsecond_delay = 700
+	# elif gripper_state == 1:
+	# 	microsecond_delay = 1000
+	# elif gripper_state == 2:
+	# 	microsecond_delay = 1400
+	# elif gripper_state == 3:
+	# 	microsecond_delay = 1700
+
 	if gripper_state == 0:
-		microsecond_delay = 700
+		robot.servo(40)
 	elif gripper_state == 1:
 		microsecond_delay = 1000
 	elif gripper_state == 2:
 		microsecond_delay = 1400
 	elif gripper_state == 3:
-		microsecond_delay = 1600
+		robot.servo(675)
+
+	
 
 	try:
 		print('Setting gripper to {} microsecond delay'.format(microsecond_delay))
@@ -79,7 +100,6 @@ def activate_gripper(gripper_state):
 
 if __name__=="__main__":	
 	gripper_state = 0
-	activate_gripper(gripper_state)
 
 	# Dorna arm initialisation
 	robot = Dorna("myconfig.json")
@@ -87,6 +107,31 @@ if __name__=="__main__":
 	robot.set_toolhead({"x": 80})  # Set gripper tip length for IK
 	mv_scale = 3
 	print(robot.connect())
+
+	activate_gripper(gripper_state)
+
+	# manipulation_analysis_pose = [-1.350630230199798, 104.99476770048315, 552.4727117125126, -26.1, 200]
+	# manipulation_analysis_pose = [0.4824848511110624, 45.81260132790233, 521.629980020351, -36.100019999999994, 199.99999000000003]
+	# navigation_mode_pose = [0.5243962854933291, 49.79214976349321, 399.2267074597666, -26.1, 200]
+	# navigation_mode_look_down_pose = [0.35380074678137585, 176.88710773800682, 440.02462126337844, -108.02028500000002, 199.999995]
+
+	# todo navigation_mode_look_down_pose
+	pick_up_object_right_in_front_pose = [4.732975534515328, 186.6211937924129, -178.6453444895452, -61.19049000000004, 0.0]
+	manipulation_analysis_pose = [-0.7070520139752532, 70.7964863471116, 537.813061901588, -1.188899999999993, 0.0]
+	navigation_mode_pose = [-2.5241238884508714, 38.54357006633009, 395.20905918415366, -4.258319999999988, 0.0]
+	drop_into_bin_pose = [-0.6301972873213746, 260.7045089923903, 568.3996025850317, 53.81109000000003, 0.0]
+
+	rospy.init_node('arm_and_wheel_control')
+	pub = rospy.Publisher('twist', Twist, queue_size=1)
+
+	speed = rospy.get_param("~speed", 0.25)
+	turn = rospy.get_param("~turn", 1.0)
+	x = 0
+	y = 0
+	z = 0
+	th = 0
+
+	joint_change_amt = 10
 
 	last_time_command_ran = time.time()
 
@@ -96,34 +141,43 @@ if __name__=="__main__":
 		print(msg)
 		while(1):
 			key = getKey()
-			if key in moveBindings.keys():
-				dxyz = tuple([mv_scale * param for param in moveBindings[key]])
+			# if key in wheelMoveBindings.keys():
+			# 	x = wheelMoveBindings[key][0]
+			# 	y = wheelMoveBindings[key][1]
+			# 	z = wheelMoveBindings[key][2]
+			# 	th = wheelMoveBindings[key][3]
+			# 	print(x * speed, y * speed, z * speed, th * turn)
+			# else:
+			# 	# turn off wheels if doing anything else
+			# 	x = 0
+			# 	y = 0
+			# 	z = 0
+			# 	th = 0
+			# 	if (key == '\x03'):
+			# 		break
+
+			# twist = Twist()
+			# twist.linear.x = x*speed; twist.linear.y = y*speed; twist.linear.z = z*speed;
+			# twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = th*turn
+			# pub.publish(twist)
+			
+			if key in armMoveBindings.keys():
+				
+
+				dxyz = tuple([mv_scale * param for param in armMoveBindings[key]])
 				command = generate_command(dxyz)
 				print(command)
-				# todo debounce and append and stutter commands?
-				# wait 1 second before running next command
-				time_to_last_command = time.time() - last_time_command_ran
-				# if time_to_last_command > 0.25:
 				if robot._device["state"] == 0:
-				# if True:
 					print('In keyboard control code: commands: {}'.format(robot._system["command"]))
-					# with open('result.json', 'w') as fp:
-					#     json.dump(robot._system["command"], fp)
 					pprint(robot._system["command"])
 					robot.play(command)
 					last_time_command_ran = time.time()
 				else:
-					print('Last command was run before 1 second ago, so not running this command')
-				
-				# if (status == 14):
-				#     print(msg)
-				# status = (status + 1) % 15
+					print('Last command was run too soon, state is not 0')
 			else:
 				dxyz = (0, 0, 0)
 
-				if (key == '\x03'):
-					break
-				elif key == 'p': # stop robot
+				if key == 'p': # stop robot
 					print('Halting robot')
 					robot.halt()
 				elif key == 'o':  # check position status
@@ -134,6 +188,9 @@ if __name__=="__main__":
 					for joint in ["j3", "j2", "j1", "j0"]:
 						robot.home(joint)
 						print("{} homed".format(joint))
+
+					# robot.set_joint({"j4": 0}, True)
+					robot.set_joint({"j4": 0, "j3": 0}, True)
 				elif key == '0':
 					dxyz = [0, 0, 0]
 					command = generate_command(dxyz, movement=0, coord_sys='joint')
@@ -145,10 +202,24 @@ if __name__=="__main__":
 					if gripper_state == 4:
 						gripper_state = 0
 					activate_gripper(gripper_state)
+				elif key == 'v':
+					gripper_state -= 1
+					if gripper_state < 0:
+						gripper_state = 3
+					activate_gripper(gripper_state)
+				elif key == '\\':
+					gripper_state = 0
+					activate_gripper(gripper_state)
+				elif key == 'z':
+					gripper_state = 2
+					activate_gripper(gripper_state)
+				elif key == 'x':
+					gripper_state = 3
+					activate_gripper(gripper_state)
 				elif key == 'c':
 					robot.calibrate([0, 0, 0, 0 ,0])
 					print("Robot calibrated")
-				# elif key == 'l':
+				# elif key == '4':
 				# 	robot.move_circle({'movement': 1})
 				# 	print("Robot circle")
 				elif key == 'b':
@@ -179,30 +250,111 @@ if __name__=="__main__":
 						else:
 							print('Robot busy, no command ran in trajectory')
 							break
-				elif key == '.':
-					dxyz = [0, 0, 0, 0, 5]
+				# elif key == ';':
+				# 	command = generate_command(navigation_mode_look_down_pose, movement=0, coord_sys='xyz')
+				# 	print(command)
+				# 	if robot._device["state"] == 0:
+				# 		robot.play(command)
+
+				# 		print('Robot moved to navigation look down pose')
+				# 	else:
+				# 		print('Robot busy, did not go to navigation down pose')
+				elif key == 'n':
+					command = generate_command(navigation_mode_pose, movement=0, coord_sys='xyz')
+					print(command)
+					if robot._device["state"] == 0:
+						robot.play(command)
+
+						print('Robot moved to navigation pose')
+					else:
+						print('Robot busy, did not go to navigation pose')
+				elif key == 'm':
+					command = generate_command(manipulation_analysis_pose, movement=0, coord_sys='xyz')
+					print(command)
+					if robot._device["state"] == 0:
+						robot.play(command)
+
+						print('Robot moved to manipulation pose')
+					else:
+						print('Robot busy, did not go to manipulation pose')
+				elif key == '7':
+					command = generate_command(pick_up_object_right_in_front_pose, movement=0, coord_sys='xyz')
+					print(command)
+					if robot._device["state"] == 0:
+						robot.play(command)
+
+						print('Robot moved to pick_up_object_right_in_front_pose')
+					else:
+						print('Robot busy, did not go to pick_up_object_right_in_front_pose')
+				elif key == '8':
+					command = generate_command(drop_into_bin_pose, movement=0, coord_sys='xyz')
+					print(command)
+					if robot._device["state"] == 0:
+						robot.play(command)
+
+						print('Robot moved to drop_into_bin_pose')
+					else:
+						print('Robot busy, did not go to drop_into_bin_pose')
+				elif key == '1':
+					dxyz = [-joint_change_amt, 0, 0, 0, 0]
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
 					if robot._device["state"] == 0:
 						robot.play(command)
-						print('Rolling +5')
-				elif key == ',':
-					dxyz = [0, 0, 0, 0, -5]
+						print('Base angle -5')
+				elif key == '2':
+					dxyz = [joint_change_amt, 0, 0, 0, 0]
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
 					if robot._device["state"] == 0:
 						robot.play(command)
-						print('Rolling -5')
+						print('Base angle +5')
+				elif key == '3':
+					dxyz = [0, -joint_change_amt, 0, 0, 0]
+					command = generate_command(dxyz, movement=1, coord_sys='joint')
+					if robot._device["state"] == 0:
+						robot.play(command)
+						print('Shoulder angle -5')
+				elif key == '4':
+					dxyz = [0, joint_change_amt, 0, 0, 0]
+					command = generate_command(dxyz, movement=1, coord_sys='joint')
+					if robot._device["state"] == 0:
+						robot.play(command)
+						print('Shoulder angle +5')
+				elif key == '5':
+					dxyz = [0, 0, -joint_change_amt, 0, 0]
+					command = generate_command(dxyz, movement=1, coord_sys='joint')
+					if robot._device["state"] == 0:
+						robot.play(command)
+						print('Elbow angle -5')
+				elif key == '6':
+					dxyz = [0, 0, joint_change_amt, 0, 0]
+					command = generate_command(dxyz, movement=1, coord_sys='joint')
+					if robot._device["state"] == 0:
+						robot.play(command)
+						print('Elbow angle +5')
 				elif key == '#':
-					dxyz = [0, 0, 0, 5, 0]
+					dxyz = [0, 0, 0, joint_change_amt, 0]
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
 					if robot._device["state"] == 0:
 						robot.play(command)
 						print('wrist pitch +5')
-				elif key == ';':
-					dxyz = [0, 0, 0, -5, 0]
+				elif key == '\'':
+					dxyz = [0, 0, 0, -joint_change_amt, 0]
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
 					if robot._device["state"] == 0:
 						robot.play(command)
 						print('wrist pitch -5')
+				elif key == '.':
+					dxyz = [0, 0, 0, 0, -joint_change_amt]
+					command = generate_command(dxyz, movement=1, coord_sys='joint')
+					if robot._device["state"] == 0:
+						robot.play(command)
+						print('Rolling -5')
+				elif key == '/':
+					dxyz = [0, 0, 0, 0, joint_change_amt]
+					command = generate_command(dxyz, movement=1, coord_sys='joint')
+					if robot._device["state"] == 0:
+						robot.play(command)
+						print('Rolling +5')
 				elif key == 't':
 					robot.terminate()
 					print("Robot terminated")
@@ -211,19 +363,30 @@ if __name__=="__main__":
 					print("Increase mv_scale: {}".format(mv_scale))
 				elif key == '-':
 					mv_scale -= 1
-					print("Decrease mv_scale: {}".format(mv_scale))
-				elif key == '[':
-					mv_scale -= 20
+					if mv_scale < 0:
+						mv_scale = 0
 					print("Decrease mv_scale: {}".format(mv_scale))
 				elif key == ']':
 					mv_scale += 20
 					print("Decrease mv_scale: {}".format(mv_scale))
+				elif key == '[':
+					mv_scale -= 20
+					if mv_scale < 0:
+						mv_scale = 0
+					print("Decrease mv_scale: {}".format(mv_scale))
+				if (key == '\x03'):
+					break
 
 	except Exception as e:
 		print(e)
 		traceback.print_exc()
 
 	finally:
+		twist = Twist()
+		twist.linear.x = 0; twist.linear.y = 0; twist.linear.z = 0
+		twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
+		pub.publish(twist)
+		
 		termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
 		robot.terminate()
 		print("Robot terminated")

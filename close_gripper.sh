@@ -1,11 +1,11 @@
 #!/bin/bash
 echo $PWD
 echo $2
-source ~/archiconda3/etc/profile.d/conda.sh
+# source ~/archiconda3/etc/profile.d/conda.sh
 #source /home/beduffy/all_projects/arm_control
 #source activate py27
 
-conda deactivate
+# conda deactivate
 source /home/ben/all_projects/arm_control_ros/devel/setup.bash
 
 echo $(which python)
