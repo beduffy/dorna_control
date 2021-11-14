@@ -1,6 +1,8 @@
 import math
 
+import cv2
 import numpy as np
+import pyrealsense2 as rs
 try:
     import open3d as o3d
     from skimage.measure import find_contours
@@ -9,6 +11,11 @@ except Exception as e:
     print('Tried to import open3d or skimage but not installed')
 
 from line_mesh import LineMesh
+from lib.vision import get_full_pcd_from_rgbd
+from lib.vision import get_camera_coordinate, create_homogenous_transformations, \
+    convert_pixel_to_arm_coordinate, convert_cam_pcd_to_arm_pcd
+# from lib.vision_config import class_names, class_name_to_id, pinhole_camera_intrinsic
+from lib.vision_config import pinhole_camera_intrinsic
 
 def _inch_to_mm(x):
     if x == None:
@@ -193,7 +200,6 @@ def f_k(joint_angles_deg):
         # TODO change all variable names
         # TODO understand IK too
         # TODO would be awesome to do matplotlib pointcloud as well
-        # TODO commit and push all to repo
 
         _bx = _inch_to_mm(3.759)  # x-distance from base to shoulder. 95.47859999999999mm Most likely.
         _bz = _inch_to_mm(8.111)  # height from ground to shoulder joint. 206.01940000000002mm confirmed
@@ -207,16 +213,11 @@ def f_k(joint_angles_deg):
         # joint to radian
         theta = [math.radians(j) for j in joint_angles_deg]
 
-        # import pdb;pdb.set_trace()
-
         # first we find x, y, z assuming base rotation is zero (theta_0 = 0). Then we rotate everything
         # then we rotate the robot around z axis for theta_0
 
         # top-down view
         # tmp = _bx + _l1 * math.cos(theta[1]) + _l2 * math.cos(theta[1] + theta[2]) + toolhead_x_length * math.cos(theta[1] + theta[2] + theta[3])
-        # x = tmp * math.cos(theta[0])
-        # y = tmp * math.sin(theta[0])
-
         # base_x = TODO ???
 
         # TODO we're missing distance from elbow to wrist?!?!?
@@ -238,9 +239,6 @@ def f_k(joint_angles_deg):
         toolhead_x = toolhead_side_x * math.cos(theta[0])
         toolhead_y = toolhead_side_x * math.sin(theta[0])
         print('shoulder_x: {} shoulder_y: {} elbow_x: {} elbow_y: {} toolhead_x: {} toolhead_y: {}'.format(shoulder_x, shoulder_y, elbow_x, elbow_y, toolhead_x, toolhead_y))
-
-        # x = tmp * math.cos(theta[0])
-        # y = tmp * math.sin(theta[0])
 
         # side-view
         # z = _bz + _l1 * math.sin(theta[1]) + _l2 * math.sin(theta[1] + theta[2]) + toolhead_x_length * math.sin(theta[1] + theta[2] + theta[3])
@@ -273,29 +271,95 @@ def f_k(joint_angles_deg):
         print(e)
         return None
 
-# base, shoulder, elbow, wrist pitch, wrist roll
-# full_toolhead_fk, xyz_positions_of_all_joints = f_k([0.0, 0.0, 0.0, 0.0, 0.0])
-# full_toolhead_fk, xyz_positions_of_all_joints = f_k([0.0, 0.0, 0.0, 30.0, 0.0])
-# full_toolhead_fk, xyz_positions_of_all_joints = f_k([0.0, 0.0, 0.0, 45, 0.0])
-full_toolhead_fk, xyz_positions_of_all_joints = f_k([0.0, 0.0, 0.0, 60, 0.0])
-# full_toolhead_fk, xyz_positions_of_all_joints = f_k([45, 0.0, 0.0, 0.0, 0.0])
-# full_toolhead_fk, xyz_positions_of_all_joints = f_k([45, 45, 45, 0.0, 0.0])
-# full_toolhead_fk, xyz_positions_of_all_joints = f_k([45, 45, 45, 60, 70])
-print('full_toolhead_fk')
-print(full_toolhead_fk)
-print('xyz_positions_of_all_joints')
-print(xyz_positions_of_all_joints)
+if __name__ == '__main__':
+    # base, shoulder, elbow, wrist pitch, wrist roll
+    full_toolhead_fk, xyz_positions_of_all_joints = f_k([0.0, 0.0, 0.0, 0.0, 0.0])
+    # full_toolhead_fk, xyz_positions_of_all_joints = f_k([0.0, 0.0, 0.0, 30.0, 0.0])
+    # full_toolhead_fk, xyz_positions_of_all_joints = f_k([0.0, 0.0, 0.0, 45, 0.0])
+    # full_toolhead_fk, xyz_positions_of_all_joints = f_k([0.0, 0.0, 0.0, 60, 0.0])
+    # full_toolhead_fk, xyz_positions_of_all_joints = f_k([45, 0.0, 0.0, 0.0, 0.0])
+    # full_toolhead_fk, xyz_positions_of_all_joints = f_k([45, 45, 45, 0.0, 0.0])
+    # full_toolhead_fk, xyz_positions_of_all_joints = f_k([45, 45, 45, 60, 70])
+    print('full_toolhead_fk')
+    print(full_toolhead_fk)
+    print('xyz_positions_of_all_joints')
+    print(xyz_positions_of_all_joints)
 
-# origin_frame_size = 0.01
-# origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-#     size=origin_frame_size, origin=[0.0, 0.0, 0.0])
-coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-    size=25.0, origin=[0.0, 0.0, 0.0])
+    # origin_frame_size = 0.01
+    # origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+    #     size=origin_frame_size, origin=[0.0, 0.0, 0.0])
+    coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+        size=25.0, origin=[0.0, 0.0, 0.0])
 
-# origin_frame_size = 0.01
-# origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-#     size=origin_frame_size, origin=[0.0, 0.0, 0.0])
-coordinate_frame_shoulder_height = o3d.geometry.TriangleMesh.create_coordinate_frame(
-    size=25.0, origin=[0.0, 0.0, 206.01940000000002])
+    # origin_frame_size = 0.01
+    # origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+    #     size=origin_frame_size, origin=[0.0, 0.0, 0.0])
+    coordinate_frame_shoulder_height = o3d.geometry.TriangleMesh.create_coordinate_frame(
+        size=25.0, origin=[0.0, 0.0, 206.01940000000002])
 
-plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=[coordinate_frame, coordinate_frame_shoulder_height])
+    # plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=[coordinate_frame, coordinate_frame_shoulder_height])
+
+    # user_input = input('Want to see pointcoud overlayed?\n')
+    user_input = 'Y'
+    if user_input.lower() == 'y':
+        try:
+            cam2arm = np.loadtxt('data/latest_aruco_cam2arm.txt', delimiter=' ')
+
+            # realsense stuff 
+            pipeline = rs.pipeline()
+            config = rs.config()
+            config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+            config.enable_stream(rs.stream.color, 640, 480, rs.format.rgb8, 30)
+            profile = pipeline.start(config)
+            spatial = rs.spatial_filter()
+            spatial.set_option(rs.option.holes_fill, 3)
+            depth_sensor = profile.get_device().first_depth_sensor()
+            # Getting the depth sensor's depth scale (see rs-align example for explanation)
+            depth_scale = depth_sensor.get_depth_scale()
+            print('DEPTH SCALE: ', depth_scale)
+            align = rs.align(rs.stream.color)
+
+            print('Running 20 frames to wait for auto-exposure')
+            for i in range(20):
+                frames = pipeline.wait_for_frames()
+                aligned_frames = align.process(frames)
+                depth_frame = aligned_frames.get_depth_frame()
+                color_frame = aligned_frames.get_color_frame()
+
+            frames = pipeline.wait_for_frames()
+            aligned_frames = align.process(frames)
+            depth_frame = aligned_frames.get_depth_frame()
+            color_frame = aligned_frames.get_color_frame()
+
+            # hole filling
+            depth_frame = spatial.process(depth_frame)
+            depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
+            color_intrin = color_frame.profile.as_video_stream_profile().intrinsics
+
+            camera_depth_img = np.asanyarray(depth_frame.get_data())
+            camera_color_img = np.asanyarray(color_frame.get_data())
+            depth_colormap = cv2.applyColorMap(
+                cv2.convertScaleAbs(camera_depth_img, alpha=0.03),
+                cv2.COLORMAP_JET)
+
+            camera_color_img = cv2.cvtColor(camera_color_img, cv2.COLOR_RGB2BGR)
+            images = np.hstack((camera_color_img, depth_colormap))
+            camera_color_img = cv2.cvtColor(camera_color_img, cv2.COLOR_BGR2RGB)  # for open3D
+            cv2.imshow("image", images)
+            k = cv2.waitKey(5)
+
+            # dont need dorna import here but do need realsense
+            cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img,
+                                            pinhole_camera_intrinsic, visualise=False)
+
+            # only plot open3D arm when arm is in position. Otherwise if non-blocking
+            # TODO remove q1 and z offset now that aruco and solvePnP finds correct transform
+            # TODO never understood how this relates, if origin looks good but cam2arm is bad?
+            # transforming rgbd pointcloud using bad cam2arm means what? . What is the thing changing again?
+
+            full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, cam2arm, 0.0)
+
+            plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=[full_arm_pcd, coordinate_frame, coordinate_frame_shoulder_height])
+        except Exception as e:
+            print('Exception in pointcloud comparison')
+            print(e)
