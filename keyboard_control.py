@@ -7,7 +7,7 @@ import sys, select, termios, tty
 import traceback
 import json
 
-import rospy
+# import rospy
 from geometry_msgs.msg import Twist
 # from rosserial_arduino.srv import Test
 from dorna import Dorna
@@ -30,12 +30,12 @@ armMoveBindings = {
 		'd': (0,0,-1),
 	}
 
-wheelMoveBindings = {
-		'i':(1,0,0,0),
-		'j':(0,0,0,1),
-		'l':(0,0,0,-1),
-		',':(-1,0,0,0)
-}
+# wheelMoveBindings = {
+# 		'i':(1,0,0,0),
+# 		'j':(0,0,0,1),
+# 		'l':(0,0,0,-1),
+# 		',':(-1,0,0,0)
+# }
 
 def getKey():
 	tty.setraw(sys.stdin.fileno())
@@ -103,12 +103,16 @@ if __name__=="__main__":
 
 	# Dorna arm initialisation
 	robot = Dorna("myconfig.json")
+	# robot = Dorna()
 	robot.set_unit({"length": "mm"})
-	robot.set_toolhead({"x": 80})  # Set gripper tip length for IK
+	# robot.set_toolhead({"x": 80})  # Set gripper tip length for IK
+	# was 44.196 and then was 125 because I thought it was from the end of dorna. But no, it's from the centre of J3 joint so 175
+	print('robot.toolhead():', robot.toolhead())
 	mv_scale = 3
 	print(robot.connect())
+	# TODO could avoid password with /dev rules?
 
-	activate_gripper(gripper_state)
+	# activate_gripper(gripper_state)
 
 	# manipulation_analysis_pose = [-1.350630230199798, 104.99476770048315, 552.4727117125126, -26.1, 200]
 	# manipulation_analysis_pose = [0.4824848511110624, 45.81260132790233, 521.629980020351, -36.100019999999994, 199.99999000000003]
@@ -121,11 +125,11 @@ if __name__=="__main__":
 	navigation_mode_pose = [-2.5241238884508714, 38.54357006633009, 395.20905918415366, -4.258319999999988, 0.0]
 	drop_into_bin_pose = [-0.6301972873213746, 260.7045089923903, 568.3996025850317, 53.81109000000003, 0.0]
 
-	rospy.init_node('arm_and_wheel_control')
-	pub = rospy.Publisher('twist', Twist, queue_size=1)
+	# rospy.init_node('arm_and_wheel_control')
+	# pub = rospy.Publisher('twist', Twist, queue_size=1)
 
-	speed = rospy.get_param("~speed", 0.25)
-	turn = rospy.get_param("~turn", 1.0)
+	# speed = rospy.get_param("~speed", 0.25)
+	# turn = rospy.get_param("~turn", 1.0)
 	x = 0
 	y = 0
 	z = 0
@@ -162,8 +166,6 @@ if __name__=="__main__":
 			# pub.publish(twist)
 			
 			if key in armMoveBindings.keys():
-				
-
 				dxyz = tuple([mv_scale * param for param in armMoveBindings[key]])
 				command = generate_command(dxyz)
 				print(command)
@@ -182,6 +184,8 @@ if __name__=="__main__":
 					robot.halt()
 				elif key == 'o':  # check position status
 					print(robot.position("xyz"))
+					# print([round(float(x), 3) for x in robot.position("xyz")])  # it's a string? TODO fix 
+					# TODO print position after every command so I don't have to keep showing it? Also no whitespace please
 				elif key == 'r': # try to re-connect in case of connection missing
 					robot.connect()
 				elif key == 'h':
@@ -277,6 +281,23 @@ if __name__=="__main__":
 						print('Robot moved to manipulation pose')
 					else:
 						print('Robot busy, did not go to manipulation pose')
+				elif key == 'i':
+					print('Inputting command')
+					user_input = input('Enter a xy plane location separated by spaces\n')
+					x, y = [float(x) for x in user_input.split(' ')]
+					z = 300
+					wrist_pitch = -4.258319999999988
+					fifth_IK_value = 0.0
+					user_inputted_3d_position = [x, y, z, wrist_pitch, fifth_IK_value]
+
+					command = generate_command(user_inputted_3d_position, movement=0, coord_sys='xyz')
+					print(command)
+					if robot._device["state"] == 0:
+						robot.play(command)
+
+						print('Robot moved to drop_into_bin_pose')
+					else:
+						print('Robot busy, did not go to drop_into_bin_pose')
 				elif key == '7':
 					command = generate_command(pick_up_object_right_in_front_pose, movement=0, coord_sys='xyz')
 					print(command)
@@ -382,10 +403,10 @@ if __name__=="__main__":
 		traceback.print_exc()
 
 	finally:
-		twist = Twist()
-		twist.linear.x = 0; twist.linear.y = 0; twist.linear.z = 0
-		twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
-		pub.publish(twist)
+		# twist = Twist()
+		# twist.linear.x = 0; twist.linear.y = 0; twist.linear.z = 0
+		# twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
+		# pub.publish(twist)
 		
 		termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
 		robot.terminate()
