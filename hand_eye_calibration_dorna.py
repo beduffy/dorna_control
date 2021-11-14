@@ -15,9 +15,131 @@ from mpl_toolkits import mplot3d
 import matplotlib as mpl
 from scipy import optimize
 
-from perception.lib.vision import get_camera_coordinate, create_homogenous_transformations, convert_pixel_to_arm_coordinate
-from control.lib.kinematics import dist
+# from perception.lib.vision import get_camera_coordinate, create_homogenous_transformations, convert_pixel_to_arm_coordinate
+# from control.lib.kinematics import dist
 
+
+
+# try:
+#     import open3d as o3d
+#     open3d_import_success = True
+# except Exception as e:
+#     print(e)
+#     print('Tried to import open3d but not installed')
+#     open3d_import_success = False
+
+
+# globals
+# with open(os.path.abspath(os.path.join(__file__, '..', '..', 'resources', 'coco_labels_91.txt')), 'r') as f:
+#     class_names = [line.strip() for line in f.readlines()]
+#     class_name_to_id = {n: idx for idx, n in enumerate(class_names)}
+
+# intrinsics
+# from better calibration RMS 0.18 and mean error:  0.02500
+width, height, fx, fy, ppx, ppy = (640.0, 480.0, 612.14801862, 611.29345062, 340.03640321,
+                                   230.06928807)
+# if open3d_import_success:
+#     pinhole_camera_intrinsic = o3d.camera.PinholeCameraIntrinsic(
+#             int(width), int(height), fx, fy, ppx, ppy)
+# todo make sure this is used everywhere
+
+
+# helper functions
+def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
+    # return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)  # todo doesn't work with x = 0 and x2 = 9.8e-17
+    return abs(a - b) <= rel_tol
+
+def create_homogenous_transformations(tvec_in, rvec_in):
+    # todo add to vision library and compare with DRY duplicate
+    # -- Obtain the rotation matrix tag->camera
+    R_ct = np.matrix(cv2.Rodrigues(rvec_in)[0])  # todo confirm that rvec makes sense
+    # R_tc = R_flip * R_ct.T
+    R_tc = R_ct.T
+
+    # From Wikipedia:
+    # R, T are the extrinsic parameters which denote the coordinate system transformations from
+    # 3D world coordinates to 3D camera coordinates. Equivalently, the extrinsic parameters define
+    # the position of the camera center and the camera's heading in world coordinates.
+    # T is the position of the origin of the world coordinate system expressed in coordinates of the
+    # camera-centered coordinate system. T is often mistakenly considered the position of the camera.
+    # The position, {\displaystyle C}C, of the camera expressed in world coordinates is
+    #  C=-R^{-1}T=-R^{T}T}C=-R^{{-1}}T=-R^{T}T
+
+    # tvec is the position of the marker in camera coordinates but the transformation from
+    # camera to marker is then this:
+    arm2cam_local = np.identity(4)
+    arm2cam_local[:3, :3] = R_ct
+    arm2cam_local[0, 3] = tvec_in[0]
+    arm2cam_local[1, 3] = tvec_in[1]
+    arm2cam_local[2, 3] = tvec_in[2]
+
+    # -- Now get Position and attitude f the camera respect to the marker
+    # pos_camera = -R_tc * np.matrix(tvec).T  # todo how could element-wise possibly work!?!?!?!?
+    pos_camera = np.dot(-R_tc, np.matrix(tvec_in).T)
+
+    # cam_position = np.dot(-arm2cam_rotation, tvec_arm2cam)  # .T   # arm2cam
+    cam2arm_local = np.identity(4)
+    cam2arm_local[:3, :3] = R_tc
+    cam2arm_local[0, 3] = pos_camera[0]
+    cam2arm_local[1, 3] = pos_camera[1]
+    cam2arm_local[2, 3] = pos_camera[2]
+
+    return cam2arm_local, arm2cam_local, R_tc, R_tc, pos_camera
+
+
+def convert_pixel_to_arm_coordinate(camera_depth_img, pixel_x, pixel_y, cam2arm, verbose=False):
+    # todo compare this function to the new cam to arm coord and write docstring so it's clear
+    camera_coord = get_camera_coordinate(camera_depth_img, pixel_x, pixel_y, verbose=verbose)
+    if camera_coord is not None:
+        arm_coord = np.dot(cam2arm, camera_coord)
+
+        if verbose:
+            # print('MouseX: {}. MouseY: {}'.format(pixel_x, pixel_y))
+            # print('tvec: {}'.format(tvec))
+            # print('Camera click xyz coordinate: \n{}'.format(cam_coord))
+            print('Arm coordinate: (cam2arm)  \n{}'.format(arm_coord))
+
+        return arm_coord[:3]  # return arm coordinate xyz
+
+
+def get_camera_coordinate(camera_depth_img, pixel_x, pixel_y, verbose=False):
+    z_cam = get_depth_at_pixel(camera_depth_img, pixel_x, pixel_y)
+    if isclose(z_cam, 0.0, 0.00001):
+        if verbose:
+            print('z_cam {} is close to 0'.format(z_cam))
+        return None
+
+    # intrinsics as global to library or parameter?
+
+    # assuming it's your regular 3x3 camera intrinsics
+    # x_cam = np.multiply(mouseX - ppx, z_cam / fx)  # todo using color intrinsics but depth hmm
+    # y_cam = np.multiply(mouseY - ppy, z_cam / fy)
+    x_cam = np.multiply(pixel_x - ppx, z_cam / fx)  # todo using color intrinsics but depth hmm
+    y_cam = np.multiply(pixel_y - ppy, z_cam / fy)
+    # above causes x_cam and y_cam to be much more accurate but z_cam is still 10cm off???
+    # x_cam = np.multiply(mouseX - depth_intrin.ppx, z_cam / depth_intrin.fx)  # todo using color intrinsics but depth hmm
+    # y_cam = np.multiply(mouseY - depth_intrin.ppy, z_cam / depth_intrin.fy)
+    # x_cam = np.multiply(mouseX - color_intrin.ppx, z_cam / color_intrin.fx)
+    # y_cam = np.multiply(mouseY - color_intrin.ppy, z_cam / color_intrin.fy)
+
+    # todo not doing distortion and why doesn't the above match the equation at https://docs.opencv.org/2.4/modules/calib3d/doc/camera_calibration_and_3d_reconstruction.html
+    # todo instead of using depth, only use color somehow?
+
+    cam_coord = np.array([x_cam, y_cam, z_cam, 1])
+
+    return cam_coord
+
+
+def get_depth_at_pixel(camera_depth_img, pixel_x, pixel_y, depth_scale=0.0010000000474974513):
+    z_cam = camera_depth_img[pixel_y][pixel_x] * depth_scale
+    # p = rs.rs2_deproject_pixel_to_point(depth_intrin, [mouseX, mouseY], z_cam)
+    # p = rs.rs2_deproject_pixel_to_point(color_intrin, [pixel_x, pixel_y], z_cam)
+
+    return z_cam
+
+
+def dist(x, y):
+    return np.sqrt(np.sum((x - y) ** 2))
 
 def rotationMatrixToEulerAngles(R):
     # Calculates rotation matrix to euler angles
