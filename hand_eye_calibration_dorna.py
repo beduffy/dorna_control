@@ -214,7 +214,6 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
             except Exception as e:
                 print(e)
                 tvec, rvec = None, None
-            # tvec, rvec = np.swapaxes(board_tvec, 0, 1), np.swapaxes(board_rvec, 0, 1)  # why is this even necessary
             tvec, rvec = board_tvec.squeeze(), board_rvec.squeeze()
 
 
@@ -223,7 +222,6 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
             tvec, rvec = None, None
     elif use_aruco:
         # TODO im not using depth!!!!!! 
-        # TODO create new repo or use dorna control, start committing . copy over what is needed and clean all the code so i can think better
 
         if all_rvec is not None:
             # retval, board_rvec, board_tvec = cv2.aruco.estimatePoseBoard(corners, ids, board, camera_matrix, dist_coeffs, all_rvec, all_tvec)
@@ -239,26 +237,31 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
                 shoulder_motor_marker_id = [l[0] for l in ids.tolist()].index(id_on_shoulder_motor) 
                 rvec, tvec = all_rvec[shoulder_motor_marker_id, 0, :], all_tvec[shoulder_motor_marker_id, 0, :]  # get first marker
                 found_correct_marker = True
-            if found_correct_marker and rvec is not None and len(corners) == 4:  # TODO do not forget
+            # if found_correct_marker and rvec is not None and len(corners) == 4:  # TODO do not forget
             # if found_correct_marker and rvec is not None and len(corners) == 2:  # TODO do not forget
-            # if found_correct_marker and rvec is not None and len(corners) == 1:  # TODO do not forget
+            if found_correct_marker and rvec is not None and len(corners) == 1:  # TODO do not forget
                 # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec, tvec, marker_length)
 
                 # draw arm origin axis as well
                 # roughly 96mm to arm and 41mm from there to centre of arm
-                y_offset_for_id_1 = -0.13
-                y_offset_for_id_3 = 0.127
-                extra_y_offset_for_id_2 = -0.167
-                extra_y_offset_for_id_4 = 0.173
-                x_offset_for_id_2 = 0.2
-                x_offset_for_id_4 = -0.2
+
+                # with some slightly off x-axis origin
+                # y_offset_for_id_1 = -0.13
+                # y_offset_for_id_3 = 0.127
+                # extra_y_offset_for_id_2 = -0.167
+                # extra_y_offset_for_id_4 = 0.173
+                # x_offset_for_id_2 = 0.2
+                # x_offset_for_id_4 = -0.2
 
                 # found with depth camera clicking
-                # y_offset_for_id_1 = -0.128
-                # extra_y_offset_for_id_2 = -0.166
-                # y_offset_for_id_3 = 0.1214
-                # extra_y_offset_for_id_4 = 0.169
+                y_offset_for_id_1 = -0.173  # for big marker
+                extra_y_offset_for_id_2 = -0.166
+                y_offset_for_id_3 = 0.1214
+                extra_y_offset_for_id_4 = 0.169
+                x_offset_for_id_2 = 0.0
+                x_offset_for_id_4 = 0.0
                 
+                # project center into image with cyan?
                 imagePoints, jacobian = cv2.projectPoints(np.array([0.0, y_offset_for_id_1, 0.0]), rvec, tvec, camera_matrix, dist_coeffs)
                 x, y = imagePoints.squeeze().tolist()
                 cv2.circle(color_img, (int(x), int(y)), 5, (255, 255, 0), -1)
@@ -291,18 +294,17 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
                 # bottom_left_first = np.array([-half_marker_len, -half_marker_len, 0.])
 
                 # TODO make sure order is correct if top left is always first and x is forward?!?!?!
-                # corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first])
+                corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first])
                 # corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first, 
                 #                               top_left_second, top_right_second, bottom_right_second, bottom_left_second])
-                corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first, 
-                                            top_left_second, top_right_second, bottom_right_second, bottom_left_second,
-                                            top_left_third, top_right_third, bottom_right_third, bottom_left_third,
-                                            top_left_fourth, top_right_fourth, bottom_right_fourth, bottom_left_fourth])
+                # corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first, 
+                #                             top_left_second, top_right_second, bottom_right_second, bottom_left_second,
+                #                             top_left_third, top_right_third, bottom_right_third, bottom_left_third,
+                #                             top_left_fourth, top_right_fourth, bottom_right_fourth, bottom_left_fourth])
                 imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
-                # for x, y in imagePointsCorners.squeeze().tolist():
-                #     cv2.circle(color_img, (int(x), int(y)), 5, (0, 0, 255), -1)
+                for x, y in imagePointsCorners.squeeze().tolist():
+                    cv2.circle(color_img, (int(x), int(y)), 5, (255, 255, 255), -1)
                 # x, y = imagePointsCorners.squeeze().tolist()
-                # 
                 # cv2.circle(color_img, (int(x), int(y)), 5, (0, 0, 255), -1)
 
                 # TODO give initial guess. Did it help?
@@ -311,24 +313,30 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
                 # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, corners[shoulder_motor_marker_id], camera_matrix, dist_coeffs, rvec, tvec)
                 # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, corners[marker_indices], camera_matrix, dist_coeffs, rvec, tvec)
                 # if there are only two, wrong could be wrong order
-                corners_reordered = []
-                ids_list = [l[0] for l in ids.tolist()]
                 
-                # for corder_id in [x[0] for x in ids.tolist()]:
-                for corder_id in [1, 2, 3, 4]:
-                # for corder_id in [x[0] - 1 for x in ids.tolist()]:
-                    corder_index = ids_list.index(corder_id) 
-                    # corners_reordered.append(corners[corder_id])
-                    corners_reordered.append(corners[corder_index])
-                    rvec_aruco, tvec_aruco = all_rvec[corder_index, 0, :], all_tvec[corder_index, 0, :]
-                    aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
+                ids_list = [l[0] for l in ids.tolist()]
+
+                if len(ids_list) > 1:
+                    corners_reordered = []
+                    # for corder_id in [x[0] for x in ids.tolist()]:
+                    for corder_id in [1, 2, 3, 4]:
+                    # for corder_id in [x[0] - 1 for x in ids.tolist()]:
+                        corder_index = ids_list.index(corder_id) 
+                        # corners_reordered.append(corners[corder_id])
+                        corners_reordered.append(corners[corder_index])
+                        rvec_aruco, tvec_aruco = all_rvec[corder_index, 0, :], all_tvec[corder_index, 0, :]
+                        aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
+                else:
+                    corners_reordered = corners
+                    aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec, tvec, marker_length)
                 
                 # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
-                outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_IPPE)
+                # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_IPPE)
                 # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs)
                 # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_IPPE)
                 # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
                 # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
+                outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, corners[shoulder_motor_marker_id], camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
                 # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_IPPE_SQUARE)
                 # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, corners[0], camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_IPPE_SQUARE)
                 # outval, rvec_arm, tvec_arm = cv2.solvePnP(np.array([[0.0, -y_offset, 0.0]]), corners[shoulder_motor_marker_id], camera_matrix, dist_coeffs)
@@ -340,6 +348,9 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
                 rvec = rvec_arm.squeeze()
                 tvec = tvec_arm.squeeze()
 
+                # TODO make it work again with no aruco in view!!!!
+
+                # draw circle over arm origin in camera image
                 imagePoints, jacobian = cv2.projectPoints(np.array([0.0, 0.0, 0.0]), rvec, tvec, camera_matrix, dist_coeffs)
                 x, y = imagePoints.squeeze().tolist()
                 cv2.circle(color_img, (int(x), int(y)), 5, (0, 0, 255), -1)
@@ -623,11 +634,8 @@ if __name__ == '__main__':
     color_intrin = color_frame.profile.as_video_stream_profile().intrinsics
 
     # calibration and marker params
-    # marker_length = 0.0265
-    # marker_length = 0.028
-    marker_length = 0.0275
     use_aruco = False  # use charuco
-    # use_aruco = True
+    use_aruco = True
     optimise_origin = False
     # optimise_origin = True
     # estimate_pose = True
@@ -645,6 +653,10 @@ if __name__ == '__main__':
     # todo for this I might need to try different optimisers or parameters. Also need to understand PnP better
 
     if use_aruco:
+        # marker_length = 0.0265
+        # marker_length = 0.028
+        # marker_length = 0.0275
+        marker_length = 0.0935  # big marker
         aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
         parameters = aruco.DetectorParameters_create()
         parameters.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
