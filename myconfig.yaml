@@ -37,6 +37,6 @@ motion:
   gpa: 2
   jt: 1
 toolhead:
-  x: 190.0
+  x: 175.0
 unit:
   length: mm
