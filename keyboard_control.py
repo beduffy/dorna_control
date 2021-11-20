@@ -84,25 +84,28 @@ def activate_gripper(gripper_state):
 	if gripper_state == 0:
 		robot.servo(40)
 	elif gripper_state == 1:
-		microsecond_delay = 1000
+		robot.servo(200)
+		# microsecond_delay = 1000
 	elif gripper_state == 2:
-		microsecond_delay = 1400
+		# microsecond_delay = 1400
+		robot.servo(400)
 	elif gripper_state == 3:
 		robot.servo(675)
 
 	
 
-	try:
-		print('Setting gripper to {} microsecond delay'.format(microsecond_delay))
-		subprocess.Popen(["./close_gripper.sh", '-m', str(microsecond_delay)])
-	except Exception as e:
-		print(e)
+	# try:
+	# 	print('Setting gripper to {} microsecond delay'.format(microsecond_delay))
+	# 	subprocess.Popen(["./close_gripper.sh", '-m', str(microsecond_delay)])
+	# except Exception as e:
+	# 	print(e)
 
 if __name__=="__main__":	
 	gripper_state = 0
 
 	# Dorna arm initialisation
-	robot = Dorna("myconfig.json")
+	# robot = Dorna("myconfig.json")
+	robot = Dorna("myconfig.yaml")
 	# robot = Dorna()
 	robot.set_unit({"length": "mm"})
 	# robot.set_toolhead({"x": 80})  # Set gripper tip length for IK
@@ -135,7 +138,8 @@ if __name__=="__main__":
 	z = 0
 	th = 0
 
-	joint_change_amt = 10
+	# joint_change_amt = 10
+	joint_change_amt = 1
 
 	last_time_command_ran = time.time()
 
@@ -183,7 +187,8 @@ if __name__=="__main__":
 					print('Halting robot')
 					robot.halt()
 				elif key == 'o':  # check position status
-					print(robot.position("xyz"))
+					print('robot_pos: ', robot.position("xyz"))
+					print('robot_joint: ', robot.position("joint"))
 					# print([round(float(x), 3) for x in robot.position("xyz")])  # it's a string? TODO fix 
 					# TODO print position after every command so I don't have to keep showing it? Also no whitespace please
 				elif key == 'r': # try to re-connect in case of connection missing
@@ -222,7 +227,8 @@ if __name__=="__main__":
 					activate_gripper(gripper_state)
 				elif key == 'c':
 					robot.calibrate([0, 0, 0, 0 ,0])
-					print("Robot calibrated")
+					robot.save_config('myconfig.json')
+					print("Robot calibrated, saved to myconfig.json")
 				# elif key == '4':
 				# 	robot.move_circle({'movement': 1})
 				# 	print("Robot circle")
@@ -283,10 +289,15 @@ if __name__=="__main__":
 						print('Robot busy, did not go to manipulation pose')
 				elif key == 'i':
 					print('Inputting command')
-					user_input = input('Enter a xy plane location separated by spaces\n')
-					x, y = [float(x) for x in user_input.split(' ')]
-					z = 300
-					wrist_pitch = -4.258319999999988
+					user_input = input('Enter a xy or xyz plane location separated by spaces\n')
+					user_input_list = [float(x) for x in user_input.split(' ')]
+					if len(user_input_list) == 2:
+						x, y = user_input_list
+						z = 300
+					else:
+						x, y, z = user_input_list
+					# wrist_pitch = -4.258319999999988
+					wrist_pitch = 0.0
 					fifth_IK_value = 0.0
 					user_inputted_3d_position = [x, y, z, wrist_pitch, fifth_IK_value]
 
@@ -369,7 +380,7 @@ if __name__=="__main__":
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
 					if robot._device["state"] == 0:
 						robot.play(command)
-						print('Rolling -5')
+						print('Rolling -5')  # TODO change all of these to joint_change_amt
 				elif key == '/':
 					dxyz = [0, 0, 0, 0, joint_change_amt]
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
@@ -407,7 +418,11 @@ if __name__=="__main__":
 		# twist.linear.x = 0; twist.linear.y = 0; twist.linear.z = 0
 		# twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
 		# pub.publish(twist)
-		
+
+		# TODO could whole file be a flask server as well? And then other files could just GET/POST anything above?
+		# TODO origibot gripper actually goes lower than center. I need to hack inside of dorna to fix that? or add offset elsewhere? 20mm downwards relative to center!
+		# TODO z command while keeping same xy as a good pre-pick pose
+
 		termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
 		robot.terminate()
 		print("Robot terminated")
