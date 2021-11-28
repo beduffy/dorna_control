@@ -17,7 +17,7 @@ except Exception as e:
 import torch
 
 # from control.lib.kinematics import isclose
-# from utilities.extra import random_colors
+from lib.extra import random_colors
 from lib.vision_config import fx, fy, ppx, ppy
 
 # todo to answer the question of what is more important or what we need more of (perception vs control) count how LOC, algorithms are in control vs vision after a few months
