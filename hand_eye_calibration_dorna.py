@@ -189,6 +189,10 @@ def click_callback(event, x, y, flags, param):
             if curr_arm_xyz is not None:
                 curr_arm_xyz = curr_arm_xyz * 1000
 
+                camera_coord = get_camera_coordinate(camera_depth_img, mouseX, mouseY, verbose=True)
+                print('camera_coord using depth and intrinsics:', camera_coord)
+                print('saved tvec:', saved_tvec)  # TODO how different is saved_tvec to inverse saved_tvec?!?!!??!
+
                 # print('Getting joint angles to compare hand-eye calibration click with FK')
                 r = requests.get('http://localhost:8080/get_xyz_joint')
                 robot_data = r.json()
@@ -706,6 +710,18 @@ if __name__ == '__main__':
         size=25.0, origin=[0.0, 0.0, 0.0])
     coordinate_frame_shoulder_height = o3d.geometry.TriangleMesh.create_coordinate_frame(
         size=25.0, origin=[0.0, 0.0, 206.01940000000002])
+    # gripper_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+    #     size=25.0, origin=[0.0, 0.0, 0.0])
+
+    # TODO .translate is easy for FK, what I've been doing, then the only other angles that matter is wrist pitch, wrist roll and base? pitch, roll and yaw I suppose
+    # TODO so I need to find the 4x4 matrix which will make .transform of coordinate frame onto gripper. And it's gripper to base or base 2 gripper?
+    # TODO once I have 4x4, I actually only need 3x1 or 3x3 rvec and 3x1 tvec
+    # TODO tvec and rvec come straight from aruco
+    # TODO why do we get cam2gripper and not cam2base though? But it's the gripper expressed in base coordinates soooooo base?
+
+    '''
+    cv.calibrateHandEye(R_gripper2base, t_gripper2base, R_target2cam, t_target2cam[, R_cam2gripper[, t_cam2gripper[, method]]]	) ->	R_cam2gripper, t_cam2gripper
+    '''
 
     # calibration and marker params
     use_aruco = False  # use charuco
@@ -1115,6 +1131,16 @@ if __name__ == '__main__':
                 r = requests.get('http://localhost:8080/get_xyz_joint')
                 robot_data = r.json()
                 joint_angles = robot_data['robot_joint_angles']
+
+                # # the below is just for testing without running arm
+                # joint_angles = [0, 0, 0, 0, 0]
+                # # joint_angles = [0, 0, 0, 25, 0]
+                # # joint_angles = [0, 25, 25, 25, 0]
+                # # joint_angles = [45, 25, 25, 25, 0]
+                # joint_angles = [45, 25, 25, -45, 45]
+                # # joint_angles = [0, 0, 0, 25, 25]
+                # # joint_angles = [0, 0, 0, 0, 45]
+                # # joint_angles = [0, 0, 0, 45, 0]
                 print('joint_angles: ', joint_angles)
 
                 full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
@@ -1124,12 +1150,60 @@ if __name__ == '__main__':
                                         pinhole_camera_intrinsic, visualise=False)
                 full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, cam2arm, 0.0)
 
-                plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=[full_arm_pcd, coordinate_frame, coordinate_frame_shoulder_height])
+                def get_gripper_base_transformation(joint_angles):
+                    full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
+
+                    # TODO are things weird because of dorna's weird angle coordinate system?
+                    # because dorna's j1 is measure relative to ground plane, j2 is then relative to j1, j3 relative to j2. But also inverse direction right?
+                    joint_angles[3] = -joint_angles[3]
+                    joint_angles[2] = -joint_angles[2]
+                    joint_angles[1] = -joint_angles[1]
+
+                    joint_angles_rad = [math.radians(j) for j in joint_angles]
+
+                    # homo_array = np.zeros((4, 4))
+                    homo_array = np.identity(4)
+                    # arm2cam_local[:3, :3] = R_ct
+                    homo_array[0, 3] = full_toolhead_fk[0]
+                    homo_array[1, 3] = full_toolhead_fk[1]
+                    homo_array[2, 3] = full_toolhead_fk[2]
+
+                    # TODO, wait it's the toolhead bottom which rotates, not the gripper tip, does this affect anything?
+                    wrist_pitch = np.sum(joint_angles_rad[1:4])
+                    wrist_roll = joint_angles_rad[4]
+                    base_yaw = joint_angles_rad[0]  # and the only way we can yaw
+                    # rot_mat = o3d.geometry.get_rotation_matrix_from_xyz(np.array([wrist_roll, wrist_pitch, base_yaw]))
+                    # rot_mat = o3d.geometry.get_rotation_matrix_from_zyx(np.array([wrist_roll, wrist_pitch, base_yaw]))
+                    rot_mat = o3d.geometry.get_rotation_matrix_from_zyx(np.array([base_yaw, wrist_pitch, wrist_roll]))  # roll correct
+                    # rot_mat = o3d.geometry.get_rotation_matrix_from_zyx(np.array([wrist_pitch, base_yaw, wrist_roll]))
+                    homo_array[:3, :3] = rot_mat
+
+                    # # -- Now get Position and attitude f the camera respect to the marker
+                    # # pos_camera = -R_tc * np.matrix(tvec).T  # todo how could element-wise possibly work!?!?!?!?
+                    # pos_camera = np.dot(-R_tc, np.matrix(tvec_in).T)
+
+                    # # cam_position = np.dot(-arm2cam_rotation, tvec_arm2cam)  # .T   # arm2cam
+                    # cam2arm_local = np.identity(4)
+                    # cam2arm_local[:3, :3] = R_tc
+                    # cam2arm_local[0, 3] = pos_camera[0]
+                    # cam2arm_local[1, 3] = pos_camera[1]
+                    # cam2arm_local[2, 3] = pos_camera[2]
+
+                    return homo_array
+
+                gripper_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+                                        size=25.0, origin=[0.0, 0.0, 0.0])
+                gripper_base_transform = get_gripper_base_transformation(joint_angles)
+                gripper_coordinate_frame.transform(gripper_base_transform)
+
+                # plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=[full_arm_pcd, coordinate_frame, coordinate_frame_shoulder_height])
+                plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=[full_arm_pcd, gripper_coordinate_frame, coordinate_frame, coordinate_frame_shoulder_height])
 
                 # TODO look into open3D interactive mode and change sliders of joints here or for ik and see how wrist pitch changes
                 # TODO look into camera settings so I can look down top down, side-ways and straight down barrel on arm to see how wrong transforms are
                 # TODO optimise on white sphere and track it
                 # TODO is there a way I could visual servo measure angles?
+                # TODO I was using speed 5000 (what does this mean in joint and xyz space? same thing, how fast can I go?)
                 
                 # dist(np.array([148.166, -190.953, 440.97]), np.array([ 131.949075, -199.25261, 452.410165]))
                 # TODO if I'm specifying that the clicked point is the centre of the battery I could get an error metric from FK vs cam2arm click point

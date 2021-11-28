@@ -95,8 +95,6 @@ def get_camera_coordinate(camera_depth_img, pixel_x, pixel_y, verbose=False):
     # intrinsics as global to library or parameter?
 
     # assuming it's your regular 3x3 camera intrinsics
-    # x_cam = np.multiply(mouseX - ppx, z_cam / fx)  # todo using color intrinsics but depth hmm
-    # y_cam = np.multiply(mouseY - ppy, z_cam / fy)
     x_cam = np.multiply(pixel_x - ppx, z_cam / fx)  # todo using color intrinsics but depth hmm
     y_cam = np.multiply(pixel_y - ppy, z_cam / fy)
     # above causes x_cam and y_cam to be much more accurate but z_cam is still 10cm off???
