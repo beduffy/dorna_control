@@ -6,6 +6,13 @@ import time
 import math
 import traceback
 
+try:
+    import open3d as o3d
+    from skimage.measure import find_contours
+except Exception as e:
+    print(e)
+    print('Tried to import open3d or skimage but not installed')
+import requests
 import pyrealsense2 as rs
 from cv2 import aruco
 import cv2
@@ -15,8 +22,10 @@ from mpl_toolkits import mplot3d
 import matplotlib as mpl
 from scipy import optimize
 
-from lib.vision import get_camera_coordinate, create_homogenous_transformations, convert_pixel_to_arm_coordinate
-
+from lib.vision import get_full_pcd_from_rgbd
+from lib.vision import get_camera_coordinate, create_homogenous_transformations, convert_pixel_to_arm_coordinate, convert_cam_pcd_to_arm_pcd
+from lib.vision_config import pinhole_camera_intrinsic
+from plot_dorna_kinematics import i_k, f_k, plot_open3d_Dorna
 
 # helper functions
 def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
@@ -24,7 +33,8 @@ def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
     return abs(a - b) <= rel_tol
 
 def dist(x, y):
-    return np.sqrt(np.sum((x - y) ** 2))
+    # return np.sqrt(np.sum((x - y) ** 2))
+    return np.sqrt(np.sum((np.array(x) - np.array(y)) ** 2))
 
 def rotationMatrixToEulerAngles(R):
     # Calculates rotation matrix to euler angles
@@ -167,24 +177,70 @@ def optimise_transformation_to_origin(cam_3d_coords, init_tvec, init_rvec):  # t
 
 def click_callback(event, x, y, flags, param):
     global mouseX, mouseY
-    global curr_arm_xyz, prev_arm_xyz
+    global curr_arm_xyz, prev_arm_xyz, click_pix_coord
+    global FK_gripper_tip_projected_to_image, FK_wrist_projected_to_image, FK_elbow_projected_to_image, FK_shoulder_projected_to_image
     if event == cv2.EVENT_LBUTTONUP:
         mouseX, mouseY = x, y
 
-        arm_xyz = convert_pixel_to_arm_coordinate(camera_depth_img, mouseX, mouseY, cam2arm, verbose=True)
-        arm_xyz = arm_xyz * 1000
-        print('arm_xyz milimetres: ', arm_xyz)
+        click_pix_coord = (int(round(mouseX)), int(round(mouseY)))
 
-    if event == cv2.EVENT_MBUTTONUP:
-        # cv2.circle(camera_color_img, (x, y), 100, (255, 255, 0), -1)  # todo if I ever want this
-        mouseX, mouseY = x, y
+        if saved_cam2arm is not None:
+            curr_arm_xyz = convert_pixel_to_arm_coordinate(camera_depth_img, mouseX, mouseY, saved_cam2arm, verbose=True)
+            if curr_arm_xyz is not None:
+                curr_arm_xyz = curr_arm_xyz * 1000
 
-        curr_arm_xyz = convert_pixel_to_arm_coordinate(camera_depth_img, mouseX, mouseY, cam2arm, verbose=True)
+                # print('Getting joint angles to compare hand-eye calibration click with FK')
+                r = requests.get('http://localhost:8080/get_xyz_joint')
+                robot_data = r.json()
+                joint_angles = robot_data['robot_joint_angles']
+                # print('current joint_angles: ', joint_angles)
 
-        print('Distance to previous arm xyz 3D: {}. 2D distance: {}'.format(dist(curr_arm_xyz, prev_arm_xyz), dist(curr_arm_xyz[:2], prev_arm_xyz[:2])))
-        prev_arm_xyz = curr_arm_xyz
-        # TODO try except
-        # IndexError: index 1258 is out of bounds for axis 0 with size 640
+                # TODO remove prints for f_k or have param
+                full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
+                dist_btwn_FK_and_cam2arm_transformed_click = dist(full_toolhead_fk[:3], curr_arm_xyz)
+
+                # TODO round all prints below, too hard to read
+                print('hand-eye click in arm coords: ', [x for x in curr_arm_xyz])
+                print('FK xyz: ', full_toolhead_fk[:3])
+                print('dist_btwn_FK_and_cam2arm_transformed_click: {}'.format(dist_btwn_FK_and_cam2arm_transformed_click))
+                
+                # TODO do I not need arm2cam? or in other words why the hell did not doing it make such a good result? does projectPoints do its own thing? yes
+                gripper_tip_fk_metric = np.array(full_toolhead_fk[:3]) / 1000
+                # print('gripper_tip_fk_metric: ', gripper_tip_fk_metric)
+                imagePointsFK, jacobian = cv2.projectPoints(gripper_tip_fk_metric, saved_rvec, saved_tvec, camera_matrix, dist_coeffs)
+                x_FK_pix, y_FK_pix = imagePointsFK.squeeze().tolist()
+                FK_gripper_tip_projected_to_image = (int(round(x_FK_pix)), int(round(y_FK_pix)))
+                print('click_pix_coord: {}, FK_gripper_tip_projected_to_image: {}'.format(click_pix_coord, FK_gripper_tip_projected_to_image))
+
+                wrist_fk_metric = np.array(xyz_positions_of_all_joints['wrist']) / 1000
+                imagePointsFK, jacobian = cv2.projectPoints(wrist_fk_metric, saved_rvec, saved_tvec, camera_matrix, dist_coeffs)
+                x_FK_pix, y_FK_pix = imagePointsFK.squeeze().tolist()
+                FK_wrist_projected_to_image = (int(round(x_FK_pix)), int(round(y_FK_pix)))
+
+                elbow_fk_metric = np.array(xyz_positions_of_all_joints['elbow']) / 1000
+                imagePointsFK, jacobian = cv2.projectPoints(elbow_fk_metric, saved_rvec, saved_tvec, camera_matrix, dist_coeffs)
+                x_FK_pix, y_FK_pix = imagePointsFK.squeeze().tolist()
+                FK_elbow_projected_to_image = (int(round(x_FK_pix)), int(round(y_FK_pix)))
+
+                shoulder_fk_metric = np.array(xyz_positions_of_all_joints['shoulder']) / 1000
+                imagePointsFK, jacobian = cv2.projectPoints(shoulder_fk_metric, saved_rvec, saved_tvec, camera_matrix, dist_coeffs)
+                x_FK_pix, y_FK_pix = imagePointsFK.squeeze().tolist()
+                FK_shoulder_projected_to_image = (int(round(x_FK_pix)), int(round(y_FK_pix)))
+            else:
+                print('curr_arm_xyz is None')
+        else:
+            print('no saved_cam2arm')
+
+    # if event == cv2.EVENT_MBUTTONUP:
+    #     # cv2.circle(camera_color_img, (x, y), 100, (255, 255, 0), -1)  # todo if I ever want this
+    #     mouseX, mouseY = x, y
+
+    #     curr_arm_xyz = convert_pixel_to_arm_coordinate(camera_depth_img, mouseX, mouseY, cam2arm, verbose=True)
+
+    #     print('Distance to previous arm xyz 3D: {}. 2D distance: {}'.format(dist(curr_arm_xyz, prev_arm_xyz), dist(curr_arm_xyz[:2], prev_arm_xyz[:2])))
+    #     prev_arm_xyz = curr_arm_xyz
+    #     # TODO try except
+    #     # IndexError: index 1258 is out of bounds for axis 0 with size 640
 
 
 def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruco=True):
@@ -254,7 +310,8 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
                 # x_offset_for_id_4 = -0.2
 
                 # found with depth camera clicking
-                y_offset_for_id_1 = -0.173  # for big marker
+                y_offset_for_id_1 = -0.175  # for big marker. # 0.0765 is dorna square width, so if I measure from edge of dorna instead (easier). 
+                # 0.175 - (0.0765 / 2) = 0.175 - 0.03825  = 0.13675m
                 extra_y_offset_for_id_2 = -0.166
                 y_offset_for_id_3 = 0.1214
                 extra_y_offset_for_id_4 = 0.169
@@ -342,18 +399,21 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
                 # outval, rvec_arm, tvec_arm = cv2.solvePnP(np.array([[0.0, -y_offset, 0.0]]), corners[shoulder_motor_marker_id], camera_matrix, dist_coeffs)
 
                 # TODO could I just use a charuco board instead???
-                # TODO bigger markers and how to minimise eyeball error? glue and pencil?
+                # TODO how to minimise eyeball error? glue and pencil?
+                # TODO why do some angles not work well? 
 
-                # TODO to get to the bottom of my hand eye problem, I should also store cam2arm to aruco marker?
                 rvec = rvec_arm.squeeze()
                 tvec = tvec_arm.squeeze()
-
-                # TODO make it work again with no aruco in view!!!!
 
                 # draw circle over arm origin in camera image
                 imagePoints, jacobian = cv2.projectPoints(np.array([0.0, 0.0, 0.0]), rvec, tvec, camera_matrix, dist_coeffs)
                 x, y = imagePoints.squeeze().tolist()
                 cv2.circle(color_img, (int(x), int(y)), 5, (0, 0, 255), -1)
+
+                # TODO would it ever be nice to always have it projected or only on click?
+                # imagePointsFK, jacobian = cv2.projectPoints(, rvec, tvec, camera_matrix, dist_coeffs)
+                # x_FK_pix, y_FK_pix = imagePointsFK.squeeze().tolist()
+                # FK_gripper_tip_projected_to_image = (int(round(x_FK_pix)), int(round(y_FK_pix)))
             else:
                 print('Not doing solvePnP')
                 tvec, rvec = None, None
@@ -377,7 +437,7 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
             One such method is called Levenberg-Marquardt optimization. Check out more details on Wikipedia.
             """
 
-            # todo smart way to weight the aruco markers by their distance and fuse all the pose estimations.
+            # todo smart way to weigh the aruco markers by their distance and fuse all the pose estimations.
 
             # if estimate_pose:  # further refine pose of specific marker by
             #     # todo does the above get better with more markers or not?!?!?!?! it doesn't because it's individual markers
@@ -613,7 +673,16 @@ if __name__ == '__main__':
     # todo seems very different to depth.intrinsics. Use depth intrinsics.....
 
     cam2arm = np.identity(4)
+    saved_cam2arm = None
+    curr_arm_xyz = None
     # cam_coords = []
+    click_pix_coord = None
+    FK_gripper_tip_projected_to_image = None
+    FK_wrist_projected_to_image = None
+    FK_elbow_projected_to_image = None
+    FK_shoulder_projected_to_image = None
+    saved_rvec = None
+    saved_tvec = None
 
     pipeline = rs.pipeline()
     config = rs.config()
@@ -632,6 +701,11 @@ if __name__ == '__main__':
     color_frame = frames.get_color_frame()
     depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
     color_intrin = color_frame.profile.as_video_stream_profile().intrinsics
+
+    coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+        size=25.0, origin=[0.0, 0.0, 0.0])
+    coordinate_frame_shoulder_height = o3d.geometry.TriangleMesh.create_coordinate_frame(
+        size=25.0, origin=[0.0, 0.0, 206.01940000000002])
 
     # calibration and marker params
     use_aruco = False  # use charuco
@@ -780,6 +854,7 @@ if __name__ == '__main__':
 
             color_img, depth_img, tvec, rvec = estimate_cam2arm_on_frame(camera_color_img, camera_depth_img, estimate_pose=estimate_pose, use_aruco=use_aruco)
 
+            # TODO would optimising the transform with depth info solve most of my problems?
             # if pixel_positions_to_optimise:
             #     # middle_pixel = pixel_positions_to_optimise[0]  # todo first is a numpy array, the rest are lists....
             #     (middle_pixel, top_left_pixel, top_right_pixel,
@@ -900,12 +975,29 @@ if __name__ == '__main__':
             # cv2.circle(color_img, bottom_right_pixel, 4, color=(0, 0, 255))
             # cv2.circle(color_img, bottom_left_pixel, 4, color=(0, 0, 0))
             #
+
+            if click_pix_coord is not None:
+                cv2.circle(color_img, click_pix_coord, 5, (0, 0, 255), -1)
+            if FK_gripper_tip_projected_to_image is not None:
+                cv2.circle(color_img, FK_gripper_tip_projected_to_image, 5, (255, 0, 0), -1)
+            if FK_wrist_projected_to_image is not None:
+                cv2.circle(color_img, FK_wrist_projected_to_image, 5, (0, 255, 255), -1)
+                cv2.line(color_img, FK_wrist_projected_to_image, FK_gripper_tip_projected_to_image, (0, 255, 255), thickness=3)
+            if FK_elbow_projected_to_image is not None:
+                cv2.circle(color_img, FK_elbow_projected_to_image, 5, (0, 0, 255), -1)
+                cv2.line(color_img, FK_elbow_projected_to_image, FK_wrist_projected_to_image, (0, 0, 255), thickness=3)
+            if FK_shoulder_projected_to_image is not None:
+                cv2.circle(color_img, FK_shoulder_projected_to_image, 5, (0, 0, 0), -1)
+                cv2.line(color_img, FK_shoulder_projected_to_image, FK_elbow_projected_to_image, (0, 0, 0), thickness=3)
+
             images = np.hstack((color_img, depth_colormap))
             # images = np.hstack((camera_color_img, depth_colormap))
             # images = camera_color_img
 
             cv2.imshow("image", images)
             k = cv2.waitKey(1)
+
+            camera_color_img = cv2.cvtColor(camera_color_img, cv2.COLOR_BGR2RGB)  # for open3D
 
             if k == ord('q'):
                 cv2.destroyAllWindows()
@@ -924,8 +1016,123 @@ if __name__ == '__main__':
                 # print('Saving best optimised aruco cam2arm with error {}\n{}'.format(
                 #             lowest_optimised_error, cam2arm))
                 if cam2arm is not None:
+                    saved_cam2arm = cam2arm
+                    saved_rvec = rvec
+                    saved_tvec = tvec
                     print('Saving aruco cam2arm {}\n'.format(cam2arm))
                     np.savetxt('data/latest_aruco_cam2arm.txt', cam2arm, delimiter=' ')
+
+                    # TODO maybe for clicking i should only used saved cam2arm rather than it changing...
+
+            if k == ord('p'):
+                if curr_arm_xyz is not None:
+                    x, y, z = curr_arm_xyz
+                    # if z < 10:
+                    #     print('Z was {} and below 10, setting to 10'.format(z))
+                    #     z = 10
+                    print('Z was {} setting to 10'.format(z))
+                    z = 10
+                    pre_grasp_z = 200
+                    # TODO prepick and then pre grasp and then grasp and then. All in other process so we see camera?
+                    # TODO how to organise all this code better? ROS? functions? bleh
+                    # TODO create function for go_to_xyz here too
+                    # TODO open gripper before
+                    # TODO do chicken head dance with gripper in same xyz but wrist pitch changing
+                    print('Going to pre-pick pose')
+                    wrist_pitch = -42.0
+                    dorna_url = 'http://localhost:8080/go_to_xyz'
+                    # dorna_full_url = '{}?x={}&y={}&z={}'.format(dorna_url, x, y, pre_grasp_z)
+                    dorna_full_url = '{}?x={}&y={}&z={}&wrist_pitch={}'.format(dorna_url, x, y, pre_grasp_z, wrist_pitch)
+                    r = requests.get(url=dorna_full_url)
+                    print('r.status_code: {}. r.text: {}'.format(r.status_code, r.text))
+                    if r.status_code == 200 and r.text == 'success':
+                        print('Sleeping before pre-grasp')
+                        time.sleep(6)  # TODO how to avoid sleeps in the future? Ask if dorna is ready or loops or polling? or ros? or something?
+                        # dorna_full_url = '{}?x={}&y={}&z={}&wrist_pitch={}'.format(dorna_url, x, y, 20, wrist_pitch)
+                        dorna_full_url = '{}?x={}&y={}&z={}&wrist_pitch={}'.format(dorna_url, x, y, z, wrist_pitch)
+                        r = requests.get(url=dorna_full_url)
+                        print('r.status_code: {}. r.text: {}'.format(r.status_code, r.text))
+                        if r.status_code == 200 and r.text == 'success':
+                            print('Sleeping before closing gripper')
+                            time.sleep(4)
+                            dorna_grasp_full_url = 'http://localhost:8080/gripper?gripper_state=3'  # TODO different objects and do my conversion of object width to gripper close width 
+                            r = requests.get(url=dorna_grasp_full_url)
+                            print('r.status_code: {}. r.text: {}'.format(r.status_code, r.text))
+                            if r.status_code == 200 and r.text == 'success':
+                                print('Sleeping short before going up (after pick)')
+                                time.sleep(1)
+                                # dorna_full_url = '{}?x={}&y={}&z={}'.format(dorna_url, x, y, 150)
+                                dorna_full_url = '{}?x={}&y={}&z={}&wrist_pitch={}'.format(dorna_url, x, y, 150, wrist_pitch)
+                                r = requests.get(url=dorna_full_url)
+                                print('r.status_code: {}. r.text: {}'.format(r.status_code, r.text))
+
+                            # Optional or not, let go
+                            dorna_grasp_full_url = 'http://localhost:8080/gripper?gripper_state=0'  # TODO could pass state for different objects and do my conversion of object width to gripper close width 
+                            r = requests.get(url=dorna_grasp_full_url)
+                            print('r.status_code: {}. r.text: {}'.format(r.status_code, r.text))
+                else:
+                    print('curr_arm_xyz is None')
+
+            if k == ord('i'):
+                if curr_arm_xyz is not None:
+                    x, y, z = curr_arm_xyz
+                    # z = 200  # pre pick
+                    # z = 20
+                    wrist_pitch = 0.0  # TODO this affects everything, understand how
+                    wrist_pitch = -42.0  # TODO this affects everything
+                    # TODO how to dynamically change wrist pitch for different things and choose one out of many? 
+                    # TODO how to prevent all collisions?
+                    # TODO aruco far away problem was to do with intrinsics I bet
+                    fifth_IK_value = 0.0
+                    xyz_pitch_roll = [x, y, z, wrist_pitch, fifth_IK_value]
+                    joint_angles = i_k(xyz_pitch_roll)
+                    print('joint_angles: ', joint_angles)
+
+                    if joint_angles:
+                        full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
+                        print('full_toolhead_fk: ', full_toolhead_fk)
+
+                        cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img,
+                                                pinhole_camera_intrinsic, visualise=False)
+
+                        # only plot open3D arm when arm is in position. Otherwise if non-blocking
+                        # TODO remove q1 and z offset now that aruco and solvePnP finds correct transform
+                        # TODO never understood how this relates, if origin looks good but cam2arm is bad?
+                        # transforming rgbd pointcloud using bad cam2arm means what? . What is the thing changing again?
+
+                        full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, cam2arm, 0.0)
+
+                        plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=[full_arm_pcd, coordinate_frame, coordinate_frame_shoulder_height])
+
+                    else:
+                        print('IK returned none')
+                else:
+                    print('curr_arm_xyz is None')
+
+            if k == ord('l'):
+                # Use curr joint angles and show line mesh arm plotted over pointcloud arm
+                print('Getting joint angles')
+                r = requests.get('http://localhost:8080/get_xyz_joint')
+                robot_data = r.json()
+                joint_angles = robot_data['robot_joint_angles']
+                print('joint_angles: ', joint_angles)
+
+                full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
+                print('full_toolhead_fk: ', full_toolhead_fk)
+
+                cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img,
+                                        pinhole_camera_intrinsic, visualise=False)
+                full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, cam2arm, 0.0)
+
+                plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=[full_arm_pcd, coordinate_frame, coordinate_frame_shoulder_height])
+
+                # TODO look into open3D interactive mode and change sliders of joints here or for ik and see how wrist pitch changes
+                # TODO look into camera settings so I can look down top down, side-ways and straight down barrel on arm to see how wrong transforms are
+                # TODO optimise on white sphere and track it
+                # TODO is there a way I could visual servo measure angles?
+                
+                # dist(np.array([148.166, -190.953, 440.97]), np.array([ 131.949075, -199.25261, 452.410165]))
+                # TODO if I'm specifying that the clicked point is the centre of the battery I could get an error metric from FK vs cam2arm click point
 
             frame_count += 1
         except ValueError as e:
