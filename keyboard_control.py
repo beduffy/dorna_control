@@ -6,11 +6,108 @@ import time
 import sys, select, termios, tty
 import traceback
 import json
+import threading
 
+from flask import Flask, request, render_template, jsonify
+# TODO Flask or ROS???
 # import rospy
 from geometry_msgs.msg import Twist
 # from rosserial_arduino.srv import Test
 from dorna import Dorna
+
+from plot_dorna_kinematics import f_k, i_k, check_ground_collision
+
+def go_to_joint_angles(joint_angles):
+	command = generate_command(joint_angles, movement=0, coord_sys='joint')
+	# command = generate_command(joint_angles, movement=0, coord_sys='xyz')  # big collision mistake
+	print(command)
+	if robot._device["state"] == 0:
+		robot.play(command)
+
+		print('Robot moved to joint_angles')
+	else:
+		print('Robot busy, did not go to joint_angles')
+
+def go_to_xyz(position):
+	command = generate_command(position, movement=0, coord_sys='xyz')
+	print(command)
+	if robot._device["state"] == 0:
+		robot.play(command)
+
+		print('Robot moved to xyz position')
+	else:
+		print('Robot busy, did not go to xyz position')
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return 'home'
+
+@app.route("/go_to_xyz")
+def go_to_xyz_route():
+	x = request.args.get('x')
+	y = request.args.get('y')
+	z = request.args.get('z')
+	wrist_pitch = request.args.get('wrist_pitch')
+
+	print('xyz:', x, y, z, 'wrist_pitch: ', wrist_pitch)
+	if x and y and z:
+		# x, y, z = float(x), float(y), float(z)
+		x, y, z, wrist_pitch = float(x), float(y), float(z), float(wrist_pitch)
+		# TODO clever stuff if no wrist pitch given
+		if z > 8:  # TODO change
+			# wrist_pitch = -4.258319999999988
+			# wrist_pitch = 0.0
+			fifth_IK_value = 0.0
+			xyz_pitch_roll = [x, y, z, wrist_pitch, fifth_IK_value]
+
+			joint_angles = i_k(xyz_pitch_roll)
+			print('joint_angles: ', joint_angles)
+
+			if joint_angles:
+				full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
+				print('full_toolhead_fk: ', full_toolhead_fk)
+
+				# TODO rename function
+				if not check_ground_collision(xyz_positions_of_all_joints):
+					go_to_joint_angles(joint_angles)  # TODO WTF is wrong with this?
+					# pass
+				else:
+					print('Ground collision detected!!!')
+					return 'failure'
+			else:
+				return 'failure'
+
+			# go_to_xyz(xyz_pitch_roll)
+			
+			return 'success'
+		else:
+			print('Z too low!')
+			return 'failure'
+
+	return 'failure'
+
+@app.route("/gripper")
+def gripper_route():
+	gripper_state = int(request.args.get('gripper_state'))
+	# gripper_state = 3
+	activate_gripper(gripper_state)
+	return 'success'
+
+# curl "http://localhost:8080/get_xyz_joint"
+@app.route("/get_xyz_joint")
+def get_xyz_joint_route():
+	robot_pos = [float(x) for x in robot.position("xyz").strip('[]').split(', ')]
+	robot_joints = [float(x) for x in robot.position("joint").strip('[]').split(', ')]
+	print('robot_pos: ', robot_pos)
+	print('robot_joint: ', robot_joints)
+	
+	return_dict = {'robot_pos': robot_pos, 'robot_joint_angles': robot_joints}
+
+	return jsonify(return_dict)
+
+
 
 msg = """
 Reading from the keyboard to control Dorna Arm!
@@ -30,18 +127,12 @@ armMoveBindings = {
 		'd': (0,0,-1),
 	}
 
-# wheelMoveBindings = {
-# 		'i':(1,0,0,0),
-# 		'j':(0,0,0,1),
-# 		'l':(0,0,0,-1),
-# 		',':(-1,0,0,0)
-# }
-
 def getKey():
 	tty.setraw(sys.stdin.fileno())
 	select.select([sys.stdin], [], [], 0)
 	key = sys.stdin.read(1)
 	termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
+	# TODO how to make this not mess up my terminal output?
 	return key
 
 def generate_command(move_cmd, movement=1, coord_sys='xyz'):
@@ -65,22 +156,14 @@ def generate_command(move_cmd, movement=1, coord_sys='xyz'):
 		# cmd =  {"command": "move", "prm": {'path': path_type, 'movement': movement, 'xyz': [x, y, z, 0, w_roll], 'speed': 5000}}
 		# cmd =  {"command": "move", "prm": {'path': path_type, 'movement': movement, 'xyz': [x, y, z, w_pitch, w_roll]}}
 	elif coord_sys == 'joint':
-		cmd = {"command": "move", "prm": {'path': path_type, 'movement': movement, 'joint': [x, y, z, w_pitch, w_roll]}}
+		# cmd = {"command": "move", "prm": {'path': path_type, 'movement': movement, 'joint': [x, y, z, w_pitch, w_roll]}}
+		cmd = {"command": "move", "prm": {'path': path_type, 'movement': movement, 'joint': [x, y, z, w_pitch, w_roll], 'speed': 5000}}
 		# cmd = {"command": "move", "prm": {'path': path_type, 'movement': movement, 'joint': [0, 0, 0, w_pitch, w_roll]}}
 	else:
 		raise ValueError("Invalid coord sys!")
 	return cmd
 
 def activate_gripper(gripper_state):
-	# if gripper_state == 0:
-	# 	microsecond_delay = 700
-	# elif gripper_state == 1:
-	# 	microsecond_delay = 1000
-	# elif gripper_state == 2:
-	# 	microsecond_delay = 1400
-	# elif gripper_state == 3:
-	# 	microsecond_delay = 1700
-
 	if gripper_state == 0:
 		robot.servo(40)
 	elif gripper_state == 1:
@@ -92,16 +175,11 @@ def activate_gripper(gripper_state):
 	elif gripper_state == 3:
 		robot.servo(675)
 
-	
-
-	# try:
-	# 	print('Setting gripper to {} microsecond delay'.format(microsecond_delay))
-	# 	subprocess.Popen(["./close_gripper.sh", '-m', str(microsecond_delay)])
-	# except Exception as e:
-	# 	print(e)
-
 if __name__=="__main__":	
 	gripper_state = 0
+
+	# TODO no need for sudo if I change permissions
+	# TODO slow grip function
 
 	# Dorna arm initialisation
 	# robot = Dorna("myconfig.json")
@@ -111,6 +189,8 @@ if __name__=="__main__":
 	# robot.set_toolhead({"x": 80})  # Set gripper tip length for IK
 	# was 44.196 and then was 125 because I thought it was from the end of dorna. But no, it's from the centre of J3 joint so 175
 	print('robot.toolhead():', robot.toolhead())
+
+	# TODO with toolhead_x of 193, my measuring tape says 634 for base straight out but FK says 644.079. Can't really be the base angle. 
 	mv_scale = 3
 	print(robot.connect())
 	# TODO could avoid password with /dev rules?
@@ -138,37 +218,23 @@ if __name__=="__main__":
 	z = 0
 	th = 0
 
-	# joint_change_amt = 10
+	joint_change_amt = 10  # TODO key for changing this? and can we calibrate even more if below 1 degree?? Of course?
 	joint_change_amt = 1
 
 	last_time_command_ran = time.time()
+
+	# app.run(host='0.0.0.0', port=8080)
+	flask_thread = threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8080, use_reloader=False))
+	# threading.Thread(target=lambda: app.run(host='0.0.0.0', port=5005)).start()
+	flask_thread.setDaemon(True)
+	flask_thread.start()
 
 	# Keyboard control loop
 	settings = termios.tcgetattr(sys.stdin)
 	try:
 		print(msg)
 		while(1):
-			key = getKey()
-			# if key in wheelMoveBindings.keys():
-			# 	x = wheelMoveBindings[key][0]
-			# 	y = wheelMoveBindings[key][1]
-			# 	z = wheelMoveBindings[key][2]
-			# 	th = wheelMoveBindings[key][3]
-			# 	print(x * speed, y * speed, z * speed, th * turn)
-			# else:
-			# 	# turn off wheels if doing anything else
-			# 	x = 0
-			# 	y = 0
-			# 	z = 0
-			# 	th = 0
-			# 	if (key == '\x03'):
-			# 		break
-
-			# twist = Twist()
-			# twist.linear.x = x*speed; twist.linear.y = y*speed; twist.linear.z = z*speed;
-			# twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = th*turn
-			# pub.publish(twist)
-			
+			key = getKey()			
 			if key in armMoveBindings.keys():
 				dxyz = tuple([mv_scale * param for param in armMoveBindings[key]])
 				command = generate_command(dxyz)
@@ -187,10 +253,15 @@ if __name__=="__main__":
 					print('Halting robot')
 					robot.halt()
 				elif key == 'o':  # check position status
-					print('robot_pos: ', robot.position("xyz"))
-					print('robot_joint: ', robot.position("joint"))
-					# print([round(float(x), 3) for x in robot.position("xyz")])  # it's a string? TODO fix 
-					# TODO print position after every command so I don't have to keep showing it? Also no whitespace please
+					if 'null' not in robot.position("xyz"):
+						robot_pos = [round(float(x), 3) for x in robot.position("xyz").strip('[]').split(', ')]
+						robot_joints = [round(float(x), 3) for x in robot.position("joint").strip('[]').split(', ')]
+						print('robot_pos: ', robot_pos)
+						print('robot_joint: ', robot_joints)
+						# print([round(float(x), 3) for x in robot.position("xyz")])  # it's a string? TODO fix 
+						# TODO print position after every command so I don't have to keep showing it? Also no whitespace please
+					else:
+						print('Null in position')
 				elif key == 'r': # try to re-connect in case of connection missing
 					robot.connect()
 				elif key == 'h':
@@ -227,8 +298,8 @@ if __name__=="__main__":
 					activate_gripper(gripper_state)
 				elif key == 'c':
 					robot.calibrate([0, 0, 0, 0 ,0])
-					robot.save_config('myconfig.json')
-					print("Robot calibrated, saved to myconfig.json")
+					robot.save_config('myconfig.yaml')
+					print("Robot calibrated, saved to myconfig.yaml")
 				# elif key == '4':
 				# 	robot.move_circle({'movement': 1})
 				# 	print("Robot circle")
@@ -288,27 +359,37 @@ if __name__=="__main__":
 					else:
 						print('Robot busy, did not go to manipulation pose')
 				elif key == 'i':
-					print('Inputting command')
-					user_input = input('Enter a xy or xyz plane location separated by spaces\n')
-					user_input_list = [float(x) for x in user_input.split(' ')]
-					if len(user_input_list) == 2:
-						x, y = user_input_list
-						z = 300
-					else:
-						x, y, z = user_input_list
+					print('Inputting IK command')
+					user_input = input('Enter a xy or xyz or xyz_wrist_pitch location separated by spaces\n')
+					# user_input_list = [float(x) for x in user_input.split(' ')]  # TODO commas and spaces?
+					user_input_list = [float(x) for x in user_input.split(', ')]
+					
 					# wrist_pitch = -4.258319999999988
 					wrist_pitch = 0.0
 					fifth_IK_value = 0.0
-					user_inputted_3d_position = [x, y, z, wrist_pitch, fifth_IK_value]
-
-					command = generate_command(user_inputted_3d_position, movement=0, coord_sys='xyz')
-					print(command)
-					if robot._device["state"] == 0:
-						robot.play(command)
-
-						print('Robot moved to drop_into_bin_pose')
+					move_arm = True
+					if len(user_input_list) == 2:
+						x, y = user_input_list
+						z = 300
+					elif len(user_input_list) == 3:
+						x, y, z = user_input_list
+					elif len(user_input_list) == 4:
+						x, y, z, wrist_pitch = user_input_list
 					else:
-						print('Robot busy, did not go to drop_into_bin_pose')
+						move_arm = False
+
+					if move_arm:
+						user_inputted_3d_position = [x, y, z, wrist_pitch, fifth_IK_value]
+						go_to_xyz(user_inputted_3d_position)
+				elif key == 'j':
+					# good battery position -52.191, 140.865, -110.363, -20.846, 0.0
+					# good 0 base angle position to test if problem is base angle: 0.0, 160.0, -118.024, -53.983, 0.0
+					# awkward position: -40.245, 13.872, -97.713, 112.514, 0.0
+					print('Inputting joint command')
+					user_input = input('Enter 5 joint angles separated by commas \n')
+					# user_input_list = [float(x) for x in user_input.split(' ')]  # TODO spaces as well?
+					joint_angles = [float(x) for x in user_input.split(', ')]
+					go_to_joint_angles(joint_angles)
 				elif key == '7':
 					command = generate_command(pick_up_object_right_in_front_pose, movement=0, coord_sys='xyz')
 					print(command)
@@ -332,61 +413,61 @@ if __name__=="__main__":
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
 					if robot._device["state"] == 0:
 						robot.play(command)
-						print('Base angle -5')
+						print('Base angle -{}'.format(joint_change_amt))
 				elif key == '2':
 					dxyz = [joint_change_amt, 0, 0, 0, 0]
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
 					if robot._device["state"] == 0:
 						robot.play(command)
-						print('Base angle +5')
+						print('Base angle +{}'.format(joint_change_amt))
 				elif key == '3':
 					dxyz = [0, -joint_change_amt, 0, 0, 0]
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
 					if robot._device["state"] == 0:
 						robot.play(command)
-						print('Shoulder angle -5')
+						print('Shoulder angle -{}'.format(joint_change_amt))
 				elif key == '4':
 					dxyz = [0, joint_change_amt, 0, 0, 0]
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
 					if robot._device["state"] == 0:
 						robot.play(command)
-						print('Shoulder angle +5')
+						print('Shoulder angle +{}'.format(joint_change_amt))
 				elif key == '5':
 					dxyz = [0, 0, -joint_change_amt, 0, 0]
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
 					if robot._device["state"] == 0:
 						robot.play(command)
-						print('Elbow angle -5')
+						print('Elbow angle -{}'.format(joint_change_amt))
 				elif key == '6':
 					dxyz = [0, 0, joint_change_amt, 0, 0]
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
 					if robot._device["state"] == 0:
 						robot.play(command)
-						print('Elbow angle +5')
+						print('Elbow angle +{}'.format(joint_change_amt))
 				elif key == '#':
 					dxyz = [0, 0, 0, joint_change_amt, 0]
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
 					if robot._device["state"] == 0:
 						robot.play(command)
-						print('wrist pitch +5')
+						print('wrist pitch +{}'.format(joint_change_amt))
 				elif key == '\'':
 					dxyz = [0, 0, 0, -joint_change_amt, 0]
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
 					if robot._device["state"] == 0:
 						robot.play(command)
-						print('wrist pitch -5')
+						print('wrist pitch -{}'.format(joint_change_amt))
 				elif key == '.':
 					dxyz = [0, 0, 0, 0, -joint_change_amt]
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
 					if robot._device["state"] == 0:
 						robot.play(command)
-						print('Rolling -5')  # TODO change all of these to joint_change_amt
+						print('Rolling -{}'.format(joint_change_amt))
 				elif key == '/':
 					dxyz = [0, 0, 0, 0, joint_change_amt]
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
 					if robot._device["state"] == 0:
 						robot.play(command)
-						print('Rolling +5')
+						print('Rolling +{}'.format(joint_change_amt))
 				elif key == 't':
 					robot.terminate()
 					print("Robot terminated")
@@ -398,6 +479,15 @@ if __name__=="__main__":
 					if mv_scale < 0:
 						mv_scale = 0
 					print("Decrease mv_scale: {}".format(mv_scale))
+				elif key == 'u':
+					if joint_change_amt == 1:
+						joint_change_amt = 10
+					elif joint_change_amt == 10:
+						joint_change_amt = 0.1
+					elif joint_change_amt == 0.1:
+						joint_change_amt = 1
+					
+					print("Changed joint_change_amt to: {}".format(joint_change_amt))
 				elif key == ']':
 					mv_scale += 20
 					print("Decrease mv_scale: {}".format(mv_scale))
