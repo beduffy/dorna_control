@@ -203,6 +203,7 @@ if __name__ == '__main__':
                 # find all planes
                 # planes, outlier_clouds = find_all_planes(pcd, num_iterations_of_segmentation=3)
                 planes, outlier_clouds = find_all_planes(pcd, num_iterations_of_segmentation=3, visualise_pcds=True)
+                # TODO how to remove arm itself? how did I do it with ROT3U?
                 # find biggest plane
                 # planes, outlier_cloud = find_all_planes(pcd, num_iterations_of_segmentation=1)
                 # biggest_plane = planes[0]  # only 1 plane found

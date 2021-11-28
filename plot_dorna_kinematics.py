@@ -119,7 +119,7 @@ def plot_open3d_Dorna(joint_and_link_positions, extra_geometry_elements=None):
 
     all_spheres = []
     for p in points:
-        mesh_sphere = create_sphere_at_pos(np.array(p), color=[0.1, 0.1, 0.7], radius=3.0)
+        mesh_sphere = create_sphere_at_pos(np.array(p), color=[0.1, 0.1, 0.7], radius=4.5)
         all_spheres.append(mesh_sphere)
 
     list_of_geometry_elements = [line_set, *line_mesh1_geoms] + all_spheres
@@ -130,17 +130,17 @@ def plot_open3d_Dorna(joint_and_link_positions, extra_geometry_elements=None):
 """
 inverse kinematics: xyz to joint
 """
-def i_k(self, xyz):
+def i_k(xyz, toolhead_x_length=193):
     try:
         x = xyz[0]
         y = xyz[1]
-        z = xyz[2]
+        z = xyz[2]		
         
-        if self._config["unit"]["length"] == "mm":
-            x = self._mm_to_inch(x)
-            y = self._mm_to_inch(y)
-            z = self._mm_to_inch(z)			
-        
+        _delta_e = 0.001
+        _bx = _inch_to_mm(3.759)  # x-distance from base to shoulder. 95.47859999999999mm Most likely.
+        _bz = _inch_to_mm(8.111)  # height from ground to shoulder joint. 206.01940000000002mm confirmed
+        l_shoulder_to_elbow = _inch_to_mm(8.)  # distance from shoulder to elbow. 203.2mm confirmed
+        l_elbow_to_wrist = _inch_to_mm(6.)  # TODO: maybe distance from base to shoulder. NO. From elbow to wrist
 
         alpha = xyz[3]
         beta = xyz[4]
@@ -155,31 +155,34 @@ def i_k(self, xyz):
         x = math.sqrt(x ** 2 + y ** 2)
 
         # next we update x and z based on base dimensions and hand orientation
-        x -= (self._bx + self._config["toolhead"]["x"] * math.cos(alpha))
-        z -= (self._bz + self._config["toolhead"]["x"] * math.sin(alpha))
+        x -= (_bx + toolhead_x_length * math.cos(alpha))
+        z -= (_bz + toolhead_x_length * math.sin(alpha))
 
         # at this point x and z are the summation of two vectors one from lower arm and one from upper arm of lengths l1 and l2
         # let L be the length of the overall vector
         # we can calculate the angle between l1 , l2 and L
         L = math.sqrt(x ** 2 + z ** 2)
-        L = np.round(L,13) # ???
+        L = np.round(L, 13) # ???
         # not valid
-        if L > (self._l1 + self._l2) or self._l1 > (self._l2 + L) or self._l2 > (self._l1 + L):  # in this case there is no solution
+        if L > (l_shoulder_to_elbow + l_elbow_to_wrist) or l_shoulder_to_elbow > (l_elbow_to_wrist + L) or l_elbow_to_wrist > (l_shoulder_to_elbow + L):  # in this case there is no solution
+            print('Returning None because this shit sucks')
+            # import pdb;pdb.set_trace()
             return None
 
         # init status
         status = 0
-        if L > (self._l1 + self._l2) - self._delta_e or self._l1 > (self._l2 + L) - self._delta_e: # in this case there is no solution
+        if L > (l_shoulder_to_elbow + l_elbow_to_wrist) - _delta_e or l_shoulder_to_elbow > (l_elbow_to_wrist + L) - _delta_e: # in this case there is no solution
             status = 1
 
-        teta_l1_L = math.acos((self._l1 ** 2 + L ** 2 - self._l2 ** 2) / (2 * self._l1 * L))  # l1 angle to L
+        teta_l1_L = math.acos((l_shoulder_to_elbow ** 2 + L ** 2 - l_elbow_to_wrist ** 2) / (2 * l_shoulder_to_elbow * L))  # l1 angle to L
         teta_L_x = math.atan2(z, x)  # L angle to x axis
         teta_1 = teta_l1_L + teta_L_x
         # note that the other solution would be to set teta_1 = teta_L_x - teta_l1_L. But for the dynamics of the robot the first solution works better.
-        teta_l1_l2 = math.acos((self._l1 ** 2 + self._l2 ** 2 - L ** 2) / (2 * self._l1 * self._l2))  # l1 angle to l2
+        teta_l1_l2 = math.acos((l_shoulder_to_elbow ** 2 + l_elbow_to_wrist ** 2 - L ** 2) / (2 * l_shoulder_to_elbow * l_elbow_to_wrist))  # l1 angle to l2
         teta_2 = teta_l1_l2 - math.pi
         teta_3 = alpha - teta_1 - teta_2
         teta_4 = beta
+        
         teta_0 = math.degrees(teta_0)
         teta_1 = math.degrees(teta_1)
         teta_2 = math.degrees(teta_2)
@@ -188,15 +191,16 @@ def i_k(self, xyz):
 
         return [teta_0, teta_1, teta_2, teta_3, teta_4] + xyz[5:]
 
-    except:
+    except Exception as e:
+        print('Inverse kinematics failure!')
+        print(e)
         return None
 
 """
 forward kinematics: joint to xyz
 """
-def f_k(joint_angles_deg):
+def f_k(joint_angles_deg, toolhead_x_length=193):
     try:
-
         # TODO change all variable names
         # TODO understand IK too
         # TODO would be awesome to do matplotlib pointcloud as well
@@ -204,11 +208,12 @@ def f_k(joint_angles_deg):
         _bx = _inch_to_mm(3.759)  # x-distance from base to shoulder. 95.47859999999999mm Most likely.
         _bz = _inch_to_mm(8.111)  # height from ground to shoulder joint. 206.01940000000002mm confirmed
         l_shoulder_to_elbow = _inch_to_mm(8.)  # distance from shoulder to elbow. 203.2mm confirmed
-        l_elbow_to_wrist = _inch_to_mm(6.)  # TODO: maybe distance from base to shoulder. NO. From elbow to wrist
-        # toolhead_x_length = 0.175
-        toolhead_x_length = 175  # in mm, like everything else
-        print('_bx, _bz, l_shoulder_to_elbow, l_elbow_to_wrist')
-        print(_bx, _bz, l_shoulder_to_elbow, l_elbow_to_wrist)
+        l_elbow_to_wrist = _inch_to_mm(6.)  # From elbow to wrist. 152.4mm
+
+        # so in with calibrated joint angles 0, 0, 0, 0, 0, we should get 95.47859 + 203.2 + 152.4 + 193 = 644.07859
+
+        # print('_bx, _bz, l_shoulder_to_elbow, l_elbow_to_wrist')
+        # print(_bx, _bz, l_shoulder_to_elbow, l_elbow_to_wrist)
 
         # joint to radian
         theta = [math.radians(j) for j in joint_angles_deg]
@@ -218,17 +223,16 @@ def f_k(joint_angles_deg):
 
         # top-down view
         # tmp = _bx + _l1 * math.cos(theta[1]) + _l2 * math.cos(theta[1] + theta[2]) + toolhead_x_length * math.cos(theta[1] + theta[2] + theta[3])
-        # base_x = TODO ???
 
         # TODO we're missing distance from elbow to wrist?!?!?
-        # TODO why not negative bx? Because x is forward
         shoulder_side_x = _bx
         # shoulder_side_x = _bx + l_shoulder_to_elbow * math.cos(theta[1])
         elbow_side_x = shoulder_side_x + l_shoulder_to_elbow * math.cos(theta[1])
         # elbow_side_x = shoulder_side_x + l_elbow_to_wrist * math.cos(theta[1] + theta[2])
         wrist_side_x = elbow_side_x + l_elbow_to_wrist * math.cos(theta[1] + theta[2])
-        toolhead_side_x = elbow_side_x + toolhead_x_length * math.cos(theta[1] + theta[2] + theta[3])
-        print('All side x: {} {} {}'.format(shoulder_side_x, elbow_side_x, toolhead_side_x))
+        toolhead_side_x = wrist_side_x + toolhead_x_length * math.cos(theta[1] + theta[2] + theta[3])
+        # print('All side x: {} {} {}'.format(shoulder_side_x, elbow_side_x, toolhead_side_x))
+        
         # rotate around z-axis
         shoulder_x = shoulder_side_x * math.cos(theta[0])
         shoulder_y = shoulder_side_x * math.sin(theta[0])
@@ -238,7 +242,7 @@ def f_k(joint_angles_deg):
         wrist_y = wrist_side_x * math.sin(theta[0])
         toolhead_x = toolhead_side_x * math.cos(theta[0])
         toolhead_y = toolhead_side_x * math.sin(theta[0])
-        print('shoulder_x: {} shoulder_y: {} elbow_x: {} elbow_y: {} toolhead_x: {} toolhead_y: {}'.format(shoulder_x, shoulder_y, elbow_x, elbow_y, toolhead_x, toolhead_y))
+        # print('shoulder_x: {} shoulder_y: {} elbow_x: {} elbow_y: {} toolhead_x: {} toolhead_y: {}'.format(shoulder_x, shoulder_y, elbow_x, elbow_y, toolhead_x, toolhead_y))
 
         # side-view
         # z = _bz + _l1 * math.sin(theta[1]) + _l2 * math.sin(theta[1] + theta[2]) + toolhead_x_length * math.sin(theta[1] + theta[2] + theta[3])
@@ -247,7 +251,7 @@ def f_k(joint_angles_deg):
         elbow_z = shoulder_z + l_shoulder_to_elbow * math.sin(theta[1])
         # elbow_z = shoulder_z + l_elbow_to_wrist * math.sin(theta[1] + theta[2])
         wrist_z = elbow_z + l_elbow_to_wrist * math.sin(theta[1] + theta[2])
-        toolhead_z = elbow_z + toolhead_x_length * math.sin(theta[1] + theta[2] + theta[3])
+        toolhead_z = wrist_z + toolhead_x_length * math.sin(theta[1] + theta[2] + theta[3])
 
         alpha = theta[1] + theta[2] + theta[3]
         beta = theta[4]  # just wrist roll right?
@@ -271,6 +275,15 @@ def f_k(joint_angles_deg):
         print(e)
         return None
 
+def check_ground_collision(xyz_positions_of_all_joints, ground_z_height=5):
+    for joint in ['shoulder', 'elbow', 'wrist', 'toolhead']:
+        joint_z = xyz_positions_of_all_joints[joint][2]
+        if joint_z < ground_z_height:
+            print('Ground collision for {} joint at z: {}'.format(joint, joint_z))
+            return True
+
+    return False
+
 if __name__ == '__main__':
     # base, shoulder, elbow, wrist pitch, wrist roll
     full_toolhead_fk, xyz_positions_of_all_joints = f_k([0.0, 0.0, 0.0, 0.0, 0.0])
@@ -284,6 +297,13 @@ if __name__ == '__main__':
     print(full_toolhead_fk)
     print('xyz_positions_of_all_joints')
     print(xyz_positions_of_all_joints)
+
+    # TODO tool z offset (kinda z) add to FK and IK and then even completely subvert dornas lower level commands and always come from joint angles
+    import pdb;pdb.set_trace()
+
+    # joint_angles = i_k(full_toolhead_fk)
+    joint_angles = i_k([483.07853333332895, 0.0, 206.01941089350998, -9.999999988651159e-06, 0.0])
+    full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
 
     # origin_frame_size = 0.01
     # origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
