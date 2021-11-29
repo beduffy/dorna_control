@@ -5,6 +5,7 @@ import argparse
 import time
 import math
 import traceback
+from glob import glob
 
 try:
     import open3d as o3d
@@ -25,6 +26,7 @@ from scipy import optimize
 from lib.vision import get_full_pcd_from_rgbd
 from lib.vision import get_camera_coordinate, create_homogenous_transformations, convert_pixel_to_arm_coordinate, convert_cam_pcd_to_arm_pcd
 from lib.vision_config import pinhole_camera_intrinsic
+from lib.handeye_opencv_wrapper import handeye_calibrate_opencv
 from plot_dorna_kinematics import i_k, f_k, plot_open3d_Dorna
 
 # helper functions
@@ -35,6 +37,47 @@ def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
 def dist(x, y):
     # return np.sqrt(np.sum((x - y) ** 2))
     return np.sqrt(np.sum((np.array(x) - np.array(y)) ** 2))
+
+def get_gripper_base_transformation(joint_angles):
+    full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
+
+    # TODO are things weird because of dorna's weird angle coordinate system?
+    # because dorna's j1 is measure relative to ground plane, j2 is then relative to j1, j3 relative to j2. But also inverse direction right?
+    joint_angles[3] = -joint_angles[3]
+    joint_angles[2] = -joint_angles[2]
+    joint_angles[1] = -joint_angles[1]
+
+    joint_angles_rad = [math.radians(j) for j in joint_angles]
+
+    # homo_array = np.zeros((4, 4))
+    homo_array = np.identity(4)
+    # arm2cam_local[:3, :3] = R_ct
+    homo_array[0, 3] = full_toolhead_fk[0]
+    homo_array[1, 3] = full_toolhead_fk[1]
+    homo_array[2, 3] = full_toolhead_fk[2]
+
+    # TODO, wait it's the toolhead bottom which rotates, not the gripper tip, does this affect anything?
+    wrist_pitch = np.sum(joint_angles_rad[1:4])
+    wrist_roll = joint_angles_rad[4]
+    base_yaw = joint_angles_rad[0]  # and the only way we can yaw
+    # rot_mat = o3d.geometry.get_rotation_matrix_from_xyz(np.array([wrist_roll, wrist_pitch, base_yaw]))
+    # rot_mat = o3d.geometry.get_rotation_matrix_from_zyx(np.array([wrist_roll, wrist_pitch, base_yaw]))
+    rot_mat = o3d.geometry.get_rotation_matrix_from_zyx(np.array([base_yaw, wrist_pitch, wrist_roll]))  # roll correct
+    # rot_mat = o3d.geometry.get_rotation_matrix_from_zyx(np.array([wrist_pitch, base_yaw, wrist_roll]))
+    homo_array[:3, :3] = rot_mat
+
+    # # -- Now get Position and attitude f the camera respect to the marker
+    # # pos_camera = -R_tc * np.matrix(tvec).T  # todo how could element-wise possibly work!?!?!?!?
+    # pos_camera = np.dot(-R_tc, np.matrix(tvec_in).T)
+
+    # # cam_position = np.dot(-arm2cam_rotation, tvec_arm2cam)  # .T   # arm2cam
+    # cam2arm_local = np.identity(4)
+    # cam2arm_local[:3, :3] = R_tc
+    # cam2arm_local[0, 3] = pos_camera[0]
+    # cam2arm_local[1, 3] = pos_camera[1]
+    # cam2arm_local[2, 3] = pos_camera[2]
+
+    return homo_array
 
 def rotationMatrixToEulerAngles(R):
     # Calculates rotation matrix to euler angles
@@ -191,7 +234,7 @@ def click_callback(event, x, y, flags, param):
 
                 camera_coord = get_camera_coordinate(camera_depth_img, mouseX, mouseY, verbose=True)
                 print('camera_coord using depth and intrinsics:', camera_coord)
-                print('saved tvec:', saved_tvec)  # TODO how different is saved_tvec to inverse saved_tvec?!?!!??!
+                print('saved tvec:', saved_tvec)  # TODO how different is saved_tvec to inverse saved
 
                 # print('Getting joint angles to compare hand-eye calibration click with FK')
                 r = requests.get('http://localhost:8080/get_xyz_joint')
@@ -745,8 +788,8 @@ if __name__ == '__main__':
     if use_aruco:
         # marker_length = 0.0265
         # marker_length = 0.028
-        # marker_length = 0.0275
-        marker_length = 0.0935  # big marker
+        marker_length = 0.0275
+        # marker_length = 0.0935  # big marker
         aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
         parameters = aruco.DetectorParameters_create()
         parameters.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
@@ -779,7 +822,6 @@ if __name__ == '__main__':
         # todo aruco con More susceptible to rotational ambiguity at medium to long ranges
         # https://stackoverflow.com/questions/52222327/improve-accuracy-of-pose-with-bigger-aruco-markers
         # https://stackoverflow.com/questions/51709522/unstable-values-in-aruco-pose-estimation
-
         # todo try apriltag_ros
 
         # board = cv2.aruco.CharucoBoard_create(7, 7, .025, .0125, aruco_dict)
@@ -809,6 +851,7 @@ if __name__ == '__main__':
 
     check_corner_frame_count = 0
     frame_count = 1
+    num_saved_handeye_transforms = 0
     marker_top_left_x_bigger_than_top_right = 0
     marker_top_left_x_bigger_than_bottom_right = 0
     marker_top_left_y_bigger_than_bottom_left = 0
@@ -1150,47 +1193,6 @@ if __name__ == '__main__':
                                         pinhole_camera_intrinsic, visualise=False)
                 full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, cam2arm, 0.0)
 
-                def get_gripper_base_transformation(joint_angles):
-                    full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
-
-                    # TODO are things weird because of dorna's weird angle coordinate system?
-                    # because dorna's j1 is measure relative to ground plane, j2 is then relative to j1, j3 relative to j2. But also inverse direction right?
-                    joint_angles[3] = -joint_angles[3]
-                    joint_angles[2] = -joint_angles[2]
-                    joint_angles[1] = -joint_angles[1]
-
-                    joint_angles_rad = [math.radians(j) for j in joint_angles]
-
-                    # homo_array = np.zeros((4, 4))
-                    homo_array = np.identity(4)
-                    # arm2cam_local[:3, :3] = R_ct
-                    homo_array[0, 3] = full_toolhead_fk[0]
-                    homo_array[1, 3] = full_toolhead_fk[1]
-                    homo_array[2, 3] = full_toolhead_fk[2]
-
-                    # TODO, wait it's the toolhead bottom which rotates, not the gripper tip, does this affect anything?
-                    wrist_pitch = np.sum(joint_angles_rad[1:4])
-                    wrist_roll = joint_angles_rad[4]
-                    base_yaw = joint_angles_rad[0]  # and the only way we can yaw
-                    # rot_mat = o3d.geometry.get_rotation_matrix_from_xyz(np.array([wrist_roll, wrist_pitch, base_yaw]))
-                    # rot_mat = o3d.geometry.get_rotation_matrix_from_zyx(np.array([wrist_roll, wrist_pitch, base_yaw]))
-                    rot_mat = o3d.geometry.get_rotation_matrix_from_zyx(np.array([base_yaw, wrist_pitch, wrist_roll]))  # roll correct
-                    # rot_mat = o3d.geometry.get_rotation_matrix_from_zyx(np.array([wrist_pitch, base_yaw, wrist_roll]))
-                    homo_array[:3, :3] = rot_mat
-
-                    # # -- Now get Position and attitude f the camera respect to the marker
-                    # # pos_camera = -R_tc * np.matrix(tvec).T  # todo how could element-wise possibly work!?!?!?!?
-                    # pos_camera = np.dot(-R_tc, np.matrix(tvec_in).T)
-
-                    # # cam_position = np.dot(-arm2cam_rotation, tvec_arm2cam)  # .T   # arm2cam
-                    # cam2arm_local = np.identity(4)
-                    # cam2arm_local[:3, :3] = R_tc
-                    # cam2arm_local[0, 3] = pos_camera[0]
-                    # cam2arm_local[1, 3] = pos_camera[1]
-                    # cam2arm_local[2, 3] = pos_camera[2]
-
-                    return homo_array
-
                 gripper_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
                                         size=25.0, origin=[0.0, 0.0, 0.0])
                 gripper_base_transform = get_gripper_base_transformation(joint_angles)
@@ -1207,6 +1209,61 @@ if __name__ == '__main__':
                 
                 # dist(np.array([148.166, -190.953, 440.97]), np.array([ 131.949075, -199.25261, 452.410165]))
                 # TODO if I'm specifying that the clicked point is the centre of the battery I could get an error metric from FK vs cam2arm click point
+
+            if k == ord('h'):  # save hand-eye calibration needed transforms
+                # get and save calibration target transformation (target2cam)
+                aruco_id_on_gripper = 4
+                bgr_color_data = cv2.cvtColor(camera_color_img, cv2.COLOR_RGB2BGR)
+                gray_data = cv2.cvtColor(bgr_color_data, cv2.COLOR_RGB2GRAY)
+                corners, ids, rejectedImgPoints = aruco.detectMarkers(gray_data, aruco_dict, parameters=parameters)
+                # frame_markers = aruco.drawDetectedMarkers(color_img, corners, ids)
+                all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
+                found_correct_marker = False
+                if aruco_id_on_gripper in ids:
+                    gripper_aruco_index = [l[0] for l in ids.tolist()].index(aruco_id_on_gripper) 
+                    rvec, tvec = all_rvec[gripper_aruco_index, 0, :], all_tvec[gripper_aruco_index, 0, :]
+                    found_correct_marker = True
+                else:
+                    tvec, rvec = None, None
+
+                if tvec is not None and rvec is not None:
+                    target2cam, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
+
+                    fp = 'data/handeye/target2cam_{}.txt'.format(num_saved_handeye_transforms)
+                    print('Saving target2cam at {} {}\n'.format(fp, target2cam))
+                    np.savetxt(fp, target2cam, delimiter=' ')
+
+                    # get and save gripper transformation (gripper2base)
+                    print('Getting joint angles')
+                    # r = requests.get('http://localhost:8080/get_xyz_joint')
+                    # robot_data = r.json()
+                    # joint_angles = robot_data['robot_joint_angles']
+
+                    # # the below is just for testing without running arm
+                    joint_angles = [0, 0, 0, 0, 0]
+                    gripper_base_transform = get_gripper_base_transformation(joint_angles)
+                    fp = 'data/handeye/gripper2base_{}.txt'.format(num_saved_handeye_transforms)
+                    print('Saving gripper2base at {} {}\n'.format(fp, gripper_base_transform))
+                    np.savetxt(fp, gripper_base_transform, delimiter=' ')
+                    
+                    # TODO use tvec from above or do it all again on special ID? or? Do use special ID because I want to keep id 1 for normal aruco stuff
+                    # TODO might need base2gripper, inverse of above actually
+                    # TODO target2cam or cam2target. Ahh opencv param names according to eye-in-hand vs eye-to-hand might change
+                    # TODO arm2cam or cam2arm? should get to the bottom of this forever. camera coordinate in arm coordinates and the transform is the same?
+                    # TODO save pic or not? Save reprojection error or ambiguity or something?
+                    # TODO save tvec or 4x4 matrix and extra from that?
+                    # TODO would be nice to plot all poses or coordinate frames or something
+                    # TODO how to avoid aruco error at range? Bigger? Board? Hold a checkerboard?
+                    # TODO should I have another key for running cv2.handEyeCalibrate, yeah, why not??? I'll be able to see reproject error and instantly see coordinate frames etc and everything else I've done! And that way I can see how it improves with more data
+                    # if it doesn't take too long, run it every time here?
+                    # TODO eventually put realsense in hand as well and do eye-in-hand. And multiple realsenses (maybe swap to handical or other? or do each one individually?)
+
+                    num_saved_handeye_transforms += 1
+                else:
+                    print('No tvec or rvec!')
+            if k == ord('c'):  # perform hand-eye calibration using saved transforms
+                handeye_calibrate_opencv()
+                cam2arm = np.loadtxt('data/handeye/latest_cv2_cam2arm.txt', delimiter=' ')
 
             frame_count += 1
         except ValueError as e:
