@@ -26,7 +26,7 @@ from scipy import optimize
 from lib.vision import get_full_pcd_from_rgbd
 from lib.vision import get_camera_coordinate, create_homogenous_transformations, convert_pixel_to_arm_coordinate, convert_cam_pcd_to_arm_pcd
 from lib.vision_config import pinhole_camera_intrinsic
-from lib.handeye_opencv_wrapper import handeye_calibrate_opencv
+from lib.handeye_opencv_wrapper import handeye_calibrate_opencv, load_all_handeye_data, plot_all_handeye_data
 from plot_dorna_kinematics import i_k, f_k, plot_open3d_Dorna
 
 # helper functions
@@ -1235,7 +1235,7 @@ if __name__ == '__main__':
                 if aruco_id_on_gripper in ids:
                     gripper_aruco_index = [l[0] for l in ids.tolist()].index(aruco_id_on_gripper) 
                     rvec, tvec = all_rvec[gripper_aruco_index, 0, :], all_tvec[gripper_aruco_index, 0, :]
-                    aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec, tvec, marker_length)
+                    # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec, tvec, marker_length)
                     found_correct_marker = True
                 else:
                     tvec, rvec = None, None
@@ -1254,12 +1254,12 @@ if __name__ == '__main__':
 
                     # get and save gripper transformation (gripper2base)
                     print('Getting joint angles')
-                    r = requests.get('http://localhost:8080/get_xyz_joint')
-                    robot_data = r.json()
-                    joint_angles = robot_data['robot_joint_angles']
+                    # r = requests.get('http://localhost:8080/get_xyz_joint')
+                    # robot_data = r.json()
+                    # joint_angles = robot_data['robot_joint_angles']
 
                     # # the below is just for testing without running arm
-                    # joint_angles = [0, 0, 0, 0, 0]
+                    joint_angles = [0, 0, 0, 0, 0]
                     gripper_base_transform = get_gripper_base_transformation(joint_angles)
                     # TODO try get inverse (actual gripper2base) just to really confirm shit
                     fp = 'data/handeye/gripper2base_{}.txt'.format(num_saved_handeye_transforms)
@@ -1268,7 +1268,6 @@ if __name__ == '__main__':
 
                     '''
                     Possible things that are wrong:
-                    - target2cam vs cam2target
                     - base2gripper vs gripper2base
                     - something wrong in get_gripper_base_transformation()? but gripper tip transform looks good... what if it looks good but rotation convention is wrong?
                     - something wrong with aruco detection or transform? aruco range, maybe I should have board? So less noise? aruco rotation shouldn't matter
@@ -1280,8 +1279,12 @@ if __name__ == '__main__':
                     - intrinsics, but it should at least give reasonable results with bad intrinsics like we got before with aruco transforms?
                     - arm in mm vs metres. Does distance affect rotation? No it does not. That is, wrist pitch, roll and base_yaw are the same if the arm's joints are a million metres long
 
+                    Unlikely/confirmed:
+                    - target2cam vs cam2target
+
                     What I can do about it
                     - since camera is static, visualise all marker poses!!!!!!!!!!!!!!!!!! better than what I did.
+                    - How to visualise and confirm all gripper poses? If everything is correct the marker poses could be ICP'd to the gripper poses but that's the whole point right?
                     - Just try inverting gripper2base to see what happens
                     - compare with id1 aruco strategy and see what part of translation and more specifically rotation is wrong!!!!
                     - how to visualise and double check transformations better. I don't understand the opencv spatial algebra direction. 
@@ -1324,9 +1327,20 @@ if __name__ == '__main__':
                     print('No tvec or rvec!')
 
             if k == ord('c'):  # perform hand-eye calibration using saved transforms
-                handeye_calibrate_opencv()
+                handeye_data_dict = load_all_handeye_data()
+                # plot_all_handeye_data(handeye_data_dict)
+                handeye_calibrate_opencv(handeye_data_dict)
+
+                # # TODO why load from file again, why not just return from function?
                 cam2arm = np.loadtxt('data/handeye/latest_cv2_cam2arm.txt', delimiter=' ')
                 saved_cam2arm = cam2arm
+
+                # TODO what the hell am I doing, of course saved cam2arm is fucked up. The only way to is to use cam_pcd 
+                cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img, pinhole_camera_intrinsic, visualise=False)
+                # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, in_milimetres=False)
+
+                # plot_all_handeye_data(handeye_data_dict, cam_pcd=full_arm_pcd)
+                plot_all_handeye_data(handeye_data_dict, cam_pcd=cam_pcd)
 
             frame_count += 1
         except ValueError as e:
