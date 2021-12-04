@@ -32,9 +32,29 @@ def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
 # 3D Vision
 # ----------------------
 
+def get_inverse_homogenous_transform(homogenous_matrix):
+    tvec_in = homogenous_matrix[:3, 3]
+    rotation_in = homogenous_matrix[:3, :3]
+
+    inverse_rotation_mat = rotation_in.T
+
+    # -- Now get Position and attitude f the camera respect to the marker
+    # pos_camera = -R_tc * np.matrix(tvec).T  # todo how could element-wise possibly work!?!?!?!?
+    inverse_tvec = np.dot(-inverse_rotation_mat, np.matrix(tvec_in).T)
+
+    # cam_position = np.dot(-arm2cam_rotation, tvec_arm2cam)  # .T   # arm2cam
+    inverse_homo = np.identity(4)
+    inverse_homo[:3, :3] = inverse_rotation_mat
+    inverse_homo[0, 3] = inverse_tvec[0]
+    inverse_homo[1, 3] = inverse_tvec[1]
+    inverse_homo[2, 3] = inverse_tvec[2]
+
+    return inverse_homo
+
 def create_homogenous_transformations(tvec_in, rvec_in):
     # todo add to vision library and compare with DRY duplicate
     # -- Obtain the rotation matrix tag->camera
+    # 2nd param is jacobian
     R_ct = np.matrix(cv2.Rodrigues(rvec_in)[0])  # todo confirm that rvec makes sense
     # R_tc = R_flip * R_ct.T
     R_tc = R_ct.T
@@ -56,16 +76,19 @@ def create_homogenous_transformations(tvec_in, rvec_in):
     arm2cam_local[1, 3] = tvec_in[1]
     arm2cam_local[2, 3] = tvec_in[2]
 
-    # -- Now get Position and attitude f the camera respect to the marker
-    # pos_camera = -R_tc * np.matrix(tvec).T  # todo how could element-wise possibly work!?!?!?!?
-    pos_camera = np.dot(-R_tc, np.matrix(tvec_in).T)
+    # # -- Now get Position and attitude f the camera respect to the marker
+    # # pos_camera = -R_tc * np.matrix(tvec).T  # todo how could element-wise possibly work!?!?!?!?
+    # pos_camera = np.dot(-R_tc, np.matrix(tvec_in).T)
 
-    # cam_position = np.dot(-arm2cam_rotation, tvec_arm2cam)  # .T   # arm2cam
-    cam2arm_local = np.identity(4)
-    cam2arm_local[:3, :3] = R_tc
-    cam2arm_local[0, 3] = pos_camera[0]
-    cam2arm_local[1, 3] = pos_camera[1]
-    cam2arm_local[2, 3] = pos_camera[2]
+    # # cam_position = np.dot(-arm2cam_rotation, tvec_arm2cam)  # .T   # arm2cam
+    # cam2arm_local = np.identity(4)
+    # cam2arm_local[:3, :3] = R_tc
+    # cam2arm_local[0, 3] = pos_camera[0]
+    # cam2arm_local[1, 3] = pos_camera[1]
+    # cam2arm_local[2, 3] = pos_camera[2]
+
+    cam2arm_local = get_inverse_homogenous_transform(arm2cam_local)
+    pos_camera = cam2arm_local[:3, 3]
 
     return cam2arm_local, arm2cam_local, R_tc, R_tc, pos_camera
 
@@ -124,9 +147,9 @@ def get_depth_at_pixel(camera_depth_img, pixel_x, pixel_y, depth_scale=0.0010000
 # ----------------------
 # todo split into 3d vision and 2d vision files themself? Hard sometimes to understand difference?
 
-def convert_cam_pcd_to_arm_pcd(cam_pcd, cam2arm, z_amount_to_add, q1=None):
+def convert_cam_pcd_to_arm_pcd(cam_pcd, cam2arm, in_milimetres=True):
     pcd_points = np.asarray(cam_pcd.points)
-    pcd_numpy = convert_cam_to_arm_coordinates_array(pcd_points, cam2arm, z_amount_to_add, q1)
+    pcd_numpy = convert_cam_to_arm_coordinates_array(pcd_points, cam2arm, in_milimetres)
     transformed_pcd = o3d.geometry.PointCloud()
     transformed_pcd.points = o3d.utility.Vector3dVector(pcd_numpy[:, :3])
     transformed_pcd.colors = cam_pcd.colors
@@ -134,7 +157,7 @@ def convert_cam_pcd_to_arm_pcd(cam_pcd, cam2arm, z_amount_to_add, q1=None):
     return transformed_pcd, pcd_numpy
 
 
-def convert_cam_to_arm_coordinates_array(camera_coordinates, cam2arm, z_amount_to_add, q1=None, xy_offset=12):
+def convert_cam_to_arm_coordinates_array(camera_coordinates, cam2arm, in_milimetres=True):
     """
     Converts matrix from camera coordinates to arm coordinates. Metre to milimetre conversion
     :param camera_coordinates: a numpy array (N, 3)
@@ -146,7 +169,10 @@ def convert_cam_to_arm_coordinates_array(camera_coordinates, cam2arm, z_amount_t
         (camera_coordinates.shape[0], 1), dtype=camera_coordinates.dtype)))
     # todo do I need top down dilation to make sure there are no gaps but could be risky too?
     # metre to milimetre conversion
-    obj_pcd_numpy = (1000.0 * np.dot(cam2arm, pcd_numpy_cam_coords.T)).T
+    if in_milimetres:
+        obj_pcd_numpy = (1000.0 * np.dot(cam2arm, pcd_numpy_cam_coords.T)).T
+    else:
+        obj_pcd_numpy = (np.dot(cam2arm, pcd_numpy_cam_coords.T)).T
 
     # todo z is still off, tune with flat objects or with ground plane
     # print('Centroid arm coordinates (before z-offset fix): {}'.format(centroid_arm_coord))
