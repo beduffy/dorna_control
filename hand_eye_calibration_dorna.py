@@ -62,7 +62,7 @@ def get_gripper_base_transformation(joint_angles):
     base_yaw = joint_angles_rad[0]  # and the only way we can yaw
     # rot_mat = o3d.geometry.get_rotation_matrix_from_xyz(np.array([wrist_roll, wrist_pitch, base_yaw]))
     # rot_mat = o3d.geometry.get_rotation_matrix_from_zyx(np.array([wrist_roll, wrist_pitch, base_yaw]))
-    rot_mat = o3d.geometry.get_rotation_matrix_from_zyx(np.array([base_yaw, wrist_pitch, wrist_roll]))  # roll correct
+    rot_mat = o3d.geometry.get_rotation_matrix_from_zyx(np.array([base_yaw, wrist_pitch, wrist_roll]))
     # rot_mat = o3d.geometry.get_rotation_matrix_from_zyx(np.array([wrist_pitch, base_yaw, wrist_roll]))
     homo_array[:3, :3] = rot_mat
 
@@ -79,17 +79,17 @@ def get_gripper_base_transformation(joint_angles):
 
     return homo_array
 
+def isRotationMatrix(R):
+    Rt = np.transpose(R)
+    shouldBeIdentity = np.dot(Rt, R)
+    I = np.identity(3, dtype=R.dtype)
+    n = np.linalg.norm(I - shouldBeIdentity)
+    return n < 1e-6
+
 def rotationMatrixToEulerAngles(R):
     # Calculates rotation matrix to euler angles
     # The result is the same as MATLAB except the order
     # of the euler angles ( x and z are swapped ).
-
-    def isRotationMatrix(R):
-        Rt = np.transpose(R)
-        shouldBeIdentity = np.dot(Rt, R)
-        I = np.identity(3, dtype=R.dtype)
-        n = np.linalg.norm(I - shouldBeIdentity)
-        return n < 1e-6
 
     # print(R.shape)
     # if not isRotationMatrix(R):
@@ -333,6 +333,17 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
             # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, all_rvec[0], all_tvec[0], marker_length / 2)  # in middle
             # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, all_rvec[0], all_tvec[0], 0)  # jumps around
             
+            ids_list = [l[0] for l in ids.tolist()]
+
+            if len(ids_list) >= 1:
+                corners_reordered = []
+                # for corder_id in [1, 2, 3, 4]:
+                for corder_id in [4]:
+                    corder_index = ids_list.index(corder_id) 
+                    corners_reordered.append(corners[corder_index])
+                    rvec_aruco, tvec_aruco = all_rvec[corder_index, 0, :], all_tvec[corder_index, 0, :]
+                    aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
+
             found_correct_marker = False
             # print(ids)
             if id_on_shoulder_motor in ids:
@@ -462,7 +473,7 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
                 # x_FK_pix, y_FK_pix = imagePointsFK.squeeze().tolist()
                 # FK_gripper_tip_projected_to_image = (int(round(x_FK_pix)), int(round(y_FK_pix)))
             else:
-                print('Not doing solvePnP')
+                # print('Not doing solvePnP')
                 tvec, rvec = None, None
             
             # todo ahhhhhhh more markers doesn't help the above. It'd be better for me to collect the marker positions of 4-10 markers and run into solvepnp
@@ -1159,7 +1170,8 @@ if __name__ == '__main__':
                         # TODO never understood how this relates, if origin looks good but cam2arm is bad?
                         # transforming rgbd pointcloud using bad cam2arm means what? . What is the thing changing again?
 
-                        full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, cam2arm, 0.0)
+                        # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, cam2arm, 0.0)
+                        full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, 0.0)
 
                         plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=[full_arm_pcd, coordinate_frame, coordinate_frame_shoulder_height])
 
@@ -1191,7 +1203,8 @@ if __name__ == '__main__':
 
                 cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img,
                                         pinhole_camera_intrinsic, visualise=False)
-                full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, cam2arm, 0.0)
+                # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, cam2arm, 0.0)  # TODO why was I doing this? mistake?
+                full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, 0.0)
 
                 gripper_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
                                         size=25.0, origin=[0.0, 0.0, 0.0])
@@ -1222,48 +1235,98 @@ if __name__ == '__main__':
                 if aruco_id_on_gripper in ids:
                     gripper_aruco_index = [l[0] for l in ids.tolist()].index(aruco_id_on_gripper) 
                     rvec, tvec = all_rvec[gripper_aruco_index, 0, :], all_tvec[gripper_aruco_index, 0, :]
+                    aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec, tvec, marker_length)
                     found_correct_marker = True
                 else:
                     tvec, rvec = None, None
 
-                if tvec is not None and rvec is not None:
-                    target2cam, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
+                if found_correct_marker and tvec is not None and rvec is not None:
+                    # usual order: cam2arm, arm2cam
+                    cam2target, target2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
+                    # target2cam, cam2target, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
+
+                    assert(isRotationMatrix(R_tc))
+                    assert(isRotationMatrix(R_ct))
 
                     fp = 'data/handeye/target2cam_{}.txt'.format(num_saved_handeye_transforms)
-                    print('Saving target2cam at {} {}\n'.format(fp, target2cam))
+                    print('Saving target2cam at {} \n{}'.format(fp, target2cam))
                     np.savetxt(fp, target2cam, delimiter=' ')
 
                     # get and save gripper transformation (gripper2base)
                     print('Getting joint angles')
-                    # r = requests.get('http://localhost:8080/get_xyz_joint')
-                    # robot_data = r.json()
-                    # joint_angles = robot_data['robot_joint_angles']
+                    r = requests.get('http://localhost:8080/get_xyz_joint')
+                    robot_data = r.json()
+                    joint_angles = robot_data['robot_joint_angles']
 
                     # # the below is just for testing without running arm
-                    joint_angles = [0, 0, 0, 0, 0]
+                    # joint_angles = [0, 0, 0, 0, 0]
                     gripper_base_transform = get_gripper_base_transformation(joint_angles)
+                    # TODO try get inverse (actual gripper2base) just to really confirm shit
                     fp = 'data/handeye/gripper2base_{}.txt'.format(num_saved_handeye_transforms)
-                    print('Saving gripper2base at {} {}\n'.format(fp, gripper_base_transform))
+                    print('Saving gripper2base at {} \n{}'.format(fp, gripper_base_transform))
                     np.savetxt(fp, gripper_base_transform, delimiter=' ')
-                    
-                    # TODO use tvec from above or do it all again on special ID? or? Do use special ID because I want to keep id 1 for normal aruco stuff
+
+                    '''
+                    Possible things that are wrong:
+                    - target2cam vs cam2target
+                    - base2gripper vs gripper2base
+                    - something wrong in get_gripper_base_transformation()? but gripper tip transform looks good... what if it looks good but rotation convention is wrong?
+                    - something wrong with aruco detection or transform? aruco range, maybe I should have board? So less noise? aruco rotation shouldn't matter
+                    - something wrong with hand-eye calculation? What if it expects lists or joined vectors or NxM array?
+                    - try different handeye methods, try more data (they say you need 3+)
+                    - normal typo bug somewhere? I've been triple checking
+                    - this is non-linear optimisation and no ability to give initial guess?
+                    - dorna negative joint angles, but gripper tip transform looks good...
+                    - intrinsics, but it should at least give reasonable results with bad intrinsics like we got before with aruco transforms?
+                    - arm in mm vs metres. Does distance affect rotation? No it does not. That is, wrist pitch, roll and base_yaw are the same if the arm's joints are a million metres long
+
+                    What I can do about it
+                    - since camera is static, visualise all marker poses!!!!!!!!!!!!!!!!!! better than what I did.
+                    - Just try inverting gripper2base to see what happens
+                    - compare with id1 aruco strategy and see what part of translation and more specifically rotation is wrong!!!!
+                    - how to visualise and double check transformations better. I don't understand the opencv spatial algebra direction. 
+                    - visualise arm coordinate origin and camera coordinate zero? I already am doing arm
+                    - confirm target2cam and base2gripper separately
+                    - use rvec instead of rotation matrix?
+                    - read internet:
+                        - https://stackoverflow.com/questions/57008332/opencv-wrong-result-in-calibratehandeye-function
+                        - https://www.reddit.com/r/opencv/comments/n46qaf/question_hand_eye_calibration_bad_results/
+                        - https://code.ihub.org.cn/projects/729/repository/revisions/master/entry/modules/calib3d/test/test_calibration_hand_eye.cpp
+                        - original PR https://github.com/opencv/opencv/pull/13880 and matlab code copied http://lazax.com/www.cs.columbia.edu/~laza/html/Stewart/matlab/handEye.m
+                        - http://campar.in.tum.de/Chair/HandEyeCalibration
+                        - https://forum.opencv.org/t/hand-eye-calibration/1880
+                        - very good https://visp-doc.inria.fr/doxygen/visp-daily/tutorial-calibration-extrinsic.html TODO find  hand_eye_calibration_show_extrinsics.py
+                        - https://programming.vip/docs/5ee2e219e75f3.html
+                        - https://github.com/IFL-CAMP/easy_handeye/blob/master/docs/troubleshooting.md
+                        - https://forum.opencv.org/t/eye-to-hand-calibration/5690/2 this is good. Rotation matrices are dangerous but not ambiguous
+                        - totally different way: https://www.codetd.com/en/article/12950073
+                        - simulator thing https://pythonrepo.com/repo/caijunhao-calibration-python-computer-vision
+                        - https://blog.zivid.com/the-practical-guide-to-3d-hand-eye-calibration-with-zivid-one
+                    - other packages. read how other packages do it
+                        - try UR5 calibration thing (why does it need offset?)
+                        - Try handical
+                        - try easy handeye and just publish all frames (base_link doesn't move, ee_link can just be 6 or 7 vector transform from keyboard_control.py, /optical_base_frame will probably need realsense-ros, /optical_target will need aruco shit): https://github.com/IFL-CAMP/easy_handeye
+                        - https://github.com/crigroup/handeye/blob/master/src/handeye/calibrator.py
+                    '''
+
                     # TODO might need base2gripper, inverse of above actually
                     # TODO target2cam or cam2target. Ahh opencv param names according to eye-in-hand vs eye-to-hand might change
                     # TODO arm2cam or cam2arm? should get to the bottom of this forever. camera coordinate in arm coordinates and the transform is the same?
+                    
                     # TODO save pic or not? Save reprojection error or ambiguity or something?
-                    # TODO save tvec or 4x4 matrix and extra from that?
                     # TODO would be nice to plot all poses or coordinate frames or something
                     # TODO how to avoid aruco error at range? Bigger? Board? Hold a checkerboard?
-                    # TODO should I have another key for running cv2.handEyeCalibrate, yeah, why not??? I'll be able to see reproject error and instantly see coordinate frames etc and everything else I've done! And that way I can see how it improves with more data
-                    # if it doesn't take too long, run it every time here?
+                    # TODO run c key everytime here after 2? if it doesn't take too long, run it every time here?
                     # TODO eventually put realsense in hand as well and do eye-in-hand. And multiple realsenses (maybe swap to handical or other? or do each one individually?)
 
                     num_saved_handeye_transforms += 1
                 else:
                     print('No tvec or rvec!')
+
             if k == ord('c'):  # perform hand-eye calibration using saved transforms
                 handeye_calibrate_opencv()
                 cam2arm = np.loadtxt('data/handeye/latest_cv2_cam2arm.txt', delimiter=' ')
+                saved_cam2arm = cam2arm
 
             frame_count += 1
         except ValueError as e:
