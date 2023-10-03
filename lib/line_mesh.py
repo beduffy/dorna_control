@@ -91,7 +91,12 @@ class LineMesh(object):
                 # cylinder_segment = cylinder_segment.rotate(
                 #     axis_a, center=True, type=o3d.geometry.RotationType.AxisAngle) # doesn't work
                 rot_mat = o3d.geometry.get_rotation_matrix_from_axis_angle(axis_a)
-                cylinder_segment = cylinder_segment.rotate(rot_mat, center=True)
+
+                # TODO the below doesn't work anymore
+                # import pdb;pdb.set_trace()
+                # cylinder_segment = cylinder_segment.rotate(rot_mat, center=True)
+                # cylinder_segment = cylinder_segment.rotate(rot_mat, center=(0, 0, 0))  # TODO is this correct anymore?
+                cylinder_segment = cylinder_segment.rotate(rot_mat)  # TODO is this correct anymore?
             # color cylinder
             color = self.colors if self.colors.ndim == 1 else self.colors[i, :]
             cylinder_segment.paint_uniform_color(color)
