@@ -39,6 +39,7 @@ def plot_open3d_Dorna(joint_and_link_positions, extra_geometry_elements=None):
     y4 = joint_and_link_positions["toolhead"][1]
     z4 = joint_and_link_positions["toolhead"][2]
 
+    # TODO separate gripper into a separate function and class. 
     # s_x = joint_and_link_positions["s_x"]
     # e_x = joint_and_link_positions["e_x"]
     # w_x = joint_and_link_positions["w_x"]
@@ -109,14 +110,17 @@ def plot_open3d_Dorna(joint_and_link_positions, extra_geometry_elements=None):
         mesh_sphere = create_sphere_at_pos(np.array(p), color=[0.1, 0.1, 0.7], radius=4.5)
         all_spheres.append(mesh_sphere)
 
-    list_of_geometry_elements = [line_set, *line_mesh1_geoms] + all_spheres
+    coordinate_frame_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame()
+    coordinate_frame_mesh.scale(100, center=(0, 0, 0))
+    list_of_geometry_elements = [line_set, *line_mesh1_geoms] + all_spheres + [coordinate_frame_mesh]
+    print(list_of_geometry_elements)
     if extra_geometry_elements:
         list_of_geometry_elements.extend(extra_geometry_elements)
     o3d.visualization.draw_geometries(list_of_geometry_elements)  # todo eventually nonblocking version
 
 if  __name__ == '__main__':
     from dorna_kinematics import f_k
-    # import pdb;pdb.set_trace()
-    full_toolhead_fk, xyz_positions_of_all_joints = f_k([0, 0, 0, 0, 0])
+    full_toolhead_fk, xyz_positions_of_all_joints = f_k([0, 0, 30, 45, 0])
+    print(xyz_positions_of_all_joints)
     
     plot_open3d_Dorna(xyz_positions_of_all_joints)
