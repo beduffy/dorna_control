@@ -15,7 +15,7 @@ from geometry_msgs.msg import Twist
 # from rosserial_arduino.srv import Test
 from dorna import Dorna
 
-from plot_dorna_kinematics import f_k, i_k, check_ground_collision
+from lib.dorna_kinematics import f_k, i_k, check_ground_collision
 
 def go_to_joint_angles(joint_angles):
 	command = generate_command(joint_angles, movement=0, coord_sys='joint')

@@ -27,16 +27,20 @@ from lib.vision import get_full_pcd_from_rgbd
 from lib.vision import get_camera_coordinate, create_homogenous_transformations, convert_pixel_to_arm_coordinate, convert_cam_pcd_to_arm_pcd
 from lib.vision_config import pinhole_camera_intrinsic
 from lib.handeye_opencv_wrapper import handeye_calibrate_opencv, load_all_handeye_data, plot_all_handeye_data
-from plot_dorna_kinematics import i_k, f_k, plot_open3d_Dorna
+from lib.dorna_kinematics import i_k, f_k
+#plot_open3d_Dorna
+
 
 # helper functions
 def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
     # return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)  # todo doesn't work with x = 0 and x2 = 9.8e-17
     return abs(a - b) <= rel_tol
 
+
 def dist(x, y):
     # return np.sqrt(np.sum((x - y) ** 2))
     return np.sqrt(np.sum((np.array(x) - np.array(y)) ** 2))
+
 
 def get_gripper_base_transformation(joint_angles):
     full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
@@ -79,12 +83,14 @@ def get_gripper_base_transformation(joint_angles):
 
     return homo_array
 
+
 def isRotationMatrix(R):
     Rt = np.transpose(R)
     shouldBeIdentity = np.dot(Rt, R)
     I = np.identity(3, dtype=R.dtype)
     n = np.linalg.norm(I - shouldBeIdentity)
     return n < 1e-6
+
 
 def rotationMatrixToEulerAngles(R):
     # Calculates rotation matrix to euler angles
