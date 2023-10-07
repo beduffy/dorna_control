@@ -79,10 +79,12 @@ depth_scale = depth_sensor.get_depth_scale()
 align = rs.align(rs.stream.color)
 frame_count = 0
 
+# coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+    # size=25.0, origin=[0.0, 0.0, 0.0])
 coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-    size=25.0, origin=[0.0, 0.0, 0.0])
-coordinate_frame_shoulder_height = o3d.geometry.TriangleMesh.create_coordinate_frame(
-    size=25.0, origin=[0.0, 0.0, 206.01940000000002])
+    size=1.0, origin=[0.0, 0.0, 0.0])
+# coordinate_frame_shoulder_height = o3d.geometry.TriangleMesh.create_coordinate_frame(
+#     size=25.0, origin=[0.0, 0.0, 206.01940000000002])
 
 cam2arm = np.identity(4)
 saved_cam2arm = cam2arm
@@ -152,14 +154,17 @@ while True:
                                         pinhole_camera_intrinsic, visualise=False)
             full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, 0.0)
 
-            gripper_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-                                    size=25.0, origin=[0.0, 0.0, 0.0])
+            # gripper_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+            #                         size=25.0, origin=[0.0, 0.0, 0.0])
             # gripper_base_transform = get_gripper_base_transformation(joint_angles)
             # gripper_coordinate_frame.transform(gripper_base_transform)
 
             # plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=[full_arm_pcd, coordinate_frame, coordinate_frame_shoulder_height])
-            list_of_geometry_elements = [full_arm_pcd, coordinate_frame, coordinate_frame_shoulder_height]
+            # list_of_geometry_elements = [full_arm_pcd, coordinate_frame, coordinate_frame_shoulder_height]
+            # list_of_geometry_elements = [full_arm_pcd]
+            list_of_geometry_elements = [full_arm_pcd, coordinate_frame]
             o3d.visualization.draw_geometries(list_of_geometry_elements)
+            # import pdb;pdb.set_trace()
 
         frame_count += 1
     except ValueError as e:
