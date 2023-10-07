@@ -24,7 +24,8 @@ import matplotlib as mpl
 from scipy import optimize
 
 from lib.vision import isclose, dist, isRotationMatrix, rotationMatrixToEulerAngles, create_homogenous_transformations
-
+from lib.realsense_helper import run_10_frames_to_wait_for_auto_exposure
+from lib.aruco_helper import create_aruco_params
 
 # export PYTHONPATH=$PYTHONPATH:/home/ben/all_projects/dorna_control
 # TODO could I put these common things into some function/library?
@@ -47,15 +48,8 @@ color_frame = frames.get_color_frame()
 depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
 color_intrin = color_frame.profile.as_video_stream_profile().intrinsics
 
+board, parameters, aruco_dict, marker_length = create_aruco_params()
 
-marker_length = 0.0275
-# marker_length = 0.0935  # big marker
-aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
-parameters = aruco.DetectorParameters_create()
-parameters.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
-# parameters.adaptiveThreshWinSizeMin = 3
-# parameters.adaptiveThreshWinSizeStep = 4  # todo test more and see if it makes worse/better
-board = cv2.aruco.GridBoard_create(3, 4, marker_length, 0.06, aruco_dict)  # marker_separation 0.06
 
 # old intrinsic calibration done by me
 camera_matrix = np.array([[612.14801862, 0., 340.03640321],
@@ -85,13 +79,7 @@ R_flip[2, 2] = -1.0
 #-- Font for the text in the image
 font = cv2.FONT_HERSHEY_PLAIN
 
-# wait for auto-exposure
-print('Running 10 frames to wait for auto-exposure')
-for i in range(10):
-    frames = pipeline.wait_for_frames()
-    aligned_frames = align.process(frames)
-    depth_frame = aligned_frames.get_depth_frame()
-    color_frame = aligned_frames.get_color_frame()
+run_10_frames_to_wait_for_auto_exposure(pipeline, align)
 
 print('Starting loop')
 while True:
