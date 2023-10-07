@@ -23,11 +23,7 @@ from mpl_toolkits import mplot3d
 import matplotlib as mpl
 from scipy import optimize
 
-# from lib.vision import get_full_pcd_from_rgbd
-# from lib.vision import get_camera_coordinate, create_homogenous_transformations, convert_pixel_to_arm_coordinate, convert_cam_pcd_to_arm_pcd
-# from lib.vision_config import pinhole_camera_intrinsic
-# from lib.handeye_opencv_wrapper import handeye_calibrate_opencv, load_all_handeye_data, plot_all_handeye_data
-# from lib.dorna_kinematics import i_k, f_k
+# TODO could I put these common things into some function/library?
 
 pipeline = rs.pipeline()
 config = rs.config()
