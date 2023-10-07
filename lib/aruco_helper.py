@@ -13,3 +13,12 @@ def create_aruco_params():
     board = cv2.aruco.GridBoard_create(3, 4, marker_length, 0.06, aruco_dict)  # marker_separation 0.06
 
     return board, parameters, aruco_dict, marker_length
+
+# TODO get over the fear of creating classes
+def aruco_detect_draw_get_transforms(gray_data, camera_color_img, aruco_dict, parameters, marker_length, camera_matrix, dist_coeffs):
+    corners, ids, rejectedImgPoints = aruco.detectMarkers(gray_data, aruco_dict,
+                                                                parameters=parameters)
+    frame_markers = aruco.drawDetectedMarkers(camera_color_img, corners, ids)
+    all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
+
+    return ids, all_rvec, all_tvec

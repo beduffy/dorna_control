@@ -26,8 +26,8 @@ from scipy import optimize
 
 from lib.vision import isclose, dist, isRotationMatrix, rotationMatrixToEulerAngles, create_homogenous_transformations
 from lib.vision_config import camera_matrix, dist_coeffs
-from lib.realsense_helper import setup_start_realsense, run_10_frames_to_wait_for_auto_exposure
-from lib.aruco_helper import create_aruco_params
+from lib.realsense_helper import setup_start_realsense, realsense_get_frames, run_10_frames_to_wait_for_auto_exposure
+from lib.aruco_helper import create_aruco_params, aruco_detect_draw_get_transforms
 
 # export PYTHONPATH=$PYTHONPATH:/home/ben/all_projects/dorna_control
 # TODO could I put these common things into some function/library?
@@ -56,26 +56,17 @@ if __name__ == '__main__':
     print('Starting loop')
     while True:
         try:
-            frames = pipeline.wait_for_frames()
-            aligned_frames = align.process(frames)
-            depth_frame = aligned_frames.get_depth_frame()
-            color_frame = aligned_frames.get_color_frame()
-
-            depth_frame = spatial.process(depth_frame)  # hole filling
-
+            color_frame, depth_frame = realsense_get_frames(pipeline, align, spatial)
+            
             camera_depth_img = np.asanyarray(depth_frame.get_data())
             camera_color_img = np.asanyarray(color_frame.get_data())
             depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(camera_depth_img, alpha=0.03),
                                                 cv2.COLORMAP_JET)  # todo why does it look so bad, add more contrast?
             
-            color_img = camera_color_img  # stupid but for now
-            bgr_color_data = cv2.cvtColor(color_img, cv2.COLOR_RGB2BGR)
+            bgr_color_data = cv2.cvtColor(camera_color_img, cv2.COLOR_RGB2BGR)
             gray_data = cv2.cvtColor(bgr_color_data, cv2.COLOR_RGB2GRAY)
 
-            corners, ids, rejectedImgPoints = aruco.detectMarkers(gray_data, aruco_dict,
-                                                                        parameters=parameters)
-            frame_markers = aruco.drawDetectedMarkers(color_img, corners, ids)
-            all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
+            ids, all_rvec, all_tvec = aruco_detect_draw_get_transforms(gray_data, camera_color_img, aruco_dict, parameters, marker_length, camera_matrix, dist_coeffs)
 
             if ids is not None:
                 print(ids)
@@ -83,7 +74,7 @@ if __name__ == '__main__':
                 for list_idx, corner_id in enumerate(ids_list):
                     rvec_aruco, tvec_aruco = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
                     # rvec_aruco, tvec_aruco = all_rvec[corner_id, 0, :], all_tvec[corner_id, 0, :]
-                    # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
+                    # aruco.drawAxis(camera_color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
                     # https://stackoverflow.com/questions/72702953/attributeerror-module-cv2-aruco-has-no-attribute-drawframeaxes
 
                 
@@ -96,27 +87,27 @@ if __name__ == '__main__':
                 # TODO understand all of the below intuitively. 
                 # -- Print the tag position in camera frame
                 str_position = "MARKER Position x={:.5f}  y={:.5f}  z={:.5f}".format(tvec[0], tvec[1], tvec[2])
-                cv2.putText(color_img, str_position, (0, start_y), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
+                cv2.putText(camera_color_img, str_position, (0, start_y), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
 
                 # -- Print the marker's attitude respect to camera frame
                 str_attitude = "MARKER Attitude r={:.5f}  p={:.5f}  y={:.5f}".format(
                     math.degrees(roll_marker), math.degrees(pitch_marker),
                     math.degrees(yaw_marker))
-                cv2.putText(color_img, str_attitude, (0, start_y + jump_amt * 1), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
+                cv2.putText(camera_color_img, str_attitude, (0, start_y + jump_amt * 1), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
 
                 str_position = "CAMERA Position x={:.5f}  y={:.5f}  z={:.5f}".format(
                     pos_camera[0].item(), pos_camera[1].item(), pos_camera[2].item())
-                cv2.putText(color_img, str_position, (0, start_y + jump_amt * 2), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
+                cv2.putText(camera_color_img, str_position, (0, start_y + jump_amt * 2), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
 
                 # -- Get the attitude of the camera respect to the frame
                 roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(R_flip * R_ct)  # todo no flip needed?
                 str_attitude = "CAMERA Attitude r={:.5f}  p={:.5f}  y={:.5f}".format(
                     math.degrees(roll_camera), math.degrees(pitch_camera),
                     math.degrees(yaw_camera))
-                cv2.putText(color_img, str_attitude, (0, start_y + jump_amt * 3), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
+                cv2.putText(camera_color_img, str_attitude, (0, start_y + jump_amt * 3), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
 
             
-            images = np.hstack((color_img, depth_colormap))
+            images = np.hstack((camera_color_img, depth_colormap))
 
             cv2.imshow("image", images)
             k = cv2.waitKey(1)
@@ -125,8 +116,6 @@ if __name__ == '__main__':
                 cv2.destroyAllWindows()
                 pipeline.stop()
                 break
-
-            camera_color_img = cv2.cvtColor(camera_color_img, cv2.COLOR_BGR2RGB)  # for open3D
 
             frame_count += 1
         except ValueError as e:

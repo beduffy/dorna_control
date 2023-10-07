@@ -40,3 +40,15 @@ def run_10_frames_to_wait_for_auto_exposure(pipeline, align):
         aligned_frames = align.process(frames)
         depth_frame = aligned_frames.get_depth_frame()
         color_frame = aligned_frames.get_color_frame()
+
+
+def realsense_get_frames(pipeline, align, spatial):
+    # TODO dupliated with above but didn't want to pass spatial to above. hmm
+    frames = pipeline.wait_for_frames()
+    aligned_frames = align.process(frames)
+    depth_frame = aligned_frames.get_depth_frame()
+    color_frame = aligned_frames.get_color_frame()
+
+    depth_frame = spatial.process(depth_frame)  # hole filling
+
+    return color_frame, depth_frame
