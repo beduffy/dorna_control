@@ -40,10 +40,11 @@ if __name__ == '__main__':
 
     board, parameters, aruco_dict, marker_length = create_aruco_params()
 
+    size = 0.1
     # coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
         # size=25.0, origin=[0.0, 0.0, 0.0])
     coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-        size=1.0, origin=[0.0, 0.0, 0.0])
+        size=size, origin=[0.0, 0.0, 0.0])
     # coordinate_frame_shoulder_height = o3d.geometry.TriangleMesh.create_coordinate_frame(
     #     size=25.0, origin=[0.0, 0.0, 206.01940000000002])
 
@@ -77,7 +78,9 @@ if __name__ == '__main__':
                     # aruco.drawAxis(camera_color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
                     # https://stackoverflow.com/questions/72702953/attributeerror-module-cv2-aruco-has-no-attribute-drawframeaxes
 
-
+                tvec, rvec = tvec_aruco, rvec_aruco  # for easier assignment if multiple markers later.
+                cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
+                saved_cam2arm = cam2arm
             
             images = np.hstack((camera_color_img, depth_colormap))
             # images = np.hstack((camera_color_img, depth_colormap))
@@ -95,17 +98,23 @@ if __name__ == '__main__':
             if k == ord('o'):
                 cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img,
                                             pinhole_camera_intrinsic, visualise=False)
-                full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, 0.0)
+                full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, 0.0)  # TODO do I need this or not?
 
                 # gripper_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
                 #                         size=25.0, origin=[0.0, 0.0, 0.0])
                 # gripper_base_transform = get_gripper_base_transformation(joint_angles)
                 # gripper_coordinate_frame.transform(gripper_base_transform)
 
+                aruco_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+                                        size=size, origin=[0.0, 0.0, 0.0])
+                # aruco_coordinate_frame.transform(cam2arm)  # didn't work. I lack understanding TODO
+                aruco_coordinate_frame.transform(arm2cam)  # on the spot but rotated wrong...  ahh did it again and it looked good. it's aruco flaws... maybe this caused all my problems? I should use charuco board?
+
                 # plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=[full_arm_pcd, coordinate_frame, coordinate_frame_shoulder_height])
                 # list_of_geometry_elements = [full_arm_pcd, coordinate_frame, coordinate_frame_shoulder_height]
                 # list_of_geometry_elements = [full_arm_pcd]
-                list_of_geometry_elements = [full_arm_pcd, coordinate_frame]
+                # list_of_geometry_elements = [full_arm_pcd, coordinate_frame]
+                list_of_geometry_elements = [cam_pcd, coordinate_frame, aruco_coordinate_frame]
                 o3d.visualization.draw_geometries(list_of_geometry_elements)
                 # import pdb;pdb.set_trace()
 
