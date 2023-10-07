@@ -32,6 +32,19 @@ from lib.aruco_helper import create_aruco_params, aruco_detect_draw_get_transfor
 # export PYTHONPATH=$PYTHONPATH:/home/ben/all_projects/dorna_control
 # TODO could I put these common things into some function/library?
 
+
+# def get_transforms_and_euler_angles_to_marker(tvec, rvec):
+#     # TODO how to clean this mess of too many return values? when does separating functions into one thing not make sense?
+#     cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
+
+#     # -- Get the attitude in terms of euler 321 (Needs to be flipped first)
+#     roll_marker, pitch_marker, yaw_marker = rotationMatrixToEulerAngles(R_flip * R_tc)
+#     # -- Get the attitude of the camera respect to the frame
+#     roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(R_flip * R_ct)  # todo no flip needed?
+
+#     return cam2arm, arm2cam, roll_marker, pitch_marker, yaw_marker, roll_camera, pitch_camera, yaw_camera
+
+
 if __name__ == '__main__':
     depth_intrin, color_intrin, depth_scale, pipeline, align, spatial = setup_start_realsense()
 
@@ -79,10 +92,16 @@ if __name__ == '__main__':
 
                 
                 tvec, rvec = tvec_aruco, rvec_aruco
+
+                # refactoring fail but a lesson in here. TODO
+                # cam2arm, arm2cam, roll_marker, pitch_marker, yaw_marker, roll_camera, pitch_camera, yaw_camera = get_transforms_and_euler_angles_to_marker(tvec, rvec)
+
                 cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
 
                 # -- Get the attitude in terms of euler 321 (Needs to be flipped first)
                 roll_marker, pitch_marker, yaw_marker = rotationMatrixToEulerAngles(R_flip * R_tc)
+                # -- Get the attitude of the camera respect to the frame
+                roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(R_flip * R_ct)  # todo no flip needed?
 
                 # TODO understand all of the below intuitively. 
                 # -- Print the tag position in camera frame
@@ -99,8 +118,6 @@ if __name__ == '__main__':
                     pos_camera[0].item(), pos_camera[1].item(), pos_camera[2].item())
                 cv2.putText(camera_color_img, str_position, (0, start_y + jump_amt * 2), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
 
-                # -- Get the attitude of the camera respect to the frame
-                roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(R_flip * R_ct)  # todo no flip needed?
                 str_attitude = "CAMERA Attitude r={:.5f}  p={:.5f}  y={:.5f}".format(
                     math.degrees(roll_camera), math.degrees(pitch_camera),
                     math.degrees(yaw_camera))
