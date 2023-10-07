@@ -51,6 +51,7 @@ def get_inverse_homogenous_transform(homogenous_matrix):
 
     return inverse_homo
 
+# TODO move to matrix/transform library or something?
 def create_homogenous_transformations(tvec_in, rvec_in):
     # todo add to vision library and compare with DRY duplicate
     # -- Obtain the rotation matrix tag->camera
@@ -91,6 +92,51 @@ def create_homogenous_transformations(tvec_in, rvec_in):
     pos_camera = cam2arm_local[:3, 3]
 
     return cam2arm_local, arm2cam_local, R_tc, R_tc, pos_camera
+
+
+def rotationMatrixToEulerAngles(R):
+    # Calculates rotation matrix to euler angles
+    # The result is the same as MATLAB except the order
+    # of the euler angles ( x and z are swapped ).
+
+    # print(R.shape)
+    # if not isRotationMatrix(R):
+    #     print('Not rotation matrix!')
+    assert (isRotationMatrix(R))
+
+    sy = math.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
+
+    singular = sy < 1e-6
+
+    if not singular:
+        x = math.atan2(R[2, 1], R[2, 2])  # todo understand this for life
+        y = math.atan2(-R[2, 0], sy)
+        z = math.atan2(R[1, 0], R[0, 0])
+    else:
+        x = math.atan2(-R[1, 2], R[1, 1])
+        y = math.atan2(-R[2, 0], sy)
+        z = 0
+
+    return np.array([x, y, z])
+
+
+def isRotationMatrix(R):
+    Rt = np.transpose(R)
+    shouldBeIdentity = np.dot(Rt, R)
+    I = np.identity(3, dtype=R.dtype)
+    n = np.linalg.norm(I - shouldBeIdentity)
+    return n < 1e-6
+
+
+# helper functions
+def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
+    # return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)  # todo doesn't work with x = 0 and x2 = 9.8e-17
+    return abs(a - b) <= rel_tol
+
+
+def dist(x, y):
+    # return np.sqrt(np.sum((x - y) ** 2))
+    return np.sqrt(np.sum((np.array(x) - np.array(y)) ** 2))
 
 
 def convert_pixel_to_arm_coordinate(camera_depth_img, pixel_x, pixel_y, cam2arm, verbose=False):

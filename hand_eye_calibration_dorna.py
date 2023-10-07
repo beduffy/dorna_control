@@ -25,21 +25,13 @@ from scipy import optimize
 
 from lib.vision import get_full_pcd_from_rgbd
 from lib.vision import get_camera_coordinate, create_homogenous_transformations, convert_pixel_to_arm_coordinate, convert_cam_pcd_to_arm_pcd
+from lib.vision import isclose, dist, isRotationMatrix, rotationMatrixToEulerAngles
 from lib.vision_config import pinhole_camera_intrinsic
 from lib.handeye_opencv_wrapper import handeye_calibrate_opencv, load_all_handeye_data, plot_all_handeye_data
 from lib.dorna_kinematics import i_k, f_k
 #plot_open3d_Dorna
 
 
-# helper functions
-def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
-    # return abs(a-b) <= max(rel_tol * max(abs(a), abs(b)), abs_tol)  # todo doesn't work with x = 0 and x2 = 9.8e-17
-    return abs(a - b) <= rel_tol
-
-
-def dist(x, y):
-    # return np.sqrt(np.sum((x - y) ** 2))
-    return np.sqrt(np.sum((np.array(x) - np.array(y)) ** 2))
 
 
 def get_gripper_base_transformation(joint_angles):
@@ -84,38 +76,8 @@ def get_gripper_base_transformation(joint_angles):
     return homo_array
 
 
-def isRotationMatrix(R):
-    Rt = np.transpose(R)
-    shouldBeIdentity = np.dot(Rt, R)
-    I = np.identity(3, dtype=R.dtype)
-    n = np.linalg.norm(I - shouldBeIdentity)
-    return n < 1e-6
 
 
-def rotationMatrixToEulerAngles(R):
-    # Calculates rotation matrix to euler angles
-    # The result is the same as MATLAB except the order
-    # of the euler angles ( x and z are swapped ).
-
-    # print(R.shape)
-    # if not isRotationMatrix(R):
-    #     print('Not rotation matrix!')
-    assert (isRotationMatrix(R))
-
-    sy = math.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
-
-    singular = sy < 1e-6
-
-    if not singular:
-        x = math.atan2(R[2, 1], R[2, 2])  # todo understand this for life
-        y = math.atan2(-R[2, 0], sy)
-        z = math.atan2(R[1, 0], R[0, 0])
-    else:
-        x = math.atan2(-R[1, 2], R[1, 1])
-        y = math.atan2(-R[2, 0], sy)
-        z = 0
-
-    return np.array([x, y, z])
 
 
 def get_rigid_transform_error(joined_input_array, cam_3d_coords):
@@ -683,6 +645,7 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
                 jump_amt = 30
                 text_size = 0.6
 
+                # TODO typo below???
                 am2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
 
                 # -- Get the attitude in terms of euler 321 (Needs to be flipped first)

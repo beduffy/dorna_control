@@ -115,6 +115,7 @@ def plot_all_handeye_data(handeye_data_dict, cam_pcd=None):
         geometry_to_plot.append(cam_pcd)
     o3d.visualization.draw_geometries(geometry_to_plot)
 
+
 def handeye_calibrate_opencv(handeye_data_dict):
     # all_gripper_rotation_mats = handeye_data_dict['all_gripper_rotation_mats']
     # all_gripper_tvecs = handeye_data_dict['all_gripper_tvecs']
