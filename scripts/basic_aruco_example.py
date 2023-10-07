@@ -24,29 +24,13 @@ import matplotlib as mpl
 from scipy import optimize
 
 from lib.vision import isclose, dist, isRotationMatrix, rotationMatrixToEulerAngles, create_homogenous_transformations
-from lib.realsense_helper import run_10_frames_to_wait_for_auto_exposure
+from lib.realsense_helper import setup_start_realsense, run_10_frames_to_wait_for_auto_exposure
 from lib.aruco_helper import create_aruco_params
 
 # export PYTHONPATH=$PYTHONPATH:/home/ben/all_projects/dorna_control
 # TODO could I put these common things into some function/library?
 
-pipeline = rs.pipeline()
-config = rs.config()
-config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-
-profile = pipeline.start(config)
-spatial = rs.spatial_filter()
-spatial.set_option(rs.option.holes_fill, 3)
-
-depth_sensor = profile.get_device().first_depth_sensor()
-depth_scale = depth_sensor.get_depth_scale()
-
-frames = pipeline.wait_for_frames()
-depth_frame = frames.get_depth_frame()
-color_frame = frames.get_color_frame()
-depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
-color_intrin = color_frame.profile.as_video_stream_profile().intrinsics
+depth_intrin, color_intrin, depth_scale, pipeline, align, spatial = setup_start_realsense()
 
 board, parameters, aruco_dict, marker_length = create_aruco_params()
 
@@ -59,16 +43,7 @@ dist_coeffs = np.array(
     [1.80764862e-02, 1.09549436e+00, -3.38044260e-03, 4.04543459e-03, -4.26585263e+00])
 
 
-depth_sensor = profile.get_device().first_depth_sensor()
 
-# Using preset HighAccuracy for recording
-# depth_sensor.set_option(rs.option.visual_preset, Preset.HighAccuracy)
-
-# Getting the depth sensor's depth scale (see rs-align example for explanation)
-depth_scale = depth_sensor.get_depth_scale()
-
-align = rs.align(rs.stream.color)
-frame_count = 0
 
 #--- 180 deg rotation matrix around the x axis
 R_flip       = np.zeros((3, 3), dtype=np.float32)
@@ -81,6 +56,7 @@ font = cv2.FONT_HERSHEY_PLAIN
 
 run_10_frames_to_wait_for_auto_exposure(pipeline, align)
 
+frame_count = 0
 print('Starting loop')
 while True:
     try:
