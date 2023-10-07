@@ -1,5 +1,7 @@
 import os
 
+import numpy as np
+
 try:
     import open3d as o3d
     open3d_import_success = True
@@ -22,3 +24,11 @@ width, height, fx, fy, ppx, ppy = (640.0, 480.0, 612.14801862, 611.29345062, 340
 if open3d_import_success:
     pinhole_camera_intrinsic = o3d.camera.PinholeCameraIntrinsic(
             int(width), int(height), fx, fy, ppx, ppy)
+    
+# old intrinsic calibration done by me
+camera_matrix = np.array([[612.14801862, 0., 340.03640321],
+                            [0., 611.29345062, 230.06928807],
+                            [0., 0., 1.]])
+dist_coeffs = np.array(
+    [1.80764862e-02, 1.09549436e+00, -3.38044260e-03, 4.04543459e-03, -4.26585263e+00])
+
