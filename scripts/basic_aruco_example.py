@@ -23,6 +23,10 @@ from mpl_toolkits import mplot3d
 import matplotlib as mpl
 from scipy import optimize
 
+from lib.vision import isclose, dist, isRotationMatrix, rotationMatrixToEulerAngles, create_homogenous_transformations
+
+
+# export PYTHONPATH=$PYTHONPATH:/home/ben/all_projects/dorna_control
 # TODO could I put these common things into some function/library?
 
 pipeline = rs.pipeline()
@@ -72,6 +76,15 @@ depth_scale = depth_sensor.get_depth_scale()
 align = rs.align(rs.stream.color)
 frame_count = 0
 
+#--- 180 deg rotation matrix around the x axis
+R_flip       = np.zeros((3, 3), dtype=np.float32)
+R_flip[0, 0] =  1.0
+R_flip[1, 1] = -1.0
+R_flip[2, 2] = -1.0
+
+#-- Font for the text in the image
+font = cv2.FONT_HERSHEY_PLAIN
+
 # wait for auto-exposure
 print('Running 10 frames to wait for auto-exposure')
 for i in range(10):
@@ -117,11 +130,39 @@ while True:
                 # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
                 # https://stackoverflow.com/questions/72702953/attributeerror-module-cv2-aruco-has-no-attribute-drawframeaxes
 
+            start_y = 30
+            jump_amt = 30
+            text_size = 1
+            tvec, rvec = tvec_aruco, rvec_aruco
+            cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
+
+            # -- Get the attitude in terms of euler 321 (Needs to be flipped first)
+            roll_marker, pitch_marker, yaw_marker = rotationMatrixToEulerAngles(R_flip * R_tc)
+
+            # TODO understand all of the below intuitively. 
+            # -- Print the tag position in camera frame
+            str_position = "MARKER Position x={:.5f}  y={:.5f}  z={:.5f}".format(tvec[0], tvec[1], tvec[2])
+            cv2.putText(color_img, str_position, (0, start_y), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
+
+            # -- Print the marker's attitude respect to camera frame
+            str_attitude = "MARKER Attitude r={:.5f}  p={:.5f}  y={:.5f}".format(
+                math.degrees(roll_marker), math.degrees(pitch_marker),
+                math.degrees(yaw_marker))
+            cv2.putText(color_img, str_attitude, (0, start_y + jump_amt * 1), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
+
+            str_position = "CAMERA Position x={:.5f}  y={:.5f}  z={:.5f}".format(
+                pos_camera[0].item(), pos_camera[1].item(), pos_camera[2].item())
+            cv2.putText(color_img, str_position, (0, start_y + jump_amt * 2), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
+
+            # -- Get the attitude of the camera respect to the frame
+            roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(R_flip * R_ct)  # todo no flip needed?
+            str_attitude = "CAMERA Attitude r={:.5f}  p={:.5f}  y={:.5f}".format(
+                math.degrees(roll_camera), math.degrees(pitch_camera),
+                math.degrees(yaw_camera))
+            cv2.putText(color_img, str_attitude, (0, start_y + jump_amt * 3), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
 
         
         images = np.hstack((color_img, depth_colormap))
-        # images = np.hstack((camera_color_img, depth_colormap))
-        # images = camera_color_img
 
         cv2.imshow("image", images)
         k = cv2.waitKey(1)
