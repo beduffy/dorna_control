@@ -26,6 +26,7 @@ from lib.vision_config import camera_matrix, dist_coeffs
 from lib.realsense_helper import setup_start_realsense, realsense_get_frames, run_10_frames_to_wait_for_auto_exposure
 from lib.aruco_helper import create_aruco_params, create_charuco_params, aruco_detect_draw_get_transforms, \
     show_matplotlib_all_aruco, show_matplotlib_all_charuco
+from lib.aruco_image_text import OpenCvArucoImageText
 
 # export PYTHONPATH=$PYTHONPATH:/home/ben/all_projects/dorna_control
 # TODO Put MORE of these common things into some function/library?
@@ -45,20 +46,9 @@ if __name__ == '__main__':
     # show_matplotlib_all_charuco(board)
     # TODO oh, should go bigger... charuco aruco length within square.
 
-    # Opencv text params
-    start_y = 30
-    jump_amt = 30
-    text_size = 1
-    #--- 180 deg rotation matrix around the x axis
-    R_flip       = np.zeros((3, 3), dtype=np.float32)
-    R_flip[0, 0] =  1.0
-    R_flip[1, 1] = -1.0
-    R_flip[2, 2] = -1.0
+    opencv_aruco_image_text = OpenCvArucoImageText()
 
     marker_pose_history = deque([], maxlen=100)
-
-    #-- Font for the text in the image
-    font = cv2.FONT_HERSHEY_PLAIN
 
     run_10_frames_to_wait_for_auto_exposure(pipeline, align)
 
@@ -89,7 +79,7 @@ if __name__ == '__main__':
             # TODO if there are two markers in image, it will not be more accurate right? or?
             all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
 
-            print(ids)
+            # print(ids)
             # import pdb;pdb.set_trace()
             if ids is not None and ids.shape[0] > 1:
                 # TODO do more from below blog
@@ -121,19 +111,24 @@ if __name__ == '__main__':
                                                                                         # camera_matrix, dist_coeffs, 
                                                                                         # all_rvec[0], all_tvec[0], useExtrinsicGuess=True)  # TODO would be nice to use rvec 0 but not tvec hmm
                     # retval, board_rvec, board_tvec = cv2.aruco.estimatePoseCharucoBoard(charuco_corners, charuco_ids, board, camera_matrix, dist_coeffs)
-    # 
+
                     # aruco.drawAxis(camera_color_img, camera_matrix, dist_coeffs, board_rvec, board_tvec, 0.05)  # last param is axis length
-                    try:
+
+                    print('board_rvec', board_rvec.shape)
+                    if board_rvec is not None and board_rvec.shape[0] == 3:
                         cv2.drawFrameAxes(camera_color_img, camera_matrix, dist_coeffs, board_rvec, board_tvec, marker_length)
 
+                        print('board tvec', board_tvec)
                         tvec, rvec = board_tvec.squeeze(), board_rvec.squeeze()
 
-                        print(ids)
+                        # print(ids)
                         ids_list = [l[0] for l in ids.tolist()]
                         for list_idx, corner_id in enumerate(ids_list):
                             rvec_aruco, tvec_aruco = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
-                            # TODO not resilient to blocking of the marker yet. cv2.error: OpenCV(4.6.0) /croot/opencv-suite_1676452025216/work/modules/calib3d/src/calibration.cpp:604: error: (-5:Bad argument) Rotation must be represented by 1x3 or 3x1 floating-point rotation vector, or 3x3 rotation matrix in function 'cvProjectPoints2Internal'
-                            cv2.drawFrameAxes(camera_color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
+                            # print(rvec_aruco.shape)
+                            if rvec_aruco is not None and rvec_aruco.shape[0] == 3:
+                                # TODO not resilient to blocking of the marker yet. cv2.error: OpenCV(4.6.0) /croot/opencv-suite_1676452025216/work/modules/calib3d/src/calibration.cpp:604: error: (-5:Bad argument) Rotation must be represented by 1x3 or 3x1 floating-point rotation vector, or 3x3 rotation matrix in function 'cvProjectPoints2Internal'
+                                cv2.drawFrameAxes(camera_color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
 
                             # TODO I need charuco or aruco board and/or multiple markers... Use board beside arm and then use that as initial guess
                         
@@ -141,8 +136,6 @@ if __name__ == '__main__':
                             # if corner_id == 2:
 
                         # BOARD pose below!
-
-
 
                         # tvec, rvec = board_tvec, board_rvec  # TODO not needed due to squeeze?
 
@@ -152,9 +145,9 @@ if __name__ == '__main__':
                         cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
 
                         # -- Get the attitude in terms of euler 321 (Needs to be flipped first)
-                        roll_marker, pitch_marker, yaw_marker = rotationMatrixToEulerAngles(R_flip * R_tc)
+                        roll_marker, pitch_marker, yaw_marker = rotationMatrixToEulerAngles(opencv_aruco_image_text.R_flip * R_tc)
                         # -- Get the attitude of the camera respect to the frame
-                        roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(R_flip * R_ct)  # todo no flip needed?
+                        roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(opencv_aruco_image_text.R_flip * R_ct)  # todo no flip needed?
 
                         # marker_pose_history.append((tvec[0], tvec[1], tvec[2], 
                         #                             math.degrees(roll_marker), math.degrees(pitch_marker), math.degrees(yaw_marker)))
@@ -163,36 +156,10 @@ if __name__ == '__main__':
                         #     marker_pose_history_idx_val = np.mean([v[idx] for v in marker_pose_history]).item()
                         #     avg_6dof_pose.append(marker_pose_history_idx_val)
 
-                        # TODO understand all of the below intuitively. 
-                        # -- Print the tag position in camera frame
-                        str_position = "CHARUCO Position x={:.5f}  y={:.5f}  z={:.5f}".format(tvec[0], tvec[1], tvec[2])
-                        cv2.putText(camera_color_img, str_position, (0, start_y), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
-
-                        # -- Print the marker's attitude respect to camera frame
-                        str_attitude = "CHARUCO Attitude r={:.5f}  p={:.5f}  y={:.5f}".format(
-                            math.degrees(roll_marker), math.degrees(pitch_marker),
-                            math.degrees(yaw_marker))
-                        cv2.putText(camera_color_img, str_attitude, (0, start_y + jump_amt * 1), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
-
-                        str_position = "CAMERA Position x={:.5f}  y={:.5f}  z={:.5f}".format(
-                            pos_camera[0].item(), pos_camera[1].item(), pos_camera[2].item())
-                        cv2.putText(camera_color_img, str_position, (0, start_y + jump_amt * 2), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
-
-                        str_attitude = "CAMERA Attitude r={:.5f}  p={:.5f}  y={:.5f}".format(
-                            math.degrees(roll_camera), math.degrees(pitch_camera),
-                            math.degrees(yaw_camera))
-                        cv2.putText(camera_color_img, str_attitude, (0, start_y + jump_amt * 3), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
-
-                        # str_marker_pose_avg = 'M pos: ({:.5f} {:.5f} {:.5f}), angles: ({:.5f} {:.5f} {:.5f})'.format(
-                        #     avg_6dof_pose[0], avg_6dof_pose[1], avg_6dof_pose[2], avg_6dof_pose[3], avg_6dof_pose[4], avg_6dof_pose[5]
-                        # )
-
-                        # cv2.putText(camera_color_img, str_marker_pose_avg, (0, start_y + jump_amt * 4), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
-
-                    except Exception as e:
-                        print(e)
-                        print('FAILURE. board_rvec')
-                        print(board_rvec)
+                        
+                        opencv_aruco_image_text.put_marker_text(camera_color_img, tvec, roll_marker, pitch_marker, yaw_marker)
+                        opencv_aruco_image_text.put_camera_text(camera_color_img, pos_camera, roll_camera, pitch_camera, yaw_camera)
+                        # opencv_aruco_image_text.put_avg_marker_text(camera_color_img, avg_6dof_pose)
                     
             
             images = np.hstack((camera_color_img, depth_colormap))
