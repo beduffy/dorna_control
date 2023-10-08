@@ -21,14 +21,17 @@ def create_aruco_params():
 def create_charuco_params():
     parameters = aruco.DetectorParameters_create()
     parameters.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
-    aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)  # TODO is this the wrong thing?
+    charuco_square_length = 0.028
     # charuco_marker_length = 0.019
     charuco_marker_length = 0.0145
-    charuco_square_length = 0.028
+    # charuco_marker_length = 0.026  # TODO should reprint like this....
     # TODO maybe i can tune these more
     # TODO find out how to do long distance pose estimation!!!
 
     # TODO aruco con More susceptible to rotational ambiguity at medium to long ranges
+    # TODO read. 
+    # TODO why is charuco not working well? Bad camera calibration or parameters
     # https://stackoverflow.com/questions/52222327/improve-accuracy-of-pose-with-bigger-aruco-markers
     # https://stackoverflow.com/questions/51709522/unstable-values-in-aruco-pose-estimation
     # TODO try apriltag_ros
@@ -53,7 +56,6 @@ def aruco_detect_draw_get_transforms(gray_data, camera_color_img, aruco_dict, pa
 
 
 def show_matplotlib_all_aruco(aruco_dict):
-    # TODO put into aruco helpers
     fig = plt.figure()
     nx = 4
     ny = 3
@@ -65,3 +67,14 @@ def show_matplotlib_all_aruco(aruco_dict):
 
     plt.savefig("data/markers.pdf")
     plt.show()
+
+
+def show_matplotlib_all_charuco(board):
+    imboard = board.draw((2000, 2000))
+    fig = plt.figure()
+    ax = fig.add_subplot(1,1,1)
+    plt.imshow(imboard, cmap = mpl.cm.gray, interpolation = "nearest")
+    ax.axis("off")
+    plt.savefig("data/charuco_board.pdf")
+    plt.show()
+    # https://docs.opencv.org/3.4/d0/d3c/classcv_1_1aruco_1_1CharucoBoard.html#a5f1b7c91bd8bf8271931d6f06292f1bc
