@@ -20,6 +20,8 @@ class OpenCvArucoImageText():
         
     def put_marker_text(self, img, tvec, roll_marker, pitch_marker, yaw_marker):
         # TODO understand all of the below intuitively. 
+
+        # THIS is marker relative to camera z forward, so negative x is to the left, 0 x is center, and right is positive
         # -- Print the tag position in camera frame
         str_position = "MARKER Position x={:.5f}  y={:.5f}  z={:.5f}".format(tvec[0], tvec[1], tvec[2])
         cv2.putText(img, str_position, (0, self.start_y), self.font, self.text_size, (0, 255, 0), 2, cv2.LINE_AA)
@@ -31,6 +33,8 @@ class OpenCvArucoImageText():
         cv2.putText(img, str_attitude, (0, self.start_y + self.jump_amt * 1), self.font, self.text_size, (0, 255, 0), 2, cv2.LINE_AA)
 
     def put_camera_text(self, img, pos_camera, roll_camera, pitch_camera, yaw_camera):
+        # This is camera pose relative to marker
+        
         str_position = "CAMERA Position x={:.5f}  y={:.5f}  z={:.5f}".format(
             pos_camera[0].item(), pos_camera[1].item(), pos_camera[2].item())
         cv2.putText(img, str_position, (0, self.start_y + self.jump_amt * 2), self.font, self.text_size, (0, 255, 0), 2, cv2.LINE_AA)
