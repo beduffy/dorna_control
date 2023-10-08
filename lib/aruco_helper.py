@@ -14,11 +14,13 @@ def create_aruco_params():
 
     return board, parameters, aruco_dict, marker_length
 
+
 # TODO get over the fear of creating classes
 def aruco_detect_draw_get_transforms(gray_data, camera_color_img, aruco_dict, parameters, marker_length, camera_matrix, dist_coeffs):
     corners, ids, rejectedImgPoints = aruco.detectMarkers(gray_data, aruco_dict,
                                                                 parameters=parameters)
     frame_markers = aruco.drawDetectedMarkers(camera_color_img, corners, ids)
+    # TODO if there are two markers in image, it will not be more accurate right? or?
     all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
 
     return ids, all_rvec, all_tvec

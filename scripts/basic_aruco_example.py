@@ -1,8 +1,5 @@
 from __future__ import print_function
-import os
 import sys
-import argparse
-import time
 import math
 import traceback
 from glob import glob
@@ -14,7 +11,6 @@ try:
 except Exception as e:
     print(e)
     print('Tried to import open3d or skimage but not installed')
-import requests
 import pyrealsense2 as rs
 from cv2 import aruco
 import cv2
@@ -30,7 +26,7 @@ from lib.realsense_helper import setup_start_realsense, realsense_get_frames, ru
 from lib.aruco_helper import create_aruco_params, aruco_detect_draw_get_transforms
 
 # export PYTHONPATH=$PYTHONPATH:/home/ben/all_projects/dorna_control
-# TODO could I put these common things into some function/library?
+# TODO Put MORE of these common things into some function/library?
 
 
 # def get_transforms_and_euler_angles_to_marker(tvec, rvec):
@@ -89,6 +85,7 @@ if __name__ == '__main__':
                     # rvec_aruco, tvec_aruco = all_rvec[corner_id, 0, :], all_tvec[corner_id, 0, :]
                     # aruco.drawAxis(camera_color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
                     # https://stackoverflow.com/questions/72702953/attributeerror-module-cv2-aruco-has-no-attribute-drawframeaxes
+                    # TODO make the axes work here!!! to see the flipping effect more and how this can ruin everything
 
                 
                 tvec, rvec = tvec_aruco, rvec_aruco
