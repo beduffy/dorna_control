@@ -63,6 +63,7 @@ if __name__ == '__main__':
                 ids_list = [l[0] for l in ids.tolist()]
                 for list_idx, corner_id in enumerate(ids_list):
                     rvec_aruco, tvec_aruco = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
+                    cv2.drawFrameAxes(camera_color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
 
                 tvec, rvec = tvec_aruco, rvec_aruco  # for easier assignment if multiple markers later.
                 cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
@@ -81,6 +82,8 @@ if __name__ == '__main__':
                 pipeline.stop()
                 break
 
+            # if k == ord('q'):
+
             if k == ord('o'):
                 cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img,
                                             pinhole_camera_intrinsic, visualise=False)
@@ -91,13 +94,17 @@ if __name__ == '__main__':
                 # aruco_coordinate_frame.transform(cam2arm)  # didn't work. I lack understanding TODO
                 aruco_coordinate_frame.transform(arm2cam)  # on the spot but rotated wrong...  ahh did it again and it looked good. it's aruco flaws... maybe this caused all my problems? I should use charuco board?
 
+                mesh_box = o3d.geometry.TriangleMesh.create_box(width=1.0, height=1.0, depth=0.003)
+                # TODO translate inwards or not?
+                mesh_box.transform(arm2cam)
+
                 # TODO write my understanding of all of the above.
                 # everything is in camera coordinate frame
                 # cam2arm means the transformation to bring points from camera frame to the aruco frame
                 # arm2cam brings points from aruco frame to camera frame. 
                 # TODO So then why does transforming coordinate frame at origin to camera frame make it go to correct place.
 
-                list_of_geometry_elements = [cam_pcd, coordinate_frame, aruco_coordinate_frame]
+                list_of_geometry_elements = [cam_pcd, coordinate_frame, aruco_coordinate_frame, mesh_box]
                 o3d.visualization.draw_geometries(list_of_geometry_elements)
 
             frame_count += 1
