@@ -27,6 +27,9 @@ from lib.vision import get_full_pcd_from_rgbd
 from lib.vision import get_camera_coordinate, create_homogenous_transformations, convert_pixel_to_arm_coordinate, convert_cam_pcd_to_arm_pcd
 from lib.vision import isclose, dist, isRotationMatrix, rotationMatrixToEulerAngles
 from lib.vision_config import pinhole_camera_intrinsic
+from lib.vision_config import camera_matrix, dist_coeffs
+from lib.realsense_helper import setup_start_realsense, realsense_get_frames, run_10_frames_to_wait_for_auto_exposure
+from lib.aruco_helper import create_aruco_params, aruco_detect_draw_get_transforms
 from lib.handeye_opencv_wrapper import handeye_calibrate_opencv, load_all_handeye_data, plot_all_handeye_data
 from lib.dorna_kinematics import i_k, f_k
 #plot_open3d_Dorna
@@ -63,7 +66,7 @@ def get_gripper_base_transformation(joint_angles):
     homo_array[:3, :3] = rot_mat
 
     # # -- Now get Position and attitude f the camera respect to the marker
-    # # pos_camera = -R_tc * np.matrix(tvec).T  # todo how could element-wise possibly work!?!?!?!?
+    # # pos_camera = -R_tc * np.matrix(tvec).T  # TODO how could element-wise possibly work!?!?!?!?
     # pos_camera = np.dot(-R_tc, np.matrix(tvec_in).T)
 
     # # cam_position = np.dot(-arm2cam_rotation, tvec_arm2cam)  # .T   # arm2cam
@@ -81,15 +84,15 @@ def get_gripper_base_transformation(joint_angles):
 
 
 def get_rigid_transform_error(joined_input_array, cam_3d_coords):
-    # todo make less global
-    tvec_opt = joined_input_array[:3].copy()  # todo do I need to copy these?
+    # TODO make less global
+    tvec_opt = joined_input_array[:3].copy()  # TODO do I need to copy these?
     rvec_opt = joined_input_array[3:].copy()
 
-    # R_ct = np.matrix(cv2.Rodrigues(rvec_opt)[0])  # todo confirm that rvec makes sense
-    # # todo all geometric vision, slam, pose estimation is about consistency with yourself... fundamental.
-    # # todo Can we turn everything into optimisation? study it more
+    # R_ct = np.matrix(cv2.Rodrigues(rvec_opt)[0])  # TODO confirm that rvec makes sense
+    # # TODO all geometric vision, slam, pose estimation is about consistency with yourself... fundamental.
+    # # TODO Can we turn everything into optimisation? study it more
     #
-    # # todo replace this with homogenous transform function given tvec and rvec?
+    # # TODO replace this with homogenous transform function given tvec and rvec?
     # arm2cam_opt = np.identity(4)
     # arm2cam_opt[:3, :3] = R_ct
     # arm2cam_opt[0, 3] = tvec_opt[0]
@@ -125,18 +128,18 @@ def get_rigid_transform_error(joined_input_array, cam_3d_coords):
 
     error = error / cam_3d_coords.shape[0]
 
-    # todo could do above with nice big distance function across all array dimensions. Did this in interactive_click_fabrik.py for side view
+    # TODO could do above with nice big distance function across all array dimensions. Did this in interactive_click_fabrik.py for side view
     # print('tvec: {}. rvec: {}. Error: {:.5f}'.format(tvec_opt, rvec_opt, error))
     return error
 
 
-def optimise_transformation_to_origin(cam_3d_coords, init_tvec, init_rvec):  # todo first param isn't used....
-    # todo remove first param
-    # todo fix params and globals and make cleaner
-    # todo add more "world points". With 3 markers we would have 3x5=15 points and should help optimisation find correct transform from a distance
-    # todo instead of rvec axis-angle optimise quaternions or dual quaternions or something continuous
+def optimise_transformation_to_origin(cam_3d_coords, init_tvec, init_rvec):  # TODO first param isn't used....
+    # TODO remove first param
+    # TODO fix params and globals and make cleaner
+    # TODO add more "world points". With 3 markers we would have 3x5=15 points and should help optimisation find correct transform from a distance
+    # TODO instead of rvec axis-angle optimise quaternions or dual quaternions or something continuous
 
-    # todo remove most of below
+    # TODO remove most of below
     # the output of np.dot(cam2arm_opt, cam_coord) should be 0, 0, 0
     # cam2arm_opt is made from init_tvec and init_rvec which are optimised
 
@@ -151,7 +154,7 @@ def optimise_transformation_to_origin(cam_3d_coords, init_tvec, init_rvec):  # t
 
     init_tvec = init_tvec.copy()
     init_rvec = init_rvec.copy()
-    # global init_rvec  # todo just for now
+    # global init_rvec  # TODO just for now
 
     print('Starting optimisation with init_tvec: {}. init_rvec: {}'.format(init_tvec, init_rvec))
 
@@ -159,9 +162,9 @@ def optimise_transformation_to_origin(cam_3d_coords, init_tvec, init_rvec):  # t
 
     # def zero_con(t):
     #     return t[0]
-    # cons = [{'type': 'eq', 'fun': zero_con}]  # todo how do I specify the output of arm_coord z-axis to be 0 with constraints?
+    # cons = [{'type': 'eq', 'fun': zero_con}]  # TODO how do I specify the output of arm_coord z-axis to be 0 with constraints?
 
-    # optim_result = optimize.minimize(get_rigid_transform_error, args=(init_tvec, init_rvec),  # todo use args?
+    # optim_result = optimize.minimize(get_rigid_transform_error, args=(init_tvec, init_rvec),  # TODO use args?
     # optim_result = optimize.minimize(get_rigid_transform_error, joined_input_array,
     optim_result = optimize.minimize(get_rigid_transform_error, joined_input_array, args=(cam_3d_coords, ),
                                      options={'max_iter': 500, 'disp': True},
@@ -170,10 +173,10 @@ def optimise_transformation_to_origin(cam_3d_coords, init_tvec, init_rvec):  # t
                                      # method='Newton-CG')
                                      # method='L-BFGS-B')
                                      # method='SLSQP')  #constraints=cons
-    # todo try other optimisers? Least squares? Should learn about all of them anyway!
+    # TODO try other optimisers? Least squares? Should learn about all of them anyway!
     # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.minimize.html
-    # todo will more points help or make it harder??!?!
-    # todo could do constrained optimsation of forcing z to 0!!!!!!
+    # TODO will more points help or make it harder??!?!
+    # TODO could do constrained optimsation of forcing z to 0!!!!!!
 
     tvec_opt = optim_result.x[:3]
     rvec_opt = optim_result.x[3:]
@@ -247,7 +250,7 @@ def click_callback(event, x, y, flags, param):
             print('no saved_cam2arm')
 
     # if event == cv2.EVENT_MBUTTONUP:
-    #     # cv2.circle(camera_color_img, (x, y), 100, (255, 255, 0), -1)  # todo if I ever want this
+    #     # cv2.circle(camera_color_img, (x, y), 100, (255, 255, 0), -1)  # TODO if I ever want this
     #     mouseX, mouseY = x, y
 
     #     curr_arm_xyz = convert_pixel_to_arm_coordinate(camera_depth_img, mouseX, mouseY, cam2arm, verbose=True)
@@ -444,14 +447,14 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
                 # print('Not doing solvePnP')
                 tvec, rvec = None, None
             
-            # todo ahhhhhhh more markers doesn't help the above. It'd be better for me to collect the marker positions of 4-10 markers and run into solvepnp
-            # todo as this says: https://stackoverflow.com/questions/51709522/unstable-values-in-aruco-pose-estimation
-            # todo https://github.com/opencv/opencv_contrib/blob/master/modules/aruco/src/aruco.cpp
+            # TODO ahhhhhhh more markers doesn't help the above. It'd be better for me to collect the marker positions of 4-10 markers and run into solvepnp
+            # TODO as this says: https://stackoverflow.com/questions/51709522/unstable-values-in-aruco-pose-estimation
+            # TODO https://github.com/opencv/opencv_contrib/blob/master/modules/aruco/src/aruco.cpp
             # https://stackoverflow.com/questions/51709522/unstable-values-in-aruco-pose-estimation
-            # todo could use cube!!!
+            # TODO could use cube!!!
             # https://pypi.org/project/apriltag/
 
-            # todo read this: https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
+            # TODO read this: https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
             """ 
             As mentioned earlier, an approximate estimate of the pose ( \mathbf{R} and \mathbf{t} ) can be found using the DLT solution. 
             A naive way to improve the DLT solution would be to randomly change the pose ( \mathbf{R} and \mathbf{t} ) slightly and 
@@ -463,13 +466,13 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
             One such method is called Levenberg-Marquardt optimization. Check out more details on Wikipedia.
             """
 
-            # todo smart way to weigh the aruco markers by their distance and fuse all the pose estimations.
+            # TODO smart way to weigh the aruco markers by their distance and fuse all the pose estimations.
 
             # if estimate_pose:  # further refine pose of specific marker by
-            #     # todo does the above get better with more markers or not?!?!?!?! it doesn't because it's individual markers
+            #     # TODO does the above get better with more markers or not?!?!?!?! it doesn't because it's individual markers
 
             #     found_correct_marker = False
-            #     # todo use initial guess as last all_rvec? This might help it be less jumpy?
+            #     # TODO use initial guess as last all_rvec? This might help it be less jumpy?
 
             #     if ids is not None: # and (use_aruco and id_on_shoulder_motor in ids):
             #         if not use_aruco:
@@ -485,7 +488,7 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
             #         if use_aruco:
             #             # retval, board_rvec, board_tvec = cv2.aruco.estimatePoseBoard(corners, ids, board, camera_matrix, dist_coeffs, all_rvec, all_tvec)
             #             # retval, board_rvec, board_tvec = cv2.aruco.estimatePoseBoard(corners, ids, board, camera_matrix, dist_coeffs, None, None, useExtrinsicGuess=False)
-            #             # img = cv2.aruco.drawPlanarBoard(board, (300, 300))  # board, outSize[, img[, marginSize[, borderBits]]]  # todo doesn't work, not showing things correctly?
+            #             # img = cv2.aruco.drawPlanarBoard(board, (300, 300))  # board, outSize[, img[, marginSize[, borderBits]]]  # TODO doesn't work, not showing things correctly?
             #             pass
             #         else:
             #             # if board_rvec is not None:
@@ -494,7 +497,7 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
             #             retval, board_rvec, board_tvec = cv2.aruco.estimatePoseCharucoBoard(charuco_corners, charuco_ids, board, camera_matrix, dist_coeffs, all_rvec[0], all_tvec[0], useExtrinsicGuess=False)
             #             # retval, board_rvec, board_tvec = cv2.aruco.estimatePoseCharucoBoard(charuco_corners, charuco_ids, board, camera_matrix, dist_coeffs)
 
-            #         if not use_aruco:  # todo only charuco here
+            #         if not use_aruco:  # TODO only charuco here
             #             try:
             #                 aruco.drawAxis(color_img, camera_matrix, dist_coeffs, board_rvec, board_tvec,
             #                                0.05)  # last param is axis length
@@ -510,16 +513,16 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
             #         if use_aruco:
             #             if id_on_shoulder_motor in ids:
             #                 shoulder_motor_marker_id = [l[0] for l in ids.tolist()].index(id_on_shoulder_motor)
-            #                 # todo calculate tvec distance between all adjacent marker middles. Should be 0.0033!!!!!!!!!!!!!!! optimise something to make it so?
-            #                 # todo and maybe intrinsics too?
+            #                 # TODO calculate tvec distance between all adjacent marker middles. Should be 0.0033!!!!!!!!!!!!!!! optimise something to make it so?
+            #                 # TODO and maybe intrinsics too?
 
             #                 rvec, tvec = all_rvec[shoulder_motor_marker_id, 0, :], all_tvec[shoulder_motor_marker_id, 0, :]  # get first marker
             #                 found_correct_marker = True
             #         else:
             #             rvec, tvec = board_rvec.squeeze(), board_tvec.squeeze()
 
-            #         # todo if no markers it crashes still
-            #         if 'tvec' in locals():  # todo how to avoid this?
+            #         # TODO if no markers it crashes still
+            #         if 'tvec' in locals():  # TODO how to avoid this?
             #             cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
 
             #             # -- Get the attitude in terms of euler 321 (Needs to be flipped first)
@@ -540,10 +543,10 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
             #                     # marker_xyz_middle = convert_pixel_to_arm_coordinate(camera_depth_img, middle_pixel[0], middle_pixel[1], cam2arm, verbose=True)
             #                     marker_xyz_middle = convert_pixel_to_arm_coordinate(camera_depth_img, middle_pixel[0], middle_pixel[1], cam2arm)
 
-            #                     # todo optimise all 4 corners and then if that still doesn't work all 4x12 corners and then charuco or whatever
-            #                     # todo see how much aruco and charuco board error are
-            #                     # todo swap to charuco and the charuco id 0 should be the corner!!!!!!!!!!!!!!!!!!!!!!!!!!
-            #                     # todo is rounding bad since everyone talks about sub-pixel accuracy? how else would i index?
+            #                     # TODO optimise all 4 corners and then if that still doesn't work all 4x12 corners and then charuco or whatever
+            #                     # TODO see how much aruco and charuco board error are
+            #                     # TODO swap to charuco and the charuco id 0 should be the corner!!!!!!!!!!!!!!!!!!!!!!!!!!
+            #                     # TODO is rounding bad since everyone talks about sub-pixel accuracy? how else would i index?
 
             #                     # 4 corners
             #                     top_left_pixel = (int(round(c[0, 0])), int(round(c[0, 1])))
@@ -576,19 +579,19 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
             #                         except Exception as e:
             #                             print(e)
             #                             print('0 z-depth value at camera coordinate. continuing loop')
-            #                             continue  # todo not a loop anymore. But returning will break everything
+            #                             continue  # TODO not a loop anymore. But returning will break everything
             #                             # return
-            #                         # todo AttributeError: 'NoneType' object has no attribute 'reshape'
-            #                         # todo probably because there is no depth at that part of the image. But it wasn't a problem before?
+            #                         # TODO AttributeError: 'NoneType' object has no attribute 'reshape'
+            #                         # TODO probably because there is no depth at that part of the image. But it wasn't a problem before?
 
-            #                     # todo should see how much my rigid body transform error changes with the same cam2arm!!!!
+            #                     # TODO should see how much my rigid body transform error changes with the same cam2arm!!!!
             #                     cam_coords = np.concatenate(cam_coords)
 
             #                     rigid_body_error_local = get_rigid_transform_error(joined_input_array, cam_coords)
             #                     print('Rigid body transform error: {}'.format(rigid_body_error))
 
 
-            #             else:  # todo fix all below so charuco works as well
+            #             else:  # TODO fix all below so charuco works as well
             #                 corner_3d_positions = []
             #                 all_dist_2ds = []
             #                 all_dist_3ds = []
@@ -606,13 +609,13 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
             #                             # cv2.imshow("image", color_img)
             #                             # cv2.waitKey(1)
 
-            #                             # todo how to enforce z is 0? for everything...
+            #                             # TODO how to enforce z is 0? for everything...
             #                             if len(corner_3d_positions) > 0:
             #                                 allowable_y_difference = 0.0008
             #                                 allowable_y_difference = 0.0012
-            #                                 # todo TypeError: 'NoneType' object is not subscriptable happens if I cover board. Why?
+            #                                 # TODO TypeError: 'NoneType' object is not subscriptable happens if I cover board. Why?
             #                                 if abs(corner_3d_positions[-1][1] - corner_xyz_arm_coord[1]) > (charuco_square_length - allowable_y_difference):
-            #                                     # print('Jumped row!!!')  # todo not detecting all. Now it is since i changed to 0.0012?
+            #                                     # print('Jumped row!!!')  # TODO not detecting all. Now it is since i changed to 0.0012?
             #                                     jumped_row = True
             #                                 else:
             #                                     jumped_row = False
@@ -620,14 +623,14 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
             #                                 dist_3d_to_last_point = dist(corner_xyz_arm_coord, corner_3d_positions[-1])
             #                                 dist_2d = dist(corner_xyz_arm_coord[:2], corner_3d_positions[-1][:2])
             #                                 # print('Dist 3D {:.4f}. Dist 2D {:.4f}. Absolute error 3D: {:.4f}. Absolute error 2D: {:.4f}'.format(dist_3d_to_last_point, dist_2d, abs(dist_3d_to_last_point - distance_between_adjacent_corners), abs(dist_2d - distance_between_adjacent_corners)))
-            #                                 # todo this happened once: TypeError: unsupported operand type(s) for -: 'NoneType' and 'float'
+            #                                 # TODO this happened once: TypeError: unsupported operand type(s) for -: 'NoneType' and 'float'
             #                                 # if dist_2d < 0.05:  # to avoid adding cases when we swap row
             #                                 if not jumped_row:  # to avoid adding cases when we swap row
             #                                     all_dist_2ds.append(dist_2d)
             #                                     all_dist_3ds.append(dist_3d_to_last_point)
             #                                     if corner_3d_positions[-1][0] > corner_xyz_arm_coord[0]:
             #                                         pass
-            #                                         # print('X to the right is smaller than the left!!!')  # todo is it really that bad to happen 1-10% of the time?
+            #                                         # print('X to the right is smaller than the left!!!')  # TODO is it really that bad to happen 1-10% of the time?
 
             #                             corner_3d_positions.append(corner_xyz_arm_coord)
 
@@ -667,7 +670,7 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
 
                 # -- Get the attitude of the camera respect to the frame
                 # roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(R_flip * R_tc)
-                roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(R_flip * R_ct)  # todo no flip needed?
+                roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(R_flip * R_ct)  # TODO no flip needed?
                 str_attitude = "CAMERA Attitude r={:.5f}  p={:.5f}  y={:.5f}".format(
                     math.degrees(roll_camera), math.degrees(pitch_camera),
                     math.degrees(yaw_camera))
@@ -677,7 +680,7 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
                 #     return -1, color_img, depth_img, None, None, None, None
 
                 # return rigid_body_error_local, color_img, depth_img, pixel_positions_to_optimise, tvec, rvec, cam_coords
-                # todo what to return? and to not make it ugly?
+                # TODO what to return? and to not make it ugly?
                 # return tvec, rvec
         else:
             tvec, rvec = None, None
@@ -686,19 +689,18 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
 
 
 if __name__ == '__main__':
-    np.set_printoptions(precision=6, suppress=True)
-    prev_arm_xyz = np.array([0., 0., 0.])
 
+    # Text parameters
+    np.set_printoptions(precision=6, suppress=True)
     #--- 180 deg rotation matrix around the x axis
     R_flip       = np.zeros((3, 3), dtype=np.float32)
     R_flip[0, 0] =  1.0
     R_flip[1, 1] = -1.0
     R_flip[2, 2] = -1.0
-
     #-- Font for the text in the image
     font = cv2.FONT_HERSHEY_PLAIN
-    # todo seems very different to depth.intrinsics. Use depth intrinsics.....
 
+    prev_arm_xyz = np.array([0., 0., 0.])
     cam2arm = np.identity(4)
     saved_cam2arm = None
     curr_arm_xyz = None
@@ -711,23 +713,7 @@ if __name__ == '__main__':
     saved_rvec = None
     saved_tvec = None
 
-    pipeline = rs.pipeline()
-    config = rs.config()
-    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-
-    profile = pipeline.start(config)
-    spatial = rs.spatial_filter()
-    spatial.set_option(rs.option.holes_fill, 3)
-
-    depth_sensor = profile.get_device().first_depth_sensor()
-    depth_scale = depth_sensor.get_depth_scale()
-
-    frames = pipeline.wait_for_frames()
-    depth_frame = frames.get_depth_frame()
-    color_frame = frames.get_color_frame()
-    depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
-    color_intrin = color_frame.profile.as_video_stream_profile().intrinsics
+    depth_intrin, color_intrin, depth_scale, pipeline, align, spatial = setup_start_realsense()
 
     coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
         size=25.0, origin=[0.0, 0.0, 0.0])
@@ -736,11 +722,19 @@ if __name__ == '__main__':
     # gripper_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
     #     size=25.0, origin=[0.0, 0.0, 0.0])
 
+    # TODO seems very different to depth.intrinsics. Use depth intrinsics.....
     # TODO .translate is easy for FK, what I've been doing, then the only other angles that matter is wrist pitch, wrist roll and base? pitch, roll and yaw I suppose
     # TODO so I need to find the 4x4 matrix which will make .transform of coordinate frame onto gripper. And it's gripper to base or base 2 gripper?
     # TODO once I have 4x4, I actually only need 3x1 or 3x3 rvec and 3x1 tvec
     # TODO tvec and rvec come straight from aruco
     # TODO why do we get cam2gripper and not cam2base though? But it's the gripper expressed in base coordinates soooooo base?
+    # TODO When estimate_pose = False I could still visualise the marker finding but only optimise and save after key a is pressed
+    # TODO FileNotFoundError: [Errno 2] No such file or directory: 'data/best_aruco_cam2arm.txt'
+    # TODO how to ensure everything is run from root directory.... Absolute paths.
+    # TODO how to ensure marker/found frame is flat? the world is flattened I mean. Wrong assumption because it isn;t?
+    # TODO could find relative pose transformations between multiple markers and then use them to create absolute ground truth instead of using a ruler
+    # TODO most important: make it work from 70cm away. This is perfect. Do I need 2 extra markers?
+    # TODO for this I might need to try different optimisers or parameters. Also need to understand PnP better
 
     '''
     cv.calibrateHandEye(R_gripper2base, t_gripper2base, R_target2cam, t_target2cam[, R_cam2gripper[, t_cam2gripper[, method]]]	) ->	R_cam2gripper, t_cam2gripper
@@ -754,40 +748,8 @@ if __name__ == '__main__':
     # estimate_pose = True
     estimate_pose = False
 
-    # todo When estimate_pose = False I could still visualise the marker finding but only optimise and save after key a is pressed
-
-    # todo FileNotFoundError: [Errno 2] No such file or directory: 'data/best_aruco_cam2arm.txt'
-    # todo how to ensure everything is run from root directory.... Absolute paths.
-
-    # todo how to ensure marker/found frame is flat? the world is flattened I mean. Wrong assumption because it isn;t?
-    # todo could find relative pose transformations between multiple markers and then use them to create absolute ground truth instead of using a ruler
-
-    # todo most important: make it work from 70cm away. This is perfect. Do I need 2 extra markers?
-    # todo for this I might need to try different optimisers or parameters. Also need to understand PnP better
-
     if use_aruco:
-        # marker_length = 0.0265
-        # marker_length = 0.028
-        marker_length = 0.0275
-        # marker_length = 0.0935  # big marker
-        aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
-        parameters = aruco.DetectorParameters_create()
-        parameters.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
-        # parameters.adaptiveThreshWinSizeMin = 3
-        # parameters.adaptiveThreshWinSizeStep = 4  # todo test more and see if it makes worse/better
-        board = cv2.aruco.GridBoard_create(3, 4, marker_length, 0.06, aruco_dict)  # marker_separation 0.06
-
-        # fig = plt.figure()
-        # nx = 4
-        # ny = 3
-        # for i in range(1, nx * ny + 1):
-        #     ax = fig.add_subplot(ny, nx, i)
-        #     img = aruco.drawMarker(aruco_dict, i, 700)
-        #     plt.imshow(img, cmap=mpl.cm.gray, interpolation="nearest")
-        #     ax.axis("off")
-
-        # plt.savefig("markers.pdf")
-        # plt.show()
+        board, parameters, aruco_dict, marker_length = create_aruco_params()
     else:
         # Charuco
         parameters = aruco.DetectorParameters_create()
@@ -796,34 +758,18 @@ if __name__ == '__main__':
         # charuco_marker_length = 0.019
         charuco_marker_length = 0.0145
         charuco_square_length = 0.028
-        # todo maybe i can tune these more
-        # todo find out how to do long distance pose estimation!!!
+        # TODO maybe i can tune these more
+        # TODO find out how to do long distance pose estimation!!!
 
-        # todo aruco con More susceptible to rotational ambiguity at medium to long ranges
+        # TODO aruco con More susceptible to rotational ambiguity at medium to long ranges
         # https://stackoverflow.com/questions/52222327/improve-accuracy-of-pose-with-bigger-aruco-markers
         # https://stackoverflow.com/questions/51709522/unstable-values-in-aruco-pose-estimation
-        # todo try apriltag_ros
+        # TODO try apriltag_ros
 
         # board = cv2.aruco.CharucoBoard_create(7, 7, .025, .0125, aruco_dict)
         # board = cv2.aruco.CharucoBoard_create(7, 7, .025, .0125, dictionary)
         # img = board.draw((200 * 3, 200 * 3))
-        board = cv2.aruco.CharucoBoard_create(7, 7, charuco_square_length, charuco_marker_length, aruco_dict)  # todo test new values
-
-    # old calibration
-    camera_matrix = np.array([[612.14801862, 0., 340.03640321],
-                              [0., 611.29345062, 230.06928807],
-                              [0., 0., 1.]])
-    dist_coeffs = np.array(
-        [1.80764862e-02, 1.09549436e+00, -3.38044260e-03, 4.04543459e-03, -4.26585263e+00])
-
-    # directly from depth/color intrinsics from factory
-    # camera_matrix = np.array([[depth_intrin.fx, 0., depth_intrin.ppx],
-    #                           [0., depth_intrin.fy, depth_intrin.ppy],
-    #                           [0., 0., 1.]])
-
-    # camera_matrix = np.array([[color_intrin.fx, 0., color_intrin.ppx],
-    #                           [0., color_intrin.fy, color_intrin.ppy],
-    #                           [0., 0., 1.]])
+        board = cv2.aruco.CharucoBoard_create(7, 7, charuco_square_length, charuco_marker_length, aruco_dict)  # TODO test new values
 
     mouseX, mouseY = 0, 0
     cv2.namedWindow('image')
@@ -839,18 +785,9 @@ if __name__ == '__main__':
 
     id_on_shoulder_motor = 1
 
-    depth_sensor = profile.get_device().first_depth_sensor()
-
-    # Using preset HighAccuracy for recording
-    # depth_sensor.set_option(rs.option.visual_preset, Preset.HighAccuracy)
-
-    # Getting the depth sensor's depth scale (see rs-align example for explanation)
-    depth_scale = depth_sensor.get_depth_scale()
-
-    align = rs.align(rs.stream.color)
     board_rvec = None
 
-    # if estimate_pose:  # todo think about this
+    # if estimate_pose:  # TODO think about this
     # command = '/home/beduffy/anaconda/envs/py36/bin/python control/scripts/send_arm_to_home_position.py'
     # print('Running command: {}'.format(command))
     # os.system(command)
@@ -859,31 +796,17 @@ if __name__ == '__main__':
     lowest_error = 1000000
     lowest_optimised_error = 1000000
 
-    # wait for auto-exposure
-    print('Running 10 frames to wait for auto-exposure')
-    for i in range(10):
-        frames = pipeline.wait_for_frames()
-        aligned_frames = align.process(frames)
-        depth_frame = aligned_frames.get_depth_frame()
-        color_frame = aligned_frames.get_color_frame()
+    run_10_frames_to_wait_for_auto_exposure(pipeline, align)
 
     print('Starting loop')
     while True:
         try:
-            frames = pipeline.wait_for_frames()
-            aligned_frames = align.process(frames)
-            depth_frame = aligned_frames.get_depth_frame()
-            color_frame = aligned_frames.get_color_frame()
-
-            depth_frame = spatial.process(depth_frame)  # hole filling
-
-            depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
-            color_intrin = color_frame.profile.as_video_stream_profile().intrinsics
+            color_frame, depth_frame = realsense_get_frames(pipeline, align, spatial)
 
             camera_depth_img = np.asanyarray(depth_frame.get_data())
             camera_color_img = np.asanyarray(color_frame.get_data())
             depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(camera_depth_img, alpha=0.03),
-                                               cv2.COLORMAP_JET)  # todo why does it look so bad, add more contrast?
+                                               cv2.COLORMAP_JET)  # TODO why does it look so bad, add more contrast?
 
             # print(camera_depth_img.shape, camera_color_img.shape)
 
@@ -895,27 +818,27 @@ if __name__ == '__main__':
 
             # TODO would optimising the transform with depth info solve most of my problems?
             # if pixel_positions_to_optimise:
-            #     # middle_pixel = pixel_positions_to_optimise[0]  # todo first is a numpy array, the rest are lists....
+            #     # middle_pixel = pixel_positions_to_optimise[0]  # TODO first is a numpy array, the rest are lists....
             #     (middle_pixel, top_left_pixel, top_right_pixel,
             #      bottom_right_pixel, bottom_left_pixel) = pixel_positions_to_optimise
 
             #     hit_lowest_error = False
-            #     if rigid_body_error < lowest_error:  # todo if optimise_origin works calculate lowest_error after or create 3rd cam2arm?
+            #     if rigid_body_error < lowest_error:  # TODO if optimise_origin works calculate lowest_error after or create 3rd cam2arm?
             #         lowest_error = rigid_body_error
             #         print('Saving best aruco cam2arm: \n{}'.format(cam2arm))
             #         print('Best error so far: {}'.format(rigid_body_error))
             #         np.savetxt('data/best_aruco_cam2arm.txt', cam2arm, delimiter=' ')
             #         hit_lowest_error = True
 
-            #     # if optimise_origin: # todo do this better
+            #     # if optimise_origin: # TODO do this better
             #     if hit_lowest_error:
-            #         # todo making the assumption that the lowest error above will get the lowest possible error here!!!
-            #         # todo why much better error when some markers are hidden? I'm closer? I don't think other markers help? prove it
+            #         # TODO making the assumption that the lowest error above will get the lowest possible error here!!!
+            #         # TODO why much better error when some markers are hidden? I'm closer? I don't think other markers help? prove it
 
-            #         # todo do many tests!!!
-            #         # todo since arm is in home position, we could plot in open3D right here!!!!!!!!
-            #         # todo show pointcloud view with open3d (blocking vs non-blocking) to test how good all the frames are!!!!!!!!!!!!!!!!!!!!!!!
-            #         # todo could do it on q key!! or every time here. Would help me visualise coordinate frame, pose and error
+            #         # TODO do many tests!!!
+            #         # TODO since arm is in home position, we could plot in open3D right here!!!!!!!!
+            #         # TODO show pointcloud view with open3d (blocking vs non-blocking) to test how good all the frames are!!!!!!!!!!!!!!!!!!!!!!!
+            #         # TODO could do it on q key!! or every time here. Would help me visualise coordinate frame, pose and error
 
 
             #         # TODO COULD OPTIMISE ALL MARKER CORNERS for all markers ??!?!? but we don't know exactly where they are but we could find the plane and use vectors hmmmm
@@ -974,14 +897,14 @@ if __name__ == '__main__':
             # # print()
             # check_corner_frame_count += 1
             #
-            # # todo marker z's seem a bit wrong? Maybe it's the depth scale by 1-10cm off
+            # # TODO marker z's seem a bit wrong? Maybe it's the depth scale by 1-10cm off
             # # will only work if we are facing it directly? Or not, because the transformation should be correct
             # # assert marker_xyz_top_left[0] < marker_xyz_top_right[0] and \
             # #        marker_xyz_top_left[0]cv2. < marker_xyz_bottom_right[0] and \
             # #        marker_xyz_top_left[1] > marker_xyz_bottom_left[1] and \
             # #        marker_xyz_top_left[1] > marker_xyz_bottom_right[1]
             #
-            # # todo not doing the below anymore but would be good to check?
+            # # TODO not doing the below anymore but would be good to check?
             # if marker_xyz_top_left is not None and marker_xyz_top_right is not None and marker_xyz_bottom_right is not None \
             #         and marker_xyz_bottom_left is not None and not (
             #         marker_xyz_top_left[0] < marker_xyz_top_right[0] and
@@ -1004,10 +927,10 @@ if __name__ == '__main__':
             #     # print('marker_top_left_y_bigger_than_bottom_left:', marker_top_left_y_bigger_than_bottom_left)
             #     # print('marker_top_left_y_bigger_than_bottom_right:', marker_top_left_y_bigger_than_bottom_right)
             #     # print('frame_count: {}'.format(frame_count))
-            #     # todo one time they all followed each other exactly 3 numbers were the same out of 4. the 4th was 0
-            #     # todo what to do about z flip????? Does it affect x and y? Probably not or....
+            #     # TODO one time they all followed each other exactly 3 numbers were the same out of 4. the 4th was 0
+            #     # TODO what to do about z flip????? Does it affect x and y? Probably not or....
             #
-            # # todo could create my own drawAxis to test the depth and once that works everything will work right?
+            # # TODO could create my own drawAxis to test the depth and once that works everything will work right?
             #
             # cv2.circle(color_img, top_left_pixel, 4, color=(255, 0, 0))
             # cv2.circle(color_img, top_right_pixel, 4, color=(0, 255, 0))
