@@ -25,6 +25,7 @@ if open3d_import_success:
     pinhole_camera_intrinsic = o3d.camera.PinholeCameraIntrinsic(
             int(width), int(height), fx, fy, ppx, ppy)
     
+# TODO measure reprojection error of this. And compare why the above is so different?
 # old intrinsic calibration done by me
 camera_matrix = np.array([[612.14801862, 0., 340.03640321],
                             [0., 611.29345062, 230.06928807],
@@ -32,3 +33,11 @@ camera_matrix = np.array([[612.14801862, 0., 340.03640321],
 dist_coeffs = np.array(
     [1.80764862e-02, 1.09549436e+00, -3.38044260e-03, 4.04543459e-03, -4.26585263e+00])
 
+# directly from depth/color intrinsics from factory
+# camera_matrix = np.array([[depth_intrin.fx, 0., depth_intrin.ppx],
+#                           [0., depth_intrin.fy, depth_intrin.ppy],
+#                           [0., 0., 1.]])
+
+# camera_matrix = np.array([[color_intrin.fx, 0., color_intrin.ppx],
+#                           [0., color_intrin.fy, color_intrin.ppy],
+#                           [0., 0., 1.]])
