@@ -2,6 +2,7 @@ from __future__ import print_function
 import sys
 import traceback
 from glob import glob
+import math
 
 try:
     import open3d as o3d
@@ -17,6 +18,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
 import matplotlib as mpl
 from scipy import optimize
+from collections import deque
 
 from lib.vision import isclose, dist, isRotationMatrix, rotationMatrixToEulerAngles, create_homogenous_transformations
 from lib.vision import get_full_pcd_from_rgbd, convert_cam_pcd_to_arm_pcd
@@ -24,6 +26,7 @@ from lib.vision_config import camera_matrix, dist_coeffs, pinhole_camera_intrins
 from lib.realsense_helper import setup_start_realsense, realsense_get_frames, run_10_frames_to_wait_for_auto_exposure
 from lib.aruco_helper import create_aruco_params, aruco_detect_draw_get_transforms
 from lib.dorna_kinematics import i_k, f_k
+from lib.aruco_image_text import OpenCvArucoImageText
 
 # export PYTHONPATH=$PYTHONPATH:/home/ben/all_projects/dorna_control
 
@@ -33,12 +36,15 @@ if __name__ == '__main__':
 
     board, parameters, aruco_dict, marker_length = create_aruco_params()
 
+    opencv_aruco_image_text = OpenCvArucoImageText()
+
     size = 0.1
     coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
         size=size, origin=[0.0, 0.0, 0.0])
 
     cam2arm = np.identity(4)
     saved_cam2arm = cam2arm
+    marker_pose_history = deque([], maxlen=100)  # TODO is this less noisy and accurate? And should be used?
 
     run_10_frames_to_wait_for_auto_exposure(pipeline, align)
 
@@ -56,20 +62,40 @@ if __name__ == '__main__':
             bgr_color_data = cv2.cvtColor(camera_color_img, cv2.COLOR_RGB2BGR)
             gray_data = cv2.cvtColor(bgr_color_data, cv2.COLOR_RGB2GRAY)
 
-            corners, ids, all_rvec, all_tvec = aruco_detect_draw_get_transforms(gray_data, camera_color_img, aruco_dict, parameters, marker_length, camera_matrix, dist_coeffs)
+            camera_color_img_debug = camera_color_img.copy()  # modified
+
+            corners, ids, all_rvec, all_tvec = aruco_detect_draw_get_transforms(gray_data, camera_color_img_debug, aruco_dict, parameters, marker_length, camera_matrix, dist_coeffs)
 
             if ids is not None:
                 print(ids)
                 ids_list = [l[0] for l in ids.tolist()]
                 for list_idx, corner_id in enumerate(ids_list):
                     rvec_aruco, tvec_aruco = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
-                    cv2.drawFrameAxes(camera_color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
+                    cv2.drawFrameAxes(camera_color_img_debug, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
 
                 tvec, rvec = tvec_aruco, rvec_aruco  # for easier assignment if multiple markers later.
                 cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
+
+                # -- Get the attitude in terms of euler 321 (Needs to be flipped first)
+                roll_marker, pitch_marker, yaw_marker = rotationMatrixToEulerAngles(opencv_aruco_image_text.R_flip * R_tc)
+                # -- Get the attitude of the camera respect to the frame
+                roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(opencv_aruco_image_text.R_flip * R_ct)  # todo no flip needed?
+
+                marker_pose_history.append((tvec[0], tvec[1], tvec[2], 
+                                            math.degrees(roll_marker), math.degrees(pitch_marker), math.degrees(yaw_marker)))
+
+                avg_6dof_pose = []
+                for idx in range(6):
+                    marker_pose_history_idx_val = np.mean([v[idx] for v in marker_pose_history]).item()
+                    avg_6dof_pose.append(marker_pose_history_idx_val)
+
+                opencv_aruco_image_text.put_marker_text(camera_color_img_debug, tvec, roll_marker, pitch_marker, yaw_marker)
+                opencv_aruco_image_text.put_camera_text(camera_color_img_debug, pos_camera, roll_camera, pitch_camera, yaw_camera)
+                opencv_aruco_image_text.put_avg_marker_text(camera_color_img_debug, avg_6dof_pose)
+
                 saved_cam2arm = cam2arm
             
-            images = np.hstack((camera_color_img, depth_colormap))
+            images = np.hstack((camera_color_img_debug, depth_colormap))
             # images = np.hstack((camera_color_img, depth_colormap))
             # images = camera_color_img
             camera_color_img = cv2.cvtColor(camera_color_img, cv2.COLOR_BGR2RGB)  # for open3D
