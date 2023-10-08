@@ -29,10 +29,12 @@ from lib.vision import isclose, dist, isRotationMatrix, rotationMatrixToEulerAng
 from lib.vision_config import pinhole_camera_intrinsic
 from lib.vision_config import camera_matrix, dist_coeffs
 from lib.realsense_helper import setup_start_realsense, realsense_get_frames, run_10_frames_to_wait_for_auto_exposure
-from lib.aruco_helper import create_aruco_params, aruco_detect_draw_get_transforms
+from lib.aruco_helper import create_aruco_params, create_charuco_params, aruco_detect_draw_get_transforms
 from lib.handeye_opencv_wrapper import handeye_calibrate_opencv, load_all_handeye_data, plot_all_handeye_data
 from lib.dorna_kinematics import i_k, f_k
-#plot_open3d_Dorna
+# from lib.open3d_plot_dorna import plot_open3d_Dorna  # TODO why broken?
+from lib.aruco_image_text import OpenCvArucoImageText
+
 
 
 
@@ -283,11 +285,11 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
             retval, board_rvec, board_tvec = cv2.aruco.estimatePoseCharucoBoard(charuco_corners, charuco_ids, board, camera_matrix, dist_coeffs, all_rvec[0], all_tvec[0], useExtrinsicGuess=False)
             # retval, board_rvec, board_tvec = cv2.aruco.estimatePoseCharucoBoard(charuco_corners, charuco_ids, board, camera_matrix, dist_coeffs)
 
-            try:
-                aruco.drawAxis(color_img, camera_matrix, dist_coeffs, board_rvec, board_tvec, 0.05)  # last param is axis length
-            except Exception as e:
-                print(e)
-                tvec, rvec = None, None
+            # try:
+            #     aruco.drawAxis(color_img, camera_matrix, dist_coeffs, board_rvec, board_tvec, 0.05)  # last param is axis length
+            # except Exception as e:
+            #     print(e)
+            #     tvec, rvec = None, None
             tvec, rvec = board_tvec.squeeze(), board_rvec.squeeze()
 
 
@@ -308,12 +310,13 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
 
             if len(ids_list) >= 1:
                 corners_reordered = []
-                # for corder_id in [1, 2, 3, 4]:
-                for corder_id in [4]:
-                    corder_index = ids_list.index(corder_id) 
-                    corners_reordered.append(corners[corder_index])
-                    rvec_aruco, tvec_aruco = all_rvec[corder_index, 0, :], all_tvec[corder_index, 0, :]
-                    aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
+                for corner_id in [1, 2, 3, 4]:
+                    # for corner_id in [4]:  # TODO make it not crash if other aruco etc!!!
+                    if corner_id in ids_list:
+                        corner_index = ids_list.index(corner_id) 
+                        corners_reordered.append(corners[corner_index])
+                        rvec_aruco, tvec_aruco = all_rvec[corner_index, 0, :], all_tvec[corner_index, 0, :]
+                        # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
 
             found_correct_marker = False
             # print(ids)
@@ -404,17 +407,17 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
 
                 if len(ids_list) > 1:
                     corners_reordered = []
-                    # for corder_id in [x[0] for x in ids.tolist()]:
-                    for corder_id in [1, 2, 3, 4]:
-                    # for corder_id in [x[0] - 1 for x in ids.tolist()]:
-                        corder_index = ids_list.index(corder_id) 
-                        # corners_reordered.append(corners[corder_id])
-                        corners_reordered.append(corners[corder_index])
-                        rvec_aruco, tvec_aruco = all_rvec[corder_index, 0, :], all_tvec[corder_index, 0, :]
-                        aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
+                    # for corner_id in [x[0] for x in ids.tolist()]:
+                    for corner_id in [1, 2, 3, 4]:
+                    # for corner_id in [x[0] - 1 for x in ids.tolist()]:
+                        corner_index = ids_list.index(corner_id) 
+                        # corners_reordered.append(corners[corner_id])
+                        corners_reordered.append(corners[corner_index])
+                        rvec_aruco, tvec_aruco = all_rvec[corner_index, 0, :], all_tvec[corner_index, 0, :]
+                        # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
                 else:
                     corners_reordered = corners
-                    aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec, tvec, marker_length)
+                    # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec, tvec, marker_length)
                 
                 # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
                 # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_IPPE)
@@ -644,41 +647,21 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
             if found_correct_marker:
                 # is this id1 or not. nope it isn't.
                 # tvec, rvec = all_tvec[0].squeeze(), all_rvec[0].squeeze()
-                start_y = 30
-                jump_amt = 30
-                text_size = 0.6
 
-                # TODO typo below???
+                # TODO typo below??? WILL IT BREAK THINGS and overwrite cam2arm or not?
+                # TODO the below repeats from basic_aruco_example.py
                 am2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
+                # cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
 
                 # -- Get the attitude in terms of euler 321 (Needs to be flipped first)
-                roll_marker, pitch_marker, yaw_marker = rotationMatrixToEulerAngles(R_flip * R_tc)
-
-                # -- Print the tag position in camera frame
-                str_position = "MARKER Position x={:.5f}  y={:.5f}  z={:.5f}".format(tvec[0], tvec[1], tvec[2])
-                cv2.putText(color_img, str_position, (0, start_y), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
-
-                # -- Print the marker's attitude respect to camera frame
-                str_attitude = "MARKER Attitude r={:.5f}  p={:.5f}  y={:.5f}".format(
-                    math.degrees(roll_marker), math.degrees(pitch_marker),
-                    math.degrees(yaw_marker))
-                cv2.putText(color_img, str_attitude, (0, start_y + jump_amt * 1), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
-
-                str_position = "CAMERA Position x={:.5f}  y={:.5f}  z={:.5f}".format(
-                    pos_camera[0].item(), pos_camera[1].item(), pos_camera[2].item())
-                cv2.putText(color_img, str_position, (0, start_y + jump_amt * 2), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
-
+                roll_marker, pitch_marker, yaw_marker = rotationMatrixToEulerAngles(opencv_aruco_image_text.R_flip * R_tc)
                 # -- Get the attitude of the camera respect to the frame
-                # roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(R_flip * R_tc)
-                roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(R_flip * R_ct)  # TODO no flip needed?
-                str_attitude = "CAMERA Attitude r={:.5f}  p={:.5f}  y={:.5f}".format(
-                    math.degrees(roll_camera), math.degrees(pitch_camera),
-                    math.degrees(yaw_camera))
-                cv2.putText(color_img, str_attitude, (0, start_y + jump_amt * 3), font, text_size, (0, 255, 0), 2, cv2.LINE_AA)
+                roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(opencv_aruco_image_text.R_flip * R_ct)  # todo no flip needed?
 
-                # else:
-                #     return -1, color_img, depth_img, None, None, None, None
-
+                opencv_aruco_image_text.put_marker_text(camera_color_img, tvec, roll_marker, pitch_marker, yaw_marker)
+                opencv_aruco_image_text.put_camera_text(camera_color_img, pos_camera, roll_camera, pitch_camera, yaw_camera)
+                # opencv_aruco_image_text.put_avg_marker_text(camera_color_img, avg_6dof_pose)
+            
                 # return rigid_body_error_local, color_img, depth_img, pixel_positions_to_optimise, tvec, rvec, cam_coords
                 # TODO what to return? and to not make it ugly?
                 # return tvec, rvec
@@ -689,16 +672,8 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
 
 
 if __name__ == '__main__':
-
-    # Text parameters
     np.set_printoptions(precision=6, suppress=True)
-    #--- 180 deg rotation matrix around the x axis
-    R_flip       = np.zeros((3, 3), dtype=np.float32)
-    R_flip[0, 0] =  1.0
-    R_flip[1, 1] = -1.0
-    R_flip[2, 2] = -1.0
-    #-- Font for the text in the image
-    font = cv2.FONT_HERSHEY_PLAIN
+    opencv_aruco_image_text = OpenCvArucoImageText()
 
     prev_arm_xyz = np.array([0., 0., 0.])
     cam2arm = np.identity(4)
@@ -751,25 +726,7 @@ if __name__ == '__main__':
     if use_aruco:
         board, parameters, aruco_dict, marker_length = create_aruco_params()
     else:
-        # Charuco
-        parameters = aruco.DetectorParameters_create()
-        parameters.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
-        aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
-        # charuco_marker_length = 0.019
-        charuco_marker_length = 0.0145
-        charuco_square_length = 0.028
-        # TODO maybe i can tune these more
-        # TODO find out how to do long distance pose estimation!!!
-
-        # TODO aruco con More susceptible to rotational ambiguity at medium to long ranges
-        # https://stackoverflow.com/questions/52222327/improve-accuracy-of-pose-with-bigger-aruco-markers
-        # https://stackoverflow.com/questions/51709522/unstable-values-in-aruco-pose-estimation
-        # TODO try apriltag_ros
-
-        # board = cv2.aruco.CharucoBoard_create(7, 7, .025, .0125, aruco_dict)
-        # board = cv2.aruco.CharucoBoard_create(7, 7, .025, .0125, dictionary)
-        # img = board.draw((200 * 3, 200 * 3))
-        board = cv2.aruco.CharucoBoard_create(7, 7, charuco_square_length, charuco_marker_length, aruco_dict)  # TODO test new values
+        board, parameters, aruco_dict, marker_length = create_charuco_params()
 
     mouseX, mouseY = 0, 0
     cv2.namedWindow('image')
@@ -798,7 +755,7 @@ if __name__ == '__main__':
 
     run_10_frames_to_wait_for_auto_exposure(pipeline, align)
 
-    print('Starting loop')
+    print('Starting main loop')
     while True:
         try:
             color_frame, depth_frame = realsense_get_frames(pipeline, align, spatial)
@@ -807,8 +764,6 @@ if __name__ == '__main__':
             camera_color_img = np.asanyarray(color_frame.get_data())
             depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(camera_depth_img, alpha=0.03),
                                                cv2.COLORMAP_JET)  # TODO why does it look so bad, add more contrast?
-
-            # print(camera_depth_img.shape, camera_color_img.shape)
 
             # rigid_body_error, color_img, depth_img, \
             #     pixel_positions_to_optimise, \
