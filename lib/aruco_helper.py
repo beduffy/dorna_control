@@ -19,7 +19,7 @@ def create_aruco_params():
 def aruco_detect_draw_get_transforms(gray_data, camera_color_img, aruco_dict, parameters, marker_length, camera_matrix, dist_coeffs):
     corners, ids, rejectedImgPoints = aruco.detectMarkers(gray_data, aruco_dict,
                                                                 parameters=parameters)
-    frame_markers = aruco.drawDetectedMarkers(camera_color_img, corners, ids)
+    frame_markers = aruco.drawDetectedMarkers(camera_color_img, corners, ids)  # TODO separate elsewhere? This function does too much?
     # TODO if there are two markers in image, it will not be more accurate right? or?
     all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
 
