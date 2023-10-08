@@ -24,7 +24,7 @@ from collections import deque
 from lib.vision import isclose, dist, isRotationMatrix, rotationMatrixToEulerAngles, create_homogenous_transformations
 from lib.vision_config import camera_matrix, dist_coeffs
 from lib.realsense_helper import setup_start_realsense, realsense_get_frames, run_10_frames_to_wait_for_auto_exposure
-from lib.aruco_helper import create_aruco_params, aruco_detect_draw_get_transforms
+from lib.aruco_helper import create_aruco_params, aruco_detect_draw_get_transforms, show_matplotlib_all_aruco
 
 # export PYTHONPATH=$PYTHONPATH:/home/ben/all_projects/dorna_control
 # TODO Put MORE of these common things into some function/library?
@@ -46,6 +46,8 @@ if __name__ == '__main__':
     depth_intrin, color_intrin, depth_scale, pipeline, align, spatial = setup_start_realsense()
 
     board, parameters, aruco_dict, marker_length = create_aruco_params()
+
+    show_matplotlib_all_aruco(aruco_dict)
 
     # Opencv text params
     start_y = 30
@@ -87,6 +89,8 @@ if __name__ == '__main__':
                     rvec_aruco, tvec_aruco = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
                     # TODO how to pass in estimateParameters initial guess for extrinsic guess. 
                     cv2.drawFrameAxes(camera_color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
+
+                    # TODO I need charuco or aruco board and/or multiple markers... Use board beside arm and then use that as initial guess
                 
                     # TODO I need to look at a specific id... How will I change this in future? and make it more variable and stuff? Remember first id I see?
                     if corner_id == 2:
