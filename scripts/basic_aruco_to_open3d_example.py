@@ -43,7 +43,7 @@ if __name__ == '__main__':
     run_10_frames_to_wait_for_auto_exposure(pipeline, align)
 
     frame_count = 0
-    print('Starting loop')
+    print('Starting main loop')
     while True:
         try:
             color_frame, depth_frame = realsense_get_frames(pipeline, align, spatial)
@@ -56,7 +56,7 @@ if __name__ == '__main__':
             bgr_color_data = cv2.cvtColor(camera_color_img, cv2.COLOR_RGB2BGR)
             gray_data = cv2.cvtColor(bgr_color_data, cv2.COLOR_RGB2GRAY)
 
-            ids, all_rvec, all_tvec = aruco_detect_draw_get_transforms(gray_data, camera_color_img, aruco_dict, parameters, marker_length, camera_matrix, dist_coeffs)
+            corners, ids, all_rvec, all_tvec = aruco_detect_draw_get_transforms(gray_data, camera_color_img, aruco_dict, parameters, marker_length, camera_matrix, dist_coeffs)
 
             if ids is not None:
                 print(ids)
