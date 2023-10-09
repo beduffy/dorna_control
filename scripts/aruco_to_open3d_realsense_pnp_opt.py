@@ -23,7 +23,7 @@ from collections import deque
 from lib.vision import isclose, dist, isRotationMatrix, rotationMatrixToEulerAngles, create_homogenous_transformations
 from lib.vision import get_full_pcd_from_rgbd, convert_cam_pcd_to_arm_pcd
 from lib.vision_config import camera_matrix, dist_coeffs, pinhole_camera_intrinsic
-from lib.realsense_helper import setup_start_realsense, realsense_get_frames, run_10_frames_to_wait_for_auto_exposure
+from lib.realsense_helper import setup_start_realsense, realsense_get_frames, run_10_frames_to_wait_for_auto_exposure, use_aruco_corners_and_realsense_for_3D_point
 from lib.aruco_helper import create_aruco_params, aruco_detect_draw_get_transforms
 from lib.dorna_kinematics import i_k, f_k
 from lib.aruco_image_text import OpenCvArucoImageText
@@ -73,7 +73,35 @@ if __name__ == '__main__':
                     rvec_aruco, tvec_aruco = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
                     cv2.drawFrameAxes(camera_color_img_debug, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
 
+                # below seems much more accurate at 60cm. How to use it?
+                center = use_aruco_corners_and_realsense_for_3D_point(depth_frame, corners[list_idx], color_intrin)
+                print('Center: {}'.format(center))
+
                 tvec, rvec = tvec_aruco, rvec_aruco  # for easier assignment if multiple markers later.
+
+                half_marker_len = marker_length / 2
+                # clockwise, top left has the usual aruco circle. My colours: white, blue, black, red
+                top_left_first = np.array([-half_marker_len, half_marker_len, 0.])
+                top_right_first = np.array([half_marker_len, half_marker_len, 0.])
+                bottom_right_first = np.array([half_marker_len, -half_marker_len, 0.])
+                bottom_left_first = np.array([-half_marker_len, -half_marker_len, 0.])
+
+                corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first])
+
+                imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
+                colors = ((255, 255, 255), (255, 0, 0), (0, 0, 0), (0, 0, 255))
+                for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
+                    cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
+                
+                # One validation that corners and corner_3d_points match: 
+                # imagePointsCorners: [[274.0870951, 196.669700], [302.41902, 202.462821], [292.807514, 225.908426], [263.7825, 219.728288]]
+                # corners: [[[274.1794 , 196.55408], [302.33575, 202.57216], [292.88254, 225.79572], [263.69882, 219.8472 ]]]
+                # TODO since they are so close, it is crazy to use solvePnP? Explain why
+                # import pdb;pdb.set_trace()
+
+                # TODO even an aruco board with solve pnp would help here right?
+                # TODO glue the aruco marker to see if that helps much. 
+
                 cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
 
                 # -- Get the attitude in terms of euler 321 (Needs to be flipped first)
@@ -108,7 +136,7 @@ if __name__ == '__main__':
                 pipeline.stop()
                 break
 
-            # if k == ord('q'):
+            # if k == ord(''):
 
             if k == ord('o'):
                 cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img,
@@ -131,8 +159,27 @@ if __name__ == '__main__':
                 # cam2arm means the transformation to bring points from camera frame to the aruco frame
                 # arm2cam brings points from aruco frame to camera frame. 
                 # TODO So then why does transforming coordinate frame at origin to camera frame make it go to correct place.
+               
+                # corners[0][0] += 10  # this proved they were different
 
-                list_of_geometry_elements = [cam_pcd, coordinate_frame, aruco_coordinate_frame, mesh_box]
+                outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(corners_3d_points, corners[0], camera_matrix, dist_coeffs)
+                # # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
+                # # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_IPPE)
+                # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs)
+                # # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_IPPE)
+                # # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
+                # # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
+                # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, corners[shoulder_motor_marker_id], camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
+                # # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_IPPE_SQUARE)
+                # # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, corners[0], camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_IPPE_SQUARE)
+                # # outval, rvec_arm, tvec_arm = cv2.solvePnP(np.array([[0.0, -y_offset, 0.0]]), corners[shoulder_motor_marker_id], camera_matrix, dist_coeffs)
+
+                cam2arm_opt, arm2cam_opt, _, _, _ = create_homogenous_transformations(tvec_pnp_opt, rvec_pnp_opt)
+                mesh_box_opt = o3d.geometry.TriangleMesh.create_box(width=1.0, height=1.0, depth=0.003)
+                mesh_box_opt.paint_uniform_color([1, 0.706, 0])
+                mesh_box_opt.transform(arm2cam_opt)
+
+                list_of_geometry_elements = [cam_pcd, coordinate_frame, aruco_coordinate_frame, mesh_box, mesh_box_opt]
                 o3d.visualization.draw_geometries(list_of_geometry_elements)
 
             frame_count += 1

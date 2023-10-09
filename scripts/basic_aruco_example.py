@@ -23,7 +23,7 @@ from collections import deque
 
 from lib.vision import isclose, dist, isRotationMatrix, rotationMatrixToEulerAngles, create_homogenous_transformations
 from lib.vision_config import camera_matrix, dist_coeffs
-from lib.realsense_helper import setup_start_realsense, realsense_get_frames, run_10_frames_to_wait_for_auto_exposure
+from lib.realsense_helper import setup_start_realsense, realsense_get_frames, run_10_frames_to_wait_for_auto_exposure, use_aruco_corners_and_realsense_for_3D_point
 from lib.aruco_helper import create_aruco_params, aruco_detect_draw_get_transforms, show_matplotlib_all_aruco
 from lib.aruco_image_text import OpenCvArucoImageText
 
@@ -41,28 +41,6 @@ from lib.aruco_image_text import OpenCvArucoImageText
 #     roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(R_flip * R_ct)  # todo no flip needed?
 
 #     return cam2arm, arm2cam, roll_marker, pitch_marker, yaw_marker, roll_camera, pitch_camera, yaw_camera
-
-
-def use_aruco_corners_and_realsense_for_3D_point(corners_of_one_aruco, color_intrin):
-    center = None
-    if len(corners) != 0:
-        center_point_2D = np.average(corners_of_one_aruco[0], axis=0)
-        # import pdb;pdb.set_trace()
-        depth = depth_frame.as_depth_frame().get_distance(center_point_2D[0], center_point_2D[1])
-        center_point_3D = np.append(center_point_2D, depth)
-        if depth != 0:
-            # global center
-            x = center_point_3D[0]
-            y = center_point_3D[1]
-            z = center_point_3D[2]
-            ## see rs2 document: 
-            ## https://github.com/IntelRealSense/librealsense/wiki/Projection-in-RealSense-SDK-2.0#point-coordinates
-            ## and example: https://github.com/IntelRealSense/librealsense/wiki/Projection-in-RealSense-SDK-2.0#point-coordinates
-            x, y, z = rs.rs2_deproject_pixel_to_point(color_intrin, [x, y], z)
-            center = [x, y, z]
-
-    return center
-
 
 if __name__ == '__main__':
     depth_intrin, color_intrin, depth_scale, pipeline, align, spatial = setup_start_realsense()
@@ -114,7 +92,7 @@ if __name__ == '__main__':
                         # refactoring fail but a lesson in here. TODO
                         # cam2arm, arm2cam, roll_marker, pitch_marker, yaw_marker, roll_camera, pitch_camera, yaw_camera = get_transforms_and_euler_angles_to_marker(tvec, rvec)
 
-                        center = use_aruco_corners_and_realsense_for_3D_point(corners[list_idx], color_intrin)
+                        center = use_aruco_corners_and_realsense_for_3D_point(depth_frame, corners[list_idx], color_intrin)
                         print('Center: {}'.format(center))
 
                         cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)

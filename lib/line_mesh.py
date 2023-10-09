@@ -18,6 +18,7 @@ except Exception as e:
     print(e)
     print('Tried to import open3d but not installed')
 
+
 def align_vector_to_another(a=np.array([0, 0, 1]), b=np.array([1, 0, 0])):
     """
     Aligns vector a to vector b with axis angle rotation

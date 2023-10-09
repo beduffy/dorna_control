@@ -74,10 +74,12 @@ if __name__ == '__main__':
             criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.00001)
 
             corners, ids, rejectedImgPoints = aruco.detectMarkers(gray_data, aruco_dict,
-                                                                parameters=parameters)
-            # frame_markers = aruco.drawDetectedMarkers(camera_color_img, corners, ids)  # TODO separate elsewhere? This function does too much?
+                                                                  parameters=parameters)
+            frame_markers = aruco.drawDetectedMarkers(camera_color_img, corners, ids)  # TODO separate elsewhere? This function does too much?
             # TODO if there are two markers in image, it will not be more accurate right? or?
             all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
+
+            # TODO put all this charuco stuff into a function. 
 
             # print(ids)
             # import pdb;pdb.set_trace()

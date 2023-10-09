@@ -124,6 +124,8 @@ if __name__ == '__main__':
                 # TODO translate inwards or not?
                 mesh_box.transform(arm2cam)
 
+                # TODO USE THE DEPTH CAMERA, THE GROUND PLANE, ALL OF THIS INFORMATION TO GET A BETTER ESTIMATE of the marker. And maybe then we are better. 
+
                 # TODO write my understanding of all of the above.
                 # everything is in camera coordinate frame
                 # cam2arm means the transformation to bring points from camera frame to the aruco frame
