@@ -60,7 +60,20 @@ if __name__ == '__main__':
             depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(camera_depth_img, alpha=0.03),
                                                 cv2.COLORMAP_JET)  # todo why does it look so bad, add more contrast?
             
-            bgr_color_data = cv2.cvtColor(camera_color_img, cv2.COLOR_RGB2BGR)
+            camera_color_img_orig = camera_color_img.copy()
+            h, w = camera_color_img.shape[:2]
+            newcameramtx, roi = cv2.getOptimalNewCameraMatrix(camera_matrix, dist_coeffs, (w,h), 1, (w,h))
+            dst = cv2.undistort(camera_color_img, camera_matrix, dist_coeffs, None, newcameramtx)
+            x, y, w, h = roi
+            dst = dst[y:y+h, x:x+w]
+            # https://stackoverflow.com/questions/73599224/aruco-markerdetector-undistorts-image
+            # https://forum.opencv.org/t/aruco-marker-in-a-calibrated-image/7325
+            # TODO how to use cropped image?
+            # camera_color_img = dst
+
+            # bgr_color_data = cv2.cvtColor(camera_color_img, cv2.COLOR_RGB2BGR)
+            # bgr_color_data = cv2.cvtColor(camera_color_img.copy(), cv2.COLOR_RGB2BGR)
+            bgr_color_data = cv2.cvtColor(dst, cv2.COLOR_RGB2BGR)
             gray_data = cv2.cvtColor(bgr_color_data, cv2.COLOR_RGB2GRAY)
 
             camera_color_img_debug = camera_color_img.copy()  # modified
@@ -111,14 +124,28 @@ if __name__ == '__main__':
                 ids_list_sorted = sorted(ids_list_with_index_key_tuple, key=lambda x: x[1])
 
                 image_points = []
-                # import pdb;pdb.set_trace()
                 ids_list = [x[0] for x in ids.tolist()]
                 for idx_of_marker, id_of_marker in ids_list_sorted:
                     image_points.append(corners[idx_of_marker].squeeze())
                 
+                # Re-projection error gives a good estimation of just how exact the found parameters are. 
+                # mean_error = 0
+                # for i in range(len(obj_points)):
+                #     imgpoints2, _ = cv2.projectPoints(obj_points[i], all_rvec[i], all_tvec[i], camera_matrix, dist_coeffs)
+                #     error = cv2.norm(image_points[i], imgpoints2, cv2.NORM_L2) / len(imgpoints2)
+                #     mean_error += error
+                # print("total error: {}".format(mean_error / len(obj_points)) )
+                # TODO fix or just do my own reprojection error based on above. 
+                '''
+                InputArray, cv::InputArray, int, cv::InputArray)'
+                > Input type mismatch (expected: '_src1.type() == _src2.type()'), where
+                >     '_src1.type()' is 5 (CV_32FC1)
+                > must be equal to
+                >     '_src2.type()' is 13 (CV_32FC2)
 
-                # import pdb;pdb.set_trace()
-            
+
+                '''
+                            
                 # if image_points is not None:
                 #     for square_corner_idx in range(image_points.shape[0]):
                 #         x, y = image_points[square_corner_idx][0]
@@ -133,7 +160,7 @@ if __name__ == '__main__':
 
                 # below seems much more accurate at 60cm. How to use it?
                 center = use_aruco_corners_and_realsense_for_3D_point(depth_frame, corners[list_idx], color_intrin)
-                print('Center: {}'.format(center))
+                print('Center: {}'.format(center))  # TODO should print marker xyz here to make it easier to compare
 
                 tvec, rvec = tvec_aruco, rvec_aruco  # for easier assignment if multiple markers later.
 
@@ -181,11 +208,13 @@ if __name__ == '__main__':
                 saved_cam2arm = cam2arm
             
             images = np.hstack((camera_color_img_debug, depth_colormap))
+            # images = np.hstack((camera_color_img_orig, depth_colormap))
             # images = np.hstack((camera_color_img, depth_colormap))
             # images = camera_color_img
             camera_color_img = cv2.cvtColor(camera_color_img, cv2.COLOR_BGR2RGB)  # for open3D
 
             cv2.imshow("image", images)
+            cv2.imshow('undistorted', dst)
             k = cv2.waitKey(1)
 
             if k == ord('q'):
@@ -224,7 +253,9 @@ if __name__ == '__main__':
                 # full board
                 # import pdb;pdb.set_trace()
                 
-
+                # https://forum.opencv.org/t/pose-estimation-tvec-values-jumping-inconsistently/12705/2
+                # the above says use PNP iterative
+                
                 # outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(obj_points, image_points, camera_matrix, dist_coeffs)  # TODO probably not in correct order? check 
                 outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(obj_points), np.concatenate(image_points), camera_matrix, dist_coeffs)  # TODO probably not in correct order? check 
                 # TODO draw big board tvec rvec? 
