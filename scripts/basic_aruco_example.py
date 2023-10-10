@@ -45,6 +45,7 @@ from lib.aruco_image_text import OpenCvArucoImageText
 if __name__ == '__main__':
     depth_intrin, color_intrin, depth_scale, pipeline, align, spatial = setup_start_realsense()
 
+    # TODO use some stuff from here: https://github.com/niconielsen32/ComputerVision/blob/master/ArUco/arucoDetection.py
     board, parameters, aruco_dict, marker_length = create_aruco_params()
     chosen_corner_id = None
 
