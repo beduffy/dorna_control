@@ -45,6 +45,7 @@ if __name__ == '__main__':
     cam2arm = np.identity(4)
     saved_cam2arm = cam2arm
     marker_pose_history = deque([], maxlen=100)  # TODO is this less noisy and accurate? And should be used?
+    colors = ((255, 255, 255), (255, 0, 0), (0, 0, 0), (0, 0, 255))
 
     run_10_frames_to_wait_for_auto_exposure(pipeline, align)
 
@@ -64,16 +65,68 @@ if __name__ == '__main__':
 
             camera_color_img_debug = camera_color_img.copy()  # modified
 
-            corners, ids, all_rvec, all_tvec = aruco_detect_draw_get_transforms(gray_data, camera_color_img_debug, aruco_dict, parameters, marker_length, camera_matrix, dist_coeffs)
+            # corners, ids, all_rvec, all_tvec = aruco_detect_draw_get_transforms(gray_data, camera_color_img_debug, aruco_dict, parameters, marker_length, camera_matrix, dist_coeffs)
+            corners, ids, rejectedImgPoints = aruco.detectMarkers(gray_data, aruco_dict,
+                                                                parameters=parameters)
+            # TODO Note DETECTmARKERS
+            # The function does not correct lens distortion or takes it into account. It's recommended to undistort input image with corresponding camera model, if camera parameters are known
+            frame_markers = aruco.drawDetectedMarkers(camera_color_img, corners, ids)  # TODO separate elsewhere? This function does too much?
+            all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
+            # TODO refine markers! https://docs.opencv.org/4.x/db/da9/tutorial_aruco_board_detection.html
 
-            # import pdb;pdb.set_trace()
-            # obj_points, image_points = board.matchImagePoints(corners, ids)
-            obj_points, image_points = cv2.aruco.getBoardObjectAndImagePoints(board, corners, ids)
 
+            # only 11 markers... are they not matched correctly?
+            # # obj_points, image_points = board.matchImagePoints(corners, ids)
+            # # obj_points, image_points = cv2.aruco.getBoardObjectAndImagePoints(board, corners, ids)
+
+            # # plt.scatter(obj_points[:, 0, 0], obj_points[:, 0, 1])
+            # # plt.show()
+
+            # actually gets 12 markers
+            obj_points = board.objPoints  # in tuple format, hmm
+            # for plotting it
+            all_obj_points_x = []
+            all_obj_points_y = []
+            for marker in obj_points:
+                for obj_corner in marker:
+                    all_obj_points_x.append(obj_corner[0])
+                    all_obj_points_y.append(obj_corner[1])
+            # plt.scatter(all_obj_points_x, all_obj_points_y)
+            # plt.show()
+
+            
+
+            # doesn't work
+            # retval, board_rvec, board_tvec = cv2.aruco.estimatePoseBoard(corners, ids, board, camera_matrix, dist_coeffs, np.empty(1), np.empty(1))
+            # if board_rvec is not None and board_rvec.shape[0] == 3:
+            #     cam2arm_board, arm2cam_board, _, _, _ = create_homogenous_transformations(board_tvec, board_rvec)
 
             if ids is not None:
-                print(ids)
+                # obj_points are in id 1-12 order
+                # corners are in ids order. So just sort ids?
+                # ids_list: [4, 3, 2, 1, 8, 7, 6, 5, 12, 11, 10, 9]
+                # we want to get corner index 3 (id 1) first then index 2, etc
                 ids_list = [l[0] for l in ids.tolist()]
+                ids_list_with_index_key_tuple = [(idx, id_) for idx, id_ in enumerate(ids_list)]
+                ids_list_sorted = sorted(ids_list_with_index_key_tuple, key=lambda x: x[1])
+
+                image_points = []
+                # import pdb;pdb.set_trace()
+                ids_list = [x[0] for x in ids.tolist()]
+                for idx_of_marker, id_of_marker in ids_list_sorted:
+                    image_points.append(corners[idx_of_marker].squeeze())
+                
+
+                # import pdb;pdb.set_trace()
+            
+                # if image_points is not None:
+                #     for square_corner_idx in range(image_points.shape[0]):
+                #         x, y = image_points[square_corner_idx][0]
+                #         cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[0], -1)
+                # print(image_points.shape)
+
+                print(ids_list)  # TODO why are they always in order now??!!?
+                
                 for list_idx, corner_id in enumerate(ids_list):
                     rvec_aruco, tvec_aruco = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
                     cv2.drawFrameAxes(camera_color_img_debug, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
@@ -93,10 +146,9 @@ if __name__ == '__main__':
 
                 corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first])
 
-                imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
-                colors = ((255, 255, 255), (255, 0, 0), (0, 0, 0), (0, 0, 255))
-                for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
-                    cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
+                # imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
+                # for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
+                #     cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
                 
                 # One validation that corners and corner_3d_points match: 
                 # imagePointsCorners: [[274.0870951, 196.669700], [302.41902, 202.462821], [292.807514, 225.908426], [263.7825, 219.728288]]
@@ -170,8 +222,12 @@ if __name__ == '__main__':
                 # outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(corners_3d_points, corners[0], camera_matrix, dist_coeffs)
                 
                 # full board
-                outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(obj_points, image_points, camera_matrix, dist_coeffs)  # TODO probably not in correct order? check 
+                # import pdb;pdb.set_trace()
                 
+
+                # outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(obj_points, image_points, camera_matrix, dist_coeffs)  # TODO probably not in correct order? check 
+                outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(obj_points), np.concatenate(image_points), camera_matrix, dist_coeffs)  # TODO probably not in correct order? check 
+                # TODO draw big board tvec rvec? 
                 
                 # # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
                 # # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_IPPE)
@@ -189,6 +245,7 @@ if __name__ == '__main__':
                 mesh_box_opt = o3d.geometry.TriangleMesh.create_box(width=1.0, height=1.0, depth=0.003)
                 mesh_box_opt.paint_uniform_color([1, 0.706, 0])
                 mesh_box_opt.transform(arm2cam_opt)
+                # mesh_box_opt.transform(arm2cam_board)
 
                 list_of_geometry_elements = [cam_pcd, coordinate_frame, aruco_coordinate_frame, mesh_box, mesh_box_opt]
                 o3d.visualization.draw_geometries(list_of_geometry_elements)
