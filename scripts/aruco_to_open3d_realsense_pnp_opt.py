@@ -98,6 +98,19 @@ if __name__ == '__main__':
 
             # only 11 markers... are they not matched correctly?
             # # obj_points, image_points = board.matchImagePoints(corners, ids)  # in newer version of aruco
+            # TODO reimplement it, it is right here:
+            # https://github.com/opencv/opencv/blob/590f150d5e032165e27d81294c9b7ac710b77f11/modules/objdetect/src/aruco/aruco_board.cpp#L37
+            # for(unsigned int i = 0; i < nDetectedMarkers; i++) {
+            #     int currentId = detectedIdsMat.at<int>(i);
+            #     for(unsigned int j = 0; j < ids.size(); j++) {
+            #         if(currentId == ids[j]) {
+            #             for(int p = 0; p < 4; p++) {
+            #                 objPnts.push_back(objPoints[j][p]);
+            #                 imgPnts.push_back(detectedCornersVecMat[i].ptr<Point2f>(0)[p]);
+            #             }
+            #         }
+            #     }
+            # }
             # # obj_points, image_points = cv2.aruco.getBoardObjectAndImagePoints(board, corners, ids)
 
             # # plt.scatter(obj_points[:, 0, 0], obj_points[:, 0, 1])

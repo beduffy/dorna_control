@@ -5,8 +5,6 @@ import matplotlib as mpl
 
 
 def create_aruco_params():
-    # marker_length = 0.0265
-    # marker_length = 0.028
     marker_length = 0.0275
     # marker_length = 0.0935  # big marker
 
