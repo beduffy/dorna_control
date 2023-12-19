@@ -141,6 +141,29 @@ if __name__ == '__main__':
                 # plt.scatter(all_obj_points_x, all_obj_points_y)
                 # plt.show()
                 
+                # obj_points_from_aruco_lib, image_points = cv2.aruco.getBoardObjectAndImagePoints(board, corners, ids)
+                # # plt.scatter(obj_points_from_aruco_lib[:, 0, 0], obj_points_from_aruco_lib[:, 0, 1])
+                # # plt.scatter(obj_points_from_aruco_lib[:num_points, 0, 0], obj_points_from_aruco_lib[:num_points, 0, 1], c='r')
+                # # id_idx = 0
+                # # TODO why did each point go a different colour rather than each ID?!?!?!? is it a matplotlib error (OK, it was this one), id_idx error or a obj_points error?
+                # # for id_idx in range(3): plt.scatter(obj_points_from_aruco_lib[id_idx * 4:id_idx * 4 + 4, 0, 0], obj_points_from_aruco_lib[id_idx * 4:id_idx * 4 + 4, 0, 1], c=plt.cm.RdYlBu(id_idx), label='{}'.format(id_idx))
+                # # colors_mpl = ['r', 'b', 'g', 'c', 'm', 'y', 'k', 'tab:brown', 'tab:pink', 'tab:gray', 'tab:olive', 'tab:purple', 'r']
+                # # for id_idx in range(5): plt.scatter(obj_points_from_aruco_lib[id_idx * 4:id_idx * 4 + 4, 0, 0], obj_points_from_aruco_lib[id_idx * 4:id_idx * 4 + 4, 0, 1], c=colors_mpl[id_idx], label='{}'.format(id_idx))
+                # # plt.legend()
+                # # obj_points_from_aruco_lib are not in order 1-12
+                # # obj_points_from_aruco_lib are in same order as image_points. Wait, are they??!?! TODO not at all...
+                
+                # # TODO two main questions
+                # # TODO 1. Are the points in the correct order even if for 1 marker e.g. clockwise/anticlockwise etc. No answer yet.
+                # # TODO 2. Are the IDs (groups of 4 image points) in the correct order. Answer: no (because sometimes we draw marker without the below circles on it). Next question: how to put it in the right order?
+                
+                # # draw circles on points from found image points. First num_points. I think this shows that things are not in the same order
+                # num_points = num_ids_to_draw * 4
+                # for idx, (x, y) in enumerate(image_points.squeeze().tolist()[:num_points]):
+                #     cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx % 4], -1)
+
+                # # TODO I need tests or something. 
+                # print()
 
                 # below: estimating entirePoseBoard from corners and ids but are they matched? doesn't work
                 # TODO why is it so similar to solvePnP though?
