@@ -22,34 +22,6 @@ from scipy import optimize
 
 from lib.vision import isclose, dist, isRotationMatrix, rotationMatrixToEulerAngles, create_homogenous_transformations
 
-# euler to axis angle
-#  public final void rotate(double heading, double attitude, double bank) {
-# 	// Assuming the angles are in radians.
-# 	double c1 = Math.cos(heading/2);
-# 	double s1 = Math.sin(heading/2);
-# 	double c2 = Math.cos(attitude/2);
-# 	double s2 = Math.sin(attitude/2);
-# 	double c3 = Math.cos(bank/2);
-# 	double s3 = Math.sin(bank/2);
-# 	double c1c2 = c1*c2;
-# 	double s1s2 = s1*s2;
-# 	w =c1c2*c3 - s1s2*s3;
-# 	x =c1c2*s3 + s1s2*c3;
-# 	y =s1*c2*c3 + c1*s2*s3;
-# 	z =c1*s2*c3 - s1*c2*s3;
-# 	angle = 2 * Math.acos(w);
-# 	double norm = x*x+y*y+z*z;
-# 	if (norm < 0.001) { // when all euler angles are zero angle =0 so
-# 		// we can set axis to anything to avoid divide by zero
-# 		x=1;
-# 		y=z=0;
-# 	} else {
-# 		norm = Math.sqrt(norm);
-#     	x /= norm;
-#     	y /= norm;
-#     	z /= norm;
-# 	}
-# }
 
 # https://stackoverflow.com/questions/58997792/how-do-you-convert-euler-angles-to-the-axis-angle-representation-in-python
 def euler_yzx_to_axis_angle(z_e, x_e, y_e, normalize=True):
@@ -88,10 +60,10 @@ mesh_box_opt = o3d.geometry.TriangleMesh.create_box(width=0.1, height=0.1, depth
 mesh_box_opt.paint_uniform_color([1, 0, 0])
 
 size = 0.1
-coordinate_frame_1 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.0, 0.0, 0.0])
-coordinate_frame_2 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.3, 0.0, 0.0])
-coordinate_frame_3 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.4, 0.0, 0.0])
-coordinate_frame_4 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.5, 0.0, 0.0])
+origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.0, 0.0, 0.0])
+coordinate_frame_1 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.3, 0.0, 0.0])
+coordinate_frame_2 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.4, 0.0, 0.0])
+coordinate_frame_3 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.5, 0.0, 0.0])
 
 camera_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size * 1.3, origin=[0.0, 0.0, 0.0])
 
@@ -118,11 +90,28 @@ R_flip[0, 0] =  1.0
 R_flip[1, 1] = -1.0
 R_flip[2, 2] = -1.0
 
+# TODO I need to understand conversion between all rotation types better
+# TODO why are both below the same?
+# -- Get the attitude in terms of euler 321 (Needs to be flipped first)
 roll_marker, pitch_marker, yaw_marker = rotationMatrixToEulerAngles(R_flip * R_tc)
+print('roll pitch yaw marker: ', roll_marker, pitch_marker, yaw_marker)
+# -- Get the attitude of the camera respect to the frame
+roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(R_flip * R_ct)  # todo no flip needed?
+print('roll pitch yaw camera: ', roll_camera, pitch_camera, yaw_camera)
 
-print(roll_marker, pitch_marker, yaw_marker)
+arm_position_coord_frames = [coordinate_frame_1, coordinate_frame_2, coordinate_frame_3]
 
-arm_position_coord_frames = [coordinate_frame_1, coordinate_frame_2, coordinate_frame_3, coordinate_frame_4]
-
-list_of_geometry_elements = [camera_coordinate_frame] + arm_position_coord_frames
+list_of_geometry_elements = [origin_frame, camera_coordinate_frame] + arm_position_coord_frames
 o3d.visualization.draw_geometries(list_of_geometry_elements)
+
+
+# TODO the big goal here would be to:
+# 1. Using the 3 transformations from origin to the 3 coord frames of "fake arm" and then # TODO calculate simple. Identity rotation mat and translation 0.3, 0.4, 0.5
+# 2. 3 transformations from camera to each of these coord frames. TODO how do I find these transformations. Translation is easy. Rotation is same as R_tc or R_ct? Can always prove I have things correct
+# 3. Use opencv handeye function and then plot output transformation? 
+
+'''
+Can i do all of this in simulation without even using realsense? 
+E.g. Put all objects and ground truth into simulation, visualise, then compute. 
+Use Drake or Open3D? Well putting aruco into these is hard. But I don’t need to? I have all the transforms. I don’t even need to visualise depth cameras.
+'''
