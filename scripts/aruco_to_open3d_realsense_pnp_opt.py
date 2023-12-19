@@ -166,14 +166,14 @@ if __name__ == '__main__':
                     # # we want to get corner index 3 (id 1) first then index 2, etc
                     # # TODO everthing into functions.
                     # # TODO I want a perfect match between corners <-> ids <-> obj_points <-> img_points
-                    # ids_list = [l[0] for l in ids.tolist()]
-                    # ids_list_with_index_key_tuple = [(idx, id_) for idx, id_ in enumerate(ids_list)]
-                    # ids_list_sorted = sorted(ids_list_with_index_key_tuple, key=lambda x: x[1])
+                    ids_list = [l[0] for l in ids.tolist()]
+                    ids_list_with_index_key_tuple = [(idx, id_) for idx, id_ in enumerate(ids_list)]
+                    ids_list_sorted = sorted(ids_list_with_index_key_tuple, key=lambda x: x[1])
 
-                    # image_points = []
+                    image_points = []
                     ids_list = [x[0] for x in ids.tolist()]
-                    # for idx_of_marker, id_of_marker in ids_list_sorted:
-                    #     image_points.append(corners[idx_of_marker].squeeze())
+                    for idx_of_marker, id_of_marker in ids_list_sorted:
+                        image_points.append(corners[idx_of_marker].squeeze())
 
 
                     # manual mapping, new way.
@@ -364,18 +364,25 @@ if __name__ == '__main__':
                     if id_1_tvec is not None and id_1_rvec is not None:
                         spacing = marker_length + marker_separation
                         # the below is using first rvec/tvec and then stupidly going 4 left. I should instead use id 1 rvec/tvec
+                        all_obj_points_found_from_id_1 = []
+                        id_count = 1
                         for y_ in range(3):
                             for x_ in range(4):
-                                top_left = np.array([-half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
-                                top_right = np.array([half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
-                                bottom_right = np.array([half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
-                                bottom_left = np.array([-half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
+                                if id_count in ids_list:
+                                    top_left = np.array([-half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
+                                    top_right = np.array([half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
+                                    bottom_right = np.array([half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
+                                    bottom_left = np.array([-half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
 
-                                corners_3d_points = np.array([top_left, top_right, bottom_right, bottom_left])
-                                imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
-                                for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
-                                    cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
+                                    corners_3d_points = np.array([top_left, top_right, bottom_right, bottom_left])
+                                    all_obj_points_found_from_id_1.append(corners_3d_points)
+                                    imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
+                                    for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
+                                        cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
+
+                                id_count += 1
                     
+                        # obj_points = all_obj
                         # One validation that corners and corner_3d_points match: 
                         # imagePointsCorners: [[274.0870951, 196.669700], [302.41902, 202.462821], [292.807514, 225.908426], [263.7825, 219.728288]]
                         # corners: [[[274.1794 , 196.55408], [302.33575, 202.57216], [292.88254, 225.79572], [263.69882, 219.8472 ]]]
@@ -434,7 +441,7 @@ if __name__ == '__main__':
             if k == ord('o'):
                 # o for open3D visualisation and solvePnP
                 cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img,
-                                            pinhole_camera_intrinsic, visualise=False)
+                                                 pinhole_camera_intrinsic, visualise=False)
                 # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, 0.0)  # TODO do I need this or not?
 
                 aruco_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
@@ -465,7 +472,16 @@ if __name__ == '__main__':
                 # the above says use PNP iterative
 
                 # outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(obj_points, image_points, camera_matrix, dist_coeffs)  # TODO probably not in correct order? check 
-                outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(obj_points), np.concatenate(image_points), camera_matrix, dist_coeffs)  # TODO probably not in correct order? check 
+                # outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(obj_points), np.concatenate(image_points), camera_matrix, dist_coeffs)  # TODO probably not in correct order? check 
+                
+                # the below FINALLY WORKED!!
+                # outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(all_obj_points_found_from_id_1), np.concatenate(image_points), camera_matrix, dist_coeffs)
+                # outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(all_obj_points_found_from_id_1), np.concatenate(image_points), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_ITERATIVE)
+                outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(all_obj_points_found_from_id_1), np.concatenate(image_points), camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_IPPE)
+                
+                
+                
+                
                 # outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(obj_points), np.concatenate(image_points), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_ITERATIVE)
                 # outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(obj_points), np.concatenate(image_points), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_IPPE)
                 # TODO draw big board tvec rvec? 
@@ -486,15 +502,16 @@ if __name__ == '__main__':
                 
                 
                 mesh_box_opt = o3d.geometry.TriangleMesh.create_box(width=1.0, height=1.0, depth=0.003)
-                mesh_box_opt.paint_uniform_color([1, 0.706, 0])
+                mesh_box_opt.paint_uniform_color([1, 0, 0])
                 mesh_box_opt.transform(arm2cam_opt)
                 # mesh_box_opt.transform(cam2arm_opt)
 
-                mesh_box_board = o3d.geometry.TriangleMesh.create_box(width=1.0, height=1.0, depth=0.003)
-                mesh_box_board.paint_uniform_color([1, 0.306, 0.6])
-                mesh_box_board.transform(arm2cam_board)
+                # mesh_box_board = o3d.geometry.TriangleMesh.create_box(width=1.0, height=1.0, depth=0.003)
+                # mesh_box_board.paint_uniform_color([0, 0, 1])
+                # mesh_box_board.transform(arm2cam_board)
 
-                list_of_geometry_elements = [cam_pcd, coordinate_frame, aruco_coordinate_frame, mesh_box, mesh_box_opt, mesh_box_board]
+                list_of_geometry_elements = [cam_pcd, coordinate_frame, aruco_coordinate_frame, mesh_box, mesh_box_opt]
+                # list_of_geometry_elements = [cam_pcd, coordinate_frame, aruco_coordinate_frame, mesh_box, mesh_box_opt, mesh_box_board]
                 o3d.visualization.draw_geometries(list_of_geometry_elements)
 
             frame_count += 1
