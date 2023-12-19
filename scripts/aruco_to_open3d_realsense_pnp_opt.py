@@ -103,14 +103,14 @@ if __name__ == '__main__':
                 # The function does not correct lens distortion or takes it into account. It's recommended to undistort input image with corresponding camera model, if camera parameters are known
                 # frame_markers = aruco.drawDetectedMarkers(camera_color_img_debug, corners, ids)  # TODO separate elsewhere? This function does too much?
                 
-                # only drawing first two
+                # only drawing first num_ids_to_draw
                 num_ids_to_draw = 12
                 frame_markers = aruco.drawDetectedMarkers(camera_color_img_debug, corners[0:num_ids_to_draw], ids[0:num_ids_to_draw]) 
                 # frame_markers = aruco.drawDetectedMarkers(camera_color_img_debug, corners, ids) 
                 all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
                 # TODO refine markers! https://docs.opencv.org/4.x/db/da9/tutorial_aruco_board_detection.html
 
-                # TODO put the below  into functions better!
+                # TODO put everything into functions better!
                 # only 11 markers... are they not matched correctly?
                 # # obj_points, image_points = board.matchImagePoints(corners, ids)  # in newer version of aruco
                 # TODO reimplement it, it is right here:
@@ -129,29 +129,10 @@ if __name__ == '__main__':
 
                 # actually gets 12 markers
                 obj_points = board.objPoints  # in tuple format, hmm
-                # for plotting it
-                all_obj_points_x = []
-                all_obj_points_y = []
-                for marker in obj_points:
-                    for obj_corner in marker:
-                        all_obj_points_x.append(obj_corner[0])
-                        all_obj_points_y.append(obj_corner[1])
-                        # TODO is x and y axis correct? how to work it out
-                        # all_obj_points_x.append(obj_corner[1])
-                        # all_obj_points_y.append(obj_corner[0])
-                
-                # plt.scatter(all_obj_points_x, all_obj_points_y)
-                # colors_mpl = ['r', 'b', 'g', 'c', 'm', 'r', 'k', 'tab:brown', 'tab:pink', 'tab:gray', 'tab:olive', 'tab:purple', 'r']
-                # for id_idx in range(12): plt.scatter(all_obj_points_x[id_idx * 4:id_idx * 4 + 4], all_obj_points_y[id_idx * 4:id_idx * 4 + 4], c=colors_mpl[id_idx], label='{}'.format(id_idx))
-                # plt.show()
-                # 
 
                 # below: estimating entirePoseBoard from corners and ids but are they matched? doesn't work
-                # TODO why is it so similar to solvePnP though?
                 # still not working with proper marker_separation... 
                 retval, board_rvec, board_tvec = cv2.aruco.estimatePoseBoard(corners, ids, board, camera_matrix, dist_coeffs, np.empty(1), np.empty(1))
-                # TODO wat? [rvec, tvec, num] = cv.estimatePoseBoard(..., 'OptionName',optionValue, ...)
-                # ahh 	cv.aruco.estimatePoseBoard(	corners, ids, board, cameraMatrix, distCoeffs[, rvec[, tvec[, useExtrinsicGuess]]]	) ->	retval, rvec, tvec
                 if board_rvec is not None and board_rvec.shape[0] == 3:
                     cam2arm_board, arm2cam_board, _, _, _ = create_homogenous_transformations(board_tvec, board_rvec)
 
@@ -193,8 +174,6 @@ if __name__ == '__main__':
                     >     '_src1.type()' is 5 (CV_32FC1)
                     > must be equal to
                     >     '_src2.type()' is 13 (CV_32FC2)
-
-
                     '''
                                 
                     # if image_points is not None:
@@ -212,13 +191,6 @@ if __name__ == '__main__':
                         if corner_id == 1:
                             id_1_rvec, id_1_tvec = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
                         # cv2.drawFrameAxes(camera_color_img_debug, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
-
-                        # below worked for first marker but not for 2nd
-                        # obj_points[list_idx][:2, 0:2] = obj_points[list_idx][:2, 0:2] + np.array([-half_marker_len, half_marker_len])
-                        # obj_points[list_idx][2, 0] = obj_points[list_idx][2, 0] - half_marker_len
-                        # obj_points[list_idx][3, 0] = obj_points[list_idx][3, 0] - half_marker_len
-                        # obj_points[list_idx][2, 1] = obj_points[list_idx][2, 1] - marker_length - half_marker_len
-                        # obj_points[list_idx][3, 1] = obj_points[list_idx][3, 1] - marker_length - half_marker_len
 
                         # attempt to understand obj_points and img_points by only drawing first two
                         # TODO make it work with both and any set of ids e.g. 2 + 4. Both below do not work
@@ -239,127 +211,17 @@ if __name__ == '__main__':
 
                         for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
                             pass
-                            # print(x, y)
-                        #     print((int(x), int(y)))
-                        #     print(type((int(x), int(y))))
-                            # TODO why does float go to negative or positive a million? because it is wrong mapping 
-                            # TODO TRY TO JUST do 1 goddamn ID, I know ID 1 is top right from camera position. 
                             # if x > 0 and x < 640 and y > 0 and y < 480:
                             # cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
                         
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-                        # if list_idx == 0:
-                            # break
-
-
-
-
-
-
-
-
-
-
-
-                        # TODO ahhhhh the below was copied. Each rvec tvec has a new coordinate frame. We have to choose one global one and then calculate all object points relative to that.
-                        # tvec, rvec = tvec_aruco, rvec_aruco  # using last. for easier assignment if multiple markers later.
-                        # half_marker_len = marker_length / 2
-                        # top_left_first = np.array([-half_marker_len, half_marker_len, 0.])
-                        # top_right_first = np.array([half_marker_len, half_marker_len, 0.])
-                        # bottom_right_first = np.array([half_marker_len, -half_marker_len, 0.])
-                        # bottom_left_first = np.array([-half_marker_len, -half_marker_len, 0.])
-
-                        # corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first])
-
-                        # imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
-                        # for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
-                        #     cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
-
-                        # for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()): cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
-
                     # below seems much more accurate at 60cm. How to use it?
                     center = use_aruco_corners_and_realsense_for_3D_point(depth_frame, corners[list_idx], color_intrin)
                     print('Center: {}'.format(center))  # TODO should print marker xyz here to make it easier to compare.
 
-                    # noticed my object points are in this range, not minus around center of aruco... so even object_points are wrong in aruco?
-                    '''
-                    array([[0.175 , 0.    , 0.    ],
-                            [0.2025, 0.    , 0.    ],
-                            [0.2025, 0.0275, 0.    ],
-                            [0.175 , 0.0275, 0.    ]], dtype=float32)
-                    
-                    marker_length = 0.0275. 0.2025 - 0.175 = 0.0275. 
-
-                    vs below
-                    array([[-0.01375,  0.01375,  0.     ],
-                            [ 0.01375,  0.01375,  0.     ],
-                            [ 0.01375, -0.01375,  0.     ],
-                            [-0.01375, -0.01375,  0.     ]])
-                    ''' 
-
-                    '''
-                    for id 4
-                    corners[0]
-                    (Pdb) array([[[521.10864, 337.49158],
-                            [525.71906, 385.10867],
-                            [422.8433 , 364.10492],
-                            [431.1671 , 320.4693 ]]], dtype=float32)
-                    ids[0]
-                    (Pdb) array([4], dtype=int32)
-                    obj_points[list_idx]
-                    (Pdb) array([[0.    , 0.    , 0.    ],
-                        [0.0275, 0.    , 0.    ],
-                        [0.0275, 0.0275, 0.    ],
-                        [0.    , 0.0275, 0.    ]], dtype=float32)
-                    obj_points[list_idx] + np.array([-half_marker_len, half_marker_len])
-                    obj_points[list_idx][:, 0:2] + np.array([-half_marker_len, half_marker_len]) but this ruins the last two y
-                    instead
-                    obj_points[list_idx][:2, 0:2] = obj_points[list_idx][:2, 0:2] + np.array([-half_marker_len, half_marker_len])
-                    obj_points[list_idx][2, 0] = obj_points[list_idx][2, 0] - half_marker_len
-                    obj_points[list_idx][3, 0] = obj_points[list_idx][3, 0] - half_marker_len
-                    obj_points[list_idx][2, 1] = obj_points[list_idx][2, 1] - marker_length
-                    obj_points[list_idx][3, 1] = obj_points[list_idx][3, 1] - marker_length
-                    '''
-                    # therefore the object points are using the first tvec rvec. 
-
                     # tvec, rvec = tvec_aruco, rvec_aruco  # using last. for easier assignment if multiple markers later.
                     tvec, rvec = id_1_tvec, id_1_rvec  # so I can build object points from the ground up... 
-
-                    # top_left_first = np.array([-half_marker_len, half_marker_len, 0.])
-                    # top_right_first = np.array([half_marker_len, half_marker_len, 0.])
-                    # bottom_right_first = np.array([half_marker_len, -half_marker_len, 0.])
-                    # bottom_left_first = np.array([-half_marker_len, -half_marker_len, 0.])
-
-                    # corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first])
-                    # imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
-                    # for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
-                    #     cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
-
-                    # top_left_2nd = np.array([-half_marker_len + marker_length, half_marker_len, 0.])
-                    # top_right_2nd = np.array([half_marker_len + marker_length, half_marker_len, 0.])
-                    # bottom_right_2nd = np.array([half_marker_len  + marker_length, -half_marker_len, 0.])
-                    # bottom_left_2nd = np.array([-half_marker_len  + marker_length, -half_marker_len, 0.])
-
-                    # corners_3d_points_2nd = np.array([top_left_2nd, top_right_2nd, bottom_right_2nd, bottom_left_2nd])
-
-                    # imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points_2nd, rvec, tvec, camera_matrix, dist_coeffs)
-                    # for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
-                    #     cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
-
-                    # def draw_circles_for
 
                     if id_1_tvec is not None and id_1_rvec is not None:
                         spacing = marker_length + marker_separation
@@ -382,13 +244,7 @@ if __name__ == '__main__':
 
                                 id_count += 1
                     
-                        # obj_points = all_obj
-                        # One validation that corners and corner_3d_points match: 
-                        # imagePointsCorners: [[274.0870951, 196.669700], [302.41902, 202.462821], [292.807514, 225.908426], [263.7825, 219.728288]]
-                        # corners: [[[274.1794 , 196.55408], [302.33575, 202.57216], [292.88254, 225.79572], [263.69882, 219.8472 ]]]
-                        
                         # TODO since they are so close, it is crazy to use solvePnP? Explain why
-                        # TODO even an aruco board with solve pnp would help here right?
                         # TODO glue the aruco marker to see if that helps much. 
 
                         cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
@@ -417,9 +273,6 @@ if __name__ == '__main__':
                 print('No corners detected')
             
             images = np.hstack((camera_color_img_debug, depth_colormap))
-            # images = np.hstack((camera_color_img_orig, depth_colormap))
-            # images = np.hstack((camera_color_img, depth_colormap))
-            # images = camera_color_img
             camera_color_img = cv2.cvtColor(camera_color_img, cv2.COLOR_BGR2RGB)  # for open3D
 
             cv2.imshow("image", images)
@@ -465,8 +318,7 @@ if __name__ == '__main__':
 
                 # outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(corners_3d_points, corners[0], camera_matrix, dist_coeffs)
                 
-                # full board
-                # import pdb;pdb.set_trace()
+                ##### full board
                 
                 # https://forum.opencv.org/t/pose-estimation-tvec-values-jumping-inconsistently/12705/2
                 # the above says use PNP iterative
@@ -474,37 +326,22 @@ if __name__ == '__main__':
                 # outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(obj_points, image_points, camera_matrix, dist_coeffs)  # TODO probably not in correct order? check 
                 # outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(obj_points), np.concatenate(image_points), camera_matrix, dist_coeffs)  # TODO probably not in correct order? check 
                 
+                # options: SOLVEPNP_ITERATIVE, A3Pnp, SOLVEPNP_IPPE
+                # TODO was concatenate needed?
+
                 # the below FINALLY WORKED!!
                 # outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(all_obj_points_found_from_id_1), np.concatenate(image_points), camera_matrix, dist_coeffs)
                 # outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(all_obj_points_found_from_id_1), np.concatenate(image_points), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_ITERATIVE)
                 outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(all_obj_points_found_from_id_1), np.concatenate(image_points), camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_IPPE)
                 
-                
-                
-                
-                # outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(obj_points), np.concatenate(image_points), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_ITERATIVE)
-                # outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(obj_points), np.concatenate(image_points), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_IPPE)
-                # TODO draw big board tvec rvec? 
                 # A3Pnp seems best compared to other here: https://www.youtube.com/watch?v=Efb0zux-_hU
-                # # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
-                # # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_IPPE)
-                # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs)
-                # # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_IPPE)
-                # # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
-                # # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
-                # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, corners[shoulder_motor_marker_id], camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
-                # # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_IPPE_SQUARE)
-                # # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, corners[0], camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_IPPE_SQUARE)
-                # # outval, rvec_arm, tvec_arm = cv2.solvePnP(np.array([[0.0, -y_offset, 0.0]]), corners[shoulder_motor_marker_id], camera_matrix, dist_coeffs)
 
                 # TODO better understand insides of that function and have good descriptions of cam2arm vs arm2cam.
                 cam2arm_opt, arm2cam_opt, _, _, _ = create_homogenous_transformations(tvec_pnp_opt, rvec_pnp_opt)
                 
-                
                 mesh_box_opt = o3d.geometry.TriangleMesh.create_box(width=1.0, height=1.0, depth=0.003)
                 mesh_box_opt.paint_uniform_color([1, 0, 0])
                 mesh_box_opt.transform(arm2cam_opt)
-                # mesh_box_opt.transform(cam2arm_opt)
 
                 # mesh_box_board = o3d.geometry.TriangleMesh.create_box(width=1.0, height=1.0, depth=0.003)
                 # mesh_box_board.paint_uniform_color([0, 0, 1])
