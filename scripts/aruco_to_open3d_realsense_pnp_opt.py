@@ -134,36 +134,15 @@ if __name__ == '__main__':
                     for obj_corner in marker:
                         all_obj_points_x.append(obj_corner[0])
                         all_obj_points_y.append(obj_corner[1])
-                        # TODO is x and y axis correct?
+                        # TODO is x and y axis correct? how to work it out
                         # all_obj_points_x.append(obj_corner[1])
                         # all_obj_points_y.append(obj_corner[0])
                 
                 # plt.scatter(all_obj_points_x, all_obj_points_y)
+                # colors_mpl = ['r', 'b', 'g', 'c', 'm', 'r', 'k', 'tab:brown', 'tab:pink', 'tab:gray', 'tab:olive', 'tab:purple', 'r']
+                # for id_idx in range(12): plt.scatter(all_obj_points_x[id_idx * 4:id_idx * 4 + 4], all_obj_points_y[id_idx * 4:id_idx * 4 + 4], c=colors_mpl[id_idx], label='{}'.format(id_idx))
                 # plt.show()
-                
-                # obj_points_from_aruco_lib, image_points = cv2.aruco.getBoardObjectAndImagePoints(board, corners, ids)
-                # # plt.scatter(obj_points_from_aruco_lib[:, 0, 0], obj_points_from_aruco_lib[:, 0, 1])
-                # # plt.scatter(obj_points_from_aruco_lib[:num_points, 0, 0], obj_points_from_aruco_lib[:num_points, 0, 1], c='r')
-                # # id_idx = 0
-                # # TODO why did each point go a different colour rather than each ID?!?!?!? is it a matplotlib error (OK, it was this one), id_idx error or a obj_points error?
-                # # for id_idx in range(3): plt.scatter(obj_points_from_aruco_lib[id_idx * 4:id_idx * 4 + 4, 0, 0], obj_points_from_aruco_lib[id_idx * 4:id_idx * 4 + 4, 0, 1], c=plt.cm.RdYlBu(id_idx), label='{}'.format(id_idx))
-                # # colors_mpl = ['r', 'b', 'g', 'c', 'm', 'y', 'k', 'tab:brown', 'tab:pink', 'tab:gray', 'tab:olive', 'tab:purple', 'r']
-                # # for id_idx in range(5): plt.scatter(obj_points_from_aruco_lib[id_idx * 4:id_idx * 4 + 4, 0, 0], obj_points_from_aruco_lib[id_idx * 4:id_idx * 4 + 4, 0, 1], c=colors_mpl[id_idx], label='{}'.format(id_idx))
-                # # plt.legend()
-                # # obj_points_from_aruco_lib are not in order 1-12
-                # # obj_points_from_aruco_lib are in same order as image_points. Wait, are they??!?! TODO not at all...
-                
-                # # TODO two main questions
-                # # TODO 1. Are the points in the correct order even if for 1 marker e.g. clockwise/anticlockwise etc. No answer yet.
-                # # TODO 2. Are the IDs (groups of 4 image points) in the correct order. Answer: no (because sometimes we draw marker without the below circles on it). Next question: how to put it in the right order?
-                
-                # # draw circles on points from found image points. First num_points. I think this shows that things are not in the same order
-                # num_points = num_ids_to_draw * 4
-                # for idx, (x, y) in enumerate(image_points.squeeze().tolist()[:num_points]):
-                #     cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx % 4], -1)
-
-                # # TODO I need tests or something. 
-                # print()
+                # 
 
                 # below: estimating entirePoseBoard from corners and ids but are they matched? doesn't work
                 # TODO why is it so similar to solvePnP though?
@@ -174,20 +153,25 @@ if __name__ == '__main__':
                     # cv2.drawFrameAxes(camera_color_img_debug, camera_matrix, dist_coeffs, board_rvec, board_tvec, marker_length * 2)
 
                 if ids is not None:
-                    # obj_points are in id 1-12 order
-                    # corners are in ids order. So just sort ids?
-                    # ids_list: [4, 3, 2, 1, 8, 7, 6, 5, 12, 11, 10, 9]
-                    # we want to get corner index 3 (id 1) first then index 2, etc
-                    # TODO everthing into functions.
-                    # TODO I want a perfect match between corners <-> ids <-> obj_points <-> img_points
-                    ids_list = [l[0] for l in ids.tolist()]
-                    ids_list_with_index_key_tuple = [(idx, id_) for idx, id_ in enumerate(ids_list)]
-                    ids_list_sorted = sorted(ids_list_with_index_key_tuple, key=lambda x: x[1])
+                    ######## old mapping from IDs to image points
+                    # # obj_points are in id 1-12 order.
+                    # # corners are in ids order. So just sort ids?
+                    # # ids_list: [4, 3, 2, 1, 8, 7, 6, 5, 12, 11, 10, 9]
+                    # # we want to get corner index 3 (id 1) first then index 2, etc
+                    # # TODO everthing into functions.
+                    # # TODO I want a perfect match between corners <-> ids <-> obj_points <-> img_points
+                    # ids_list = [l[0] for l in ids.tolist()]
+                    # ids_list_with_index_key_tuple = [(idx, id_) for idx, id_ in enumerate(ids_list)]
+                    # ids_list_sorted = sorted(ids_list_with_index_key_tuple, key=lambda x: x[1])
 
-                    image_points = []
+                    # image_points = []
                     ids_list = [x[0] for x in ids.tolist()]
-                    for idx_of_marker, id_of_marker in ids_list_sorted:
-                        image_points.append(corners[idx_of_marker].squeeze())
+                    # for idx_of_marker, id_of_marker in ids_list_sorted:
+                    #     image_points.append(corners[idx_of_marker].squeeze())
+
+
+                    # manual mapping, new way.
+                    ID_to_obj_point_idx_mapping = {1: 0, 2: 3, 3: 6, 4: 9, 5: 1, 6: 4, 7: 7, 8: 10, 9: 2, 10: 5, 11: 8, 12: 11}
                     
                     # Re-projection error gives a good estimation of just how exact the found parameters are. 
                     # mean_error = 0
@@ -221,21 +205,72 @@ if __name__ == '__main__':
 
                         # attempt to understand obj_points and img_points by only drawing first two
                         # TODO make it work with both and any set of ids e.g. 2 + 4. Both below do not work
-                        # To make it work with my own obj list
+                        # To make it work with my own obj list. # seems to create high numbers negative and positive million
                         imagePointsCorners, jacobian = cv2.projectPoints(obj_points[list_idx], rvec_aruco, tvec_aruco, camera_matrix, dist_coeffs)
                         # to make it work with:             obj_points, image_points = cv2.aruco.getBoardObjectAndImagePoints(board, corners, ids)
                         # imagePointsCorners, jacobian = cv2.projectPoints(obj_points_from_aruco_lib[list_idx:list_idx + 4], rvec_aruco, tvec_aruco, camera_matrix, dist_coeffs)
+
+                        # new manual mapping. Seems to create numbers in pixel space 0-640 but they're wrong. What if the order is wrong?
+                        # obj_point_index = ID_to_obj_point_idx_mapping[corner_id]
+                        # imagePointsCorners, jacobian = cv2.projectPoints(obj_points[obj_point_index], rvec_aruco, tvec_aruco, camera_matrix, dist_coeffs)
+
+                        # while in debug i can create new image
+                        # camera_color_img_debug2 = camera_color_img.copy()
+                        # for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()): print(x, y);cv2.circle(camera_color_img_debug2, (int(x), int(y)), 4, colors[idx], -1)
+                        # cv2.imshow('debug', camera_color_img_debug2)
+                        # cv2.waitKey(1)
+
+                        for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
+                            pass
+                            # print(x, y)
+                        #     print((int(x), int(y)))
+                        #     print(type((int(x), int(y))))
+                            # TODO why does float go to negative or positive a million? because it is wrong mapping 
+                            # TODO TRY TO JUST do 1 goddamn ID, I know ID 1 is top right from camera position. 
+                            # if x > 0 and x < 640 and y > 0 and y < 480:
+                            #     cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
+                        
+
+
+
+                        # TODO ahhhhh the below was copied. Each rvec tvec has a new coordinate frame. We have to choose one global one and then calculate all object points relative to that.
+                        # tvec, rvec = tvec_aruco, rvec_aruco  # using last. for easier assignment if multiple markers later.
+                        # half_marker_len = marker_length / 2
+                        # top_left_first = np.array([-half_marker_len, half_marker_len, 0.])
+                        # top_right_first = np.array([half_marker_len, half_marker_len, 0.])
+                        # bottom_right_first = np.array([half_marker_len, -half_marker_len, 0.])
+                        # bottom_left_first = np.array([-half_marker_len, -half_marker_len, 0.])
+
+                        # corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first])
+
+                        # imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
                         # for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
                         #     cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
 
+                        # for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()): cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
+
                     # below seems much more accurate at 60cm. How to use it?
                     center = use_aruco_corners_and_realsense_for_3D_point(depth_frame, corners[list_idx], color_intrin)
-                    print('Center: {}'.format(center))  # TODO should print marker xyz here to make it easier to compare
+                    print('Center: {}'.format(center))  # TODO should print marker xyz here to make it easier to compare.
 
-                    tvec, rvec = tvec_aruco, rvec_aruco  # for easier assignment if multiple markers later.
+                    # noticed my object points are in this range, not minus around center of aruco... so even object_points are wrong in aruco?
+                    '''
+                    array([[0.175 , 0.    , 0.    ],
+                            [0.2025, 0.    , 0.    ],
+                            [0.2025, 0.0275, 0.    ],
+                            [0.175 , 0.0275, 0.    ]], dtype=float32)
+                        
+                    vs below
+                    array([[-0.01375,  0.01375,  0.     ],
+                            [ 0.01375,  0.01375,  0.     ],
+                            [ 0.01375, -0.01375,  0.     ],
+                            [-0.01375, -0.01375,  0.     ]])
+                    ''' 
+                    # therefore the object points are using the first tvec rvec. 
+
+                    tvec, rvec = tvec_aruco, rvec_aruco  # using last. for easier assignment if multiple markers later.
 
                     half_marker_len = marker_length / 2
-                    
                     top_left_first = np.array([-half_marker_len, half_marker_len, 0.])
                     top_right_first = np.array([half_marker_len, half_marker_len, 0.])
                     bottom_right_first = np.array([half_marker_len, -half_marker_len, 0.])
@@ -243,15 +278,15 @@ if __name__ == '__main__':
 
                     corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first])
 
-                    # imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
-                    # for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
-                    #     cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
+                    imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
+                    for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
+                        cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
                     
                     # One validation that corners and corner_3d_points match: 
                     # imagePointsCorners: [[274.0870951, 196.669700], [302.41902, 202.462821], [292.807514, 225.908426], [263.7825, 219.728288]]
                     # corners: [[[274.1794 , 196.55408], [302.33575, 202.57216], [292.88254, 225.79572], [263.69882, 219.8472 ]]]
+                    
                     # TODO since they are so close, it is crazy to use solvePnP? Explain why
-
                     # TODO even an aruco board with solve pnp would help here right?
                     # TODO glue the aruco marker to see if that helps much. 
 
