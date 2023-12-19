@@ -150,9 +150,12 @@ if __name__ == '__main__':
                 # TODO why is it so similar to solvePnP though?
                 # still not working with proper marker_separation... 
                 retval, board_rvec, board_tvec = cv2.aruco.estimatePoseBoard(corners, ids, board, camera_matrix, dist_coeffs, np.empty(1), np.empty(1))
+                # TODO wat? [rvec, tvec, num] = cv.estimatePoseBoard(..., 'OptionName',optionValue, ...)
+                # ahh 	cv.aruco.estimatePoseBoard(	corners, ids, board, cameraMatrix, distCoeffs[, rvec[, tvec[, useExtrinsicGuess]]]	) ->	retval, rvec, tvec
                 if board_rvec is not None and board_rvec.shape[0] == 3:
                     cam2arm_board, arm2cam_board, _, _, _ = create_homogenous_transformations(board_tvec, board_rvec)
 
+                    # TODO wow, from above it became VERY STABLE but just pointing slightly wrong. 
                     cv2.drawFrameAxes(camera_color_img_debug, camera_matrix, dist_coeffs, board_rvec, board_tvec, marker_length * 2)
 
                 if ids is not None:
@@ -202,9 +205,12 @@ if __name__ == '__main__':
 
                     print(ids_list)  # TODO why are they always in order now??!!?
                     
+                    id_1_rvec, id_1_tvec = None, None
                     for list_idx, corner_id in enumerate(ids_list[0:num_ids_to_draw]):
                         if list_idx == 0:
                             rvec_aruco, tvec_aruco = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
+                        if corner_id == 1:
+                            id_1_rvec, id_1_tvec = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
                         # cv2.drawFrameAxes(camera_color_img_debug, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
 
                         # below worked for first marker but not for 2nd
@@ -255,8 +261,8 @@ if __name__ == '__main__':
 
 
 
-                        if list_idx == 1:
-                            break
+                        # if list_idx == 0:
+                            # break
 
 
 
@@ -329,7 +335,8 @@ if __name__ == '__main__':
                     '''
                     # therefore the object points are using the first tvec rvec. 
 
-                    tvec, rvec = tvec_aruco, rvec_aruco  # using last. for easier assignment if multiple markers later.
+                    # tvec, rvec = tvec_aruco, rvec_aruco  # using last. for easier assignment if multiple markers later.
+                    tvec, rvec = id_1_tvec, id_1_rvec  # so I can build object points from the ground up... 
 
                     # top_left_first = np.array([-half_marker_len, half_marker_len, 0.])
                     # top_right_first = np.array([half_marker_len, half_marker_len, 0.])
@@ -354,47 +361,51 @@ if __name__ == '__main__':
 
                     # def draw_circles_for
 
-                    spacing = marker_length + marker_separation
-                    # spacing = marker_length
-                    for x_ in range(4):
-                        top_left = np.array([-half_marker_len - x_ * spacing, half_marker_len, 0.])
-                        top_right = np.array([half_marker_len - x_ * spacing, half_marker_len, 0.])
-                        bottom_right = np.array([half_marker_len - x_ * spacing, -half_marker_len, 0.])
-                        bottom_left = np.array([-half_marker_len - x_ * spacing, -half_marker_len, 0.])
+                    if id_1_tvec is not None and id_1_rvec is not None:
+                        spacing = marker_length + marker_separation
+                        # the below is using first rvec/tvec and then stupidly going 4 left. I should instead use id 1 rvec/tvec
+                        for y_ in range(3):
+                            for x_ in range(4):
+                                top_left = np.array([-half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
+                                top_right = np.array([half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
+                                bottom_right = np.array([half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
+                                bottom_left = np.array([-half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
 
-                        corners_3d_points = np.array([top_left, top_right, bottom_right, bottom_left])
-                        imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
-                        for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
-                            cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
+                                corners_3d_points = np.array([top_left, top_right, bottom_right, bottom_left])
+                                imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
+                                for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
+                                    cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
                     
-                    # One validation that corners and corner_3d_points match: 
-                    # imagePointsCorners: [[274.0870951, 196.669700], [302.41902, 202.462821], [292.807514, 225.908426], [263.7825, 219.728288]]
-                    # corners: [[[274.1794 , 196.55408], [302.33575, 202.57216], [292.88254, 225.79572], [263.69882, 219.8472 ]]]
-                    
-                    # TODO since they are so close, it is crazy to use solvePnP? Explain why
-                    # TODO even an aruco board with solve pnp would help here right?
-                    # TODO glue the aruco marker to see if that helps much. 
+                        # One validation that corners and corner_3d_points match: 
+                        # imagePointsCorners: [[274.0870951, 196.669700], [302.41902, 202.462821], [292.807514, 225.908426], [263.7825, 219.728288]]
+                        # corners: [[[274.1794 , 196.55408], [302.33575, 202.57216], [292.88254, 225.79572], [263.69882, 219.8472 ]]]
+                        
+                        # TODO since they are so close, it is crazy to use solvePnP? Explain why
+                        # TODO even an aruco board with solve pnp would help here right?
+                        # TODO glue the aruco marker to see if that helps much. 
 
-                    cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
+                        cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
 
-                    # -- Get the attitude in terms of euler 321 (Needs to be flipped first)
-                    roll_marker, pitch_marker, yaw_marker = rotationMatrixToEulerAngles(opencv_aruco_image_text.R_flip * R_tc)
-                    # -- Get the attitude of the camera respect to the frame
-                    roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(opencv_aruco_image_text.R_flip * R_ct)  # todo no flip needed?
+                        # -- Get the attitude in terms of euler 321 (Needs to be flipped first)
+                        roll_marker, pitch_marker, yaw_marker = rotationMatrixToEulerAngles(opencv_aruco_image_text.R_flip * R_tc)
+                        # -- Get the attitude of the camera respect to the frame
+                        roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(opencv_aruco_image_text.R_flip * R_ct)  # todo no flip needed?
 
-                    marker_pose_history.append((tvec[0], tvec[1], tvec[2], 
-                                                math.degrees(roll_marker), math.degrees(pitch_marker), math.degrees(yaw_marker)))
+                        marker_pose_history.append((tvec[0], tvec[1], tvec[2], 
+                                                    math.degrees(roll_marker), math.degrees(pitch_marker), math.degrees(yaw_marker)))
 
-                    avg_6dof_pose = []
-                    for idx in range(6):
-                        marker_pose_history_idx_val = np.mean([v[idx] for v in marker_pose_history]).item()
-                        avg_6dof_pose.append(marker_pose_history_idx_val)
+                        avg_6dof_pose = []
+                        for idx in range(6):
+                            marker_pose_history_idx_val = np.mean([v[idx] for v in marker_pose_history]).item()
+                            avg_6dof_pose.append(marker_pose_history_idx_val)
 
-                    opencv_aruco_image_text.put_marker_text(camera_color_img_debug, tvec, roll_marker, pitch_marker, yaw_marker)
-                    opencv_aruco_image_text.put_camera_text(camera_color_img_debug, pos_camera, roll_camera, pitch_camera, yaw_camera)
-                    opencv_aruco_image_text.put_avg_marker_text(camera_color_img_debug, avg_6dof_pose)
+                        opencv_aruco_image_text.put_marker_text(camera_color_img_debug, tvec, roll_marker, pitch_marker, yaw_marker)
+                        opencv_aruco_image_text.put_camera_text(camera_color_img_debug, pos_camera, roll_camera, pitch_camera, yaw_camera)
+                        opencv_aruco_image_text.put_avg_marker_text(camera_color_img_debug, avg_6dof_pose)
 
-                    saved_cam2arm = cam2arm
+                        saved_cam2arm = cam2arm
+                    else:
+                        print('id 1 tvec/rvec is none?')
             else:
                 print('No corners detected')
             
