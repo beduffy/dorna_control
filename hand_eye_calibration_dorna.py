@@ -350,7 +350,7 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
                 x_offset_for_id_2 = 0.0
                 x_offset_for_id_4 = 0.0
                 
-                # project center into image with cyan?
+                # project center into image with cyan? TODO what are we projecting, name it better
                 imagePoints, jacobian = cv2.projectPoints(np.array([0.0, y_offset_for_id_1, 0.0]), rvec, tvec, camera_matrix, dist_coeffs)
                 x, y = imagePoints.squeeze().tolist()
                 cv2.circle(color_img, (int(x), int(y)), 5, (255, 255, 0), -1)
