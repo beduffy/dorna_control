@@ -45,6 +45,8 @@ if __name__ == '__main__':
     #                         [0., 0., 1.]])
 
     board, parameters, aruco_dict, marker_length = create_aruco_params()
+    half_marker_len = marker_length / 2
+    marker_separation = 0.006  # duplicated TODO 
     # show_matplotlib_all_aruco(aruco_dict)
 
     opencv_aruco_image_text = OpenCvArucoImageText()
@@ -146,11 +148,12 @@ if __name__ == '__main__':
 
                 # below: estimating entirePoseBoard from corners and ids but are they matched? doesn't work
                 # TODO why is it so similar to solvePnP though?
+                # still not working with proper marker_separation... 
                 retval, board_rvec, board_tvec = cv2.aruco.estimatePoseBoard(corners, ids, board, camera_matrix, dist_coeffs, np.empty(1), np.empty(1))
                 if board_rvec is not None and board_rvec.shape[0] == 3:
                     cam2arm_board, arm2cam_board, _, _, _ = create_homogenous_transformations(board_tvec, board_rvec)
 
-                    # cv2.drawFrameAxes(camera_color_img_debug, camera_matrix, dist_coeffs, board_rvec, board_tvec, marker_length * 2)
+                    cv2.drawFrameAxes(camera_color_img_debug, camera_matrix, dist_coeffs, board_rvec, board_tvec, marker_length * 2)
 
                 if ids is not None:
                     ######## old mapping from IDs to image points
@@ -200,8 +203,16 @@ if __name__ == '__main__':
                     print(ids_list)  # TODO why are they always in order now??!!?
                     
                     for list_idx, corner_id in enumerate(ids_list[0:num_ids_to_draw]):
-                        rvec_aruco, tvec_aruco = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
+                        if list_idx == 0:
+                            rvec_aruco, tvec_aruco = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
                         # cv2.drawFrameAxes(camera_color_img_debug, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
+
+                        # below worked for first marker but not for 2nd
+                        # obj_points[list_idx][:2, 0:2] = obj_points[list_idx][:2, 0:2] + np.array([-half_marker_len, half_marker_len])
+                        # obj_points[list_idx][2, 0] = obj_points[list_idx][2, 0] - half_marker_len
+                        # obj_points[list_idx][3, 0] = obj_points[list_idx][3, 0] - half_marker_len
+                        # obj_points[list_idx][2, 1] = obj_points[list_idx][2, 1] - marker_length - half_marker_len
+                        # obj_points[list_idx][3, 1] = obj_points[list_idx][3, 1] - marker_length - half_marker_len
 
                         # attempt to understand obj_points and img_points by only drawing first two
                         # TODO make it work with both and any set of ids e.g. 2 + 4. Both below do not work
@@ -228,8 +239,32 @@ if __name__ == '__main__':
                             # TODO why does float go to negative or positive a million? because it is wrong mapping 
                             # TODO TRY TO JUST do 1 goddamn ID, I know ID 1 is top right from camera position. 
                             # if x > 0 and x < 640 and y > 0 and y < 480:
-                            #     cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
+                            # cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
                         
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                        if list_idx == 1:
+                            break
+
+
+
+
+
+
+
+
 
 
 
@@ -259,28 +294,78 @@ if __name__ == '__main__':
                             [0.2025, 0.    , 0.    ],
                             [0.2025, 0.0275, 0.    ],
                             [0.175 , 0.0275, 0.    ]], dtype=float32)
-                        
+                    
+                    marker_length = 0.0275. 0.2025 - 0.175 = 0.0275. 
+
                     vs below
                     array([[-0.01375,  0.01375,  0.     ],
                             [ 0.01375,  0.01375,  0.     ],
                             [ 0.01375, -0.01375,  0.     ],
                             [-0.01375, -0.01375,  0.     ]])
                     ''' 
+
+                    '''
+                    for id 4
+                    corners[0]
+                    (Pdb) array([[[521.10864, 337.49158],
+                            [525.71906, 385.10867],
+                            [422.8433 , 364.10492],
+                            [431.1671 , 320.4693 ]]], dtype=float32)
+                    ids[0]
+                    (Pdb) array([4], dtype=int32)
+                    obj_points[list_idx]
+                    (Pdb) array([[0.    , 0.    , 0.    ],
+                        [0.0275, 0.    , 0.    ],
+                        [0.0275, 0.0275, 0.    ],
+                        [0.    , 0.0275, 0.    ]], dtype=float32)
+                    obj_points[list_idx] + np.array([-half_marker_len, half_marker_len])
+                    obj_points[list_idx][:, 0:2] + np.array([-half_marker_len, half_marker_len]) but this ruins the last two y
+                    instead
+                    obj_points[list_idx][:2, 0:2] = obj_points[list_idx][:2, 0:2] + np.array([-half_marker_len, half_marker_len])
+                    obj_points[list_idx][2, 0] = obj_points[list_idx][2, 0] - half_marker_len
+                    obj_points[list_idx][3, 0] = obj_points[list_idx][3, 0] - half_marker_len
+                    obj_points[list_idx][2, 1] = obj_points[list_idx][2, 1] - marker_length
+                    obj_points[list_idx][3, 1] = obj_points[list_idx][3, 1] - marker_length
+                    '''
                     # therefore the object points are using the first tvec rvec. 
 
                     tvec, rvec = tvec_aruco, rvec_aruco  # using last. for easier assignment if multiple markers later.
 
-                    half_marker_len = marker_length / 2
-                    top_left_first = np.array([-half_marker_len, half_marker_len, 0.])
-                    top_right_first = np.array([half_marker_len, half_marker_len, 0.])
-                    bottom_right_first = np.array([half_marker_len, -half_marker_len, 0.])
-                    bottom_left_first = np.array([-half_marker_len, -half_marker_len, 0.])
+                    # top_left_first = np.array([-half_marker_len, half_marker_len, 0.])
+                    # top_right_first = np.array([half_marker_len, half_marker_len, 0.])
+                    # bottom_right_first = np.array([half_marker_len, -half_marker_len, 0.])
+                    # bottom_left_first = np.array([-half_marker_len, -half_marker_len, 0.])
 
-                    corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first])
+                    # corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first])
+                    # imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
+                    # for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
+                    #     cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
 
-                    imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
-                    for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
-                        cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
+                    # top_left_2nd = np.array([-half_marker_len + marker_length, half_marker_len, 0.])
+                    # top_right_2nd = np.array([half_marker_len + marker_length, half_marker_len, 0.])
+                    # bottom_right_2nd = np.array([half_marker_len  + marker_length, -half_marker_len, 0.])
+                    # bottom_left_2nd = np.array([-half_marker_len  + marker_length, -half_marker_len, 0.])
+
+                    # corners_3d_points_2nd = np.array([top_left_2nd, top_right_2nd, bottom_right_2nd, bottom_left_2nd])
+
+                    # imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points_2nd, rvec, tvec, camera_matrix, dist_coeffs)
+                    # for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
+                    #     cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
+
+                    # def draw_circles_for
+
+                    spacing = marker_length + marker_separation
+                    # spacing = marker_length
+                    for x_ in range(4):
+                        top_left = np.array([-half_marker_len - x_ * spacing, half_marker_len, 0.])
+                        top_right = np.array([half_marker_len - x_ * spacing, half_marker_len, 0.])
+                        bottom_right = np.array([half_marker_len - x_ * spacing, -half_marker_len, 0.])
+                        bottom_left = np.array([-half_marker_len - x_ * spacing, -half_marker_len, 0.])
+
+                        corners_3d_points = np.array([top_left, top_right, bottom_right, bottom_left])
+                        imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
+                        for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
+                            cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx], -1)
                     
                     # One validation that corners and corner_3d_points match: 
                     # imagePointsCorners: [[274.0870951, 196.669700], [302.41902, 202.462821], [292.807514, 225.908426], [263.7825, 219.728288]]
