@@ -24,7 +24,7 @@ from lib.vision import isclose, dist, isRotationMatrix, rotationMatrixToEulerAng
 from lib.vision import get_full_pcd_from_rgbd, convert_cam_pcd_to_arm_pcd
 from lib.vision_config import camera_matrix, dist_coeffs, pinhole_camera_intrinsic
 from lib.realsense_helper import setup_start_realsense, realsense_get_frames, run_10_frames_to_wait_for_auto_exposure, use_aruco_corners_and_realsense_for_3D_point
-from lib.aruco_helper import create_aruco_params, aruco_detect_draw_get_transforms
+from lib.aruco_helper import create_aruco_params, aruco_detect_draw_get_transforms, show_matplotlib_all_aruco
 from lib.dorna_kinematics import i_k, f_k
 from lib.aruco_image_text import OpenCvArucoImageText
 
@@ -45,6 +45,7 @@ if __name__ == '__main__':
     #                         [0., 0., 1.]])
 
     board, parameters, aruco_dict, marker_length = create_aruco_params()
+    # show_matplotlib_all_aruco(aruco_dict)
 
     opencv_aruco_image_text = OpenCvArucoImageText()
 
@@ -71,7 +72,7 @@ if __name__ == '__main__':
             depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(camera_depth_img, alpha=0.03),
                                                 cv2.COLORMAP_JET)  # todo why does it look so bad, add more contrast?
             
-            ######### below is an attempt to undistort
+            ######### below is an attempt to undistort. But undistortion with depth camera pixel is hard?
             # camera_color_img_orig = camera_color_img.copy()
             # h, w = camera_color_img.shape[:2]
             # newcameramtx, roi = cv2.getOptimalNewCameraMatrix(camera_matrix, dist_coeffs, (w,h), 1, (w,h))
@@ -95,12 +96,15 @@ if __name__ == '__main__':
             corners, ids, rejectedImgPoints = aruco.detectMarkers(gray_data, aruco_dict,
                                                                 parameters=parameters)
             
-            # import pdb;pdb.set_trace()
             if corners:
                 # TODO Note DETECTmARKERS
                 # The function does not correct lens distortion or takes it into account. It's recommended to undistort input image with corresponding camera model, if camera parameters are known
                 # frame_markers = aruco.drawDetectedMarkers(camera_color_img_debug, corners, ids)  # TODO separate elsewhere? This function does too much?
-                frame_markers = aruco.drawDetectedMarkers(camera_color_img_debug, corners[0:2], ids[0:2]) 
+                
+                # only drawing first two
+                num_ids_to_draw = 12
+                frame_markers = aruco.drawDetectedMarkers(camera_color_img_debug, corners[0:num_ids_to_draw], ids[0:num_ids_to_draw]) 
+                # frame_markers = aruco.drawDetectedMarkers(camera_color_img_debug, corners, ids) 
                 all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
                 # TODO refine markers! https://docs.opencv.org/4.x/db/da9/tutorial_aruco_board_detection.html
 
@@ -120,10 +124,6 @@ if __name__ == '__main__':
                 #         }
                 #     }
                 # }
-                # # obj_points, image_points = cv2.aruco.getBoardObjectAndImagePoints(board, corners, ids)
-
-                # # plt.scatter(obj_points[:, 0, 0], obj_points[:, 0, 1])
-                # # plt.show()
 
                 # actually gets 12 markers
                 obj_points = board.objPoints  # in tuple format, hmm
@@ -141,27 +141,14 @@ if __name__ == '__main__':
                 # plt.scatter(all_obj_points_x, all_obj_points_y)
                 # plt.show()
                 
-                obj_points_from_aruco_lib, image_points = cv2.aruco.getBoardObjectAndImagePoints(board, corners, ids)
-                # plt.scatter(obj_points_from_aruco_lib[:, 0, 0], obj_points_from_aruco_lib[:, 0, 1])
-                # plt.scatter(obj_points_from_aruco_lib[:5, 0, 0], obj_points_from_aruco_lib[:5, 0, 1], c='r')
-                # obj_points_from_aruco_lib are not in order 1-12
-                # obj_points_from_aruco_lib are in same order as image_points
-                
 
-                for idx, (x, y) in enumerate(image_points.squeeze().tolist()[:5]):
-                    cv2.circle(camera_color_img_debug, (int(x), int(y)), 4, colors[idx % 4], -1)
-
-                # TODO I need tests or something. 
-                # import pdb;pdb.set_trace()
-                print()
-
-                # doesn't work
+                # below: estimating entirePoseBoard from corners and ids but are they matched? doesn't work
                 # TODO why is it so similar to solvePnP though?
                 retval, board_rvec, board_tvec = cv2.aruco.estimatePoseBoard(corners, ids, board, camera_matrix, dist_coeffs, np.empty(1), np.empty(1))
                 if board_rvec is not None and board_rvec.shape[0] == 3:
                     cam2arm_board, arm2cam_board, _, _, _ = create_homogenous_transformations(board_tvec, board_rvec)
 
-                    cv2.drawFrameAxes(camera_color_img_debug, camera_matrix, dist_coeffs, board_rvec, board_tvec, marker_length * 2)
+                    # cv2.drawFrameAxes(camera_color_img_debug, camera_matrix, dist_coeffs, board_rvec, board_tvec, marker_length * 2)
 
                 if ids is not None:
                     # obj_points are in id 1-12 order
@@ -205,12 +192,11 @@ if __name__ == '__main__':
 
                     print(ids_list)  # TODO why are they always in order now??!!?
                     
-                    for list_idx, corner_id in enumerate(ids_list[0:2]):
+                    for list_idx, corner_id in enumerate(ids_list[0:num_ids_to_draw]):
                         rvec_aruco, tvec_aruco = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
                         # cv2.drawFrameAxes(camera_color_img_debug, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
 
                         # attempt to understand obj_points and img_points by only drawing first two
-                        # import pdb;pdb.set_trace()
                         # TODO make it work with both and any set of ids e.g. 2 + 4. Both below do not work
                         # To make it work with my own obj list
                         imagePointsCorners, jacobian = cv2.projectPoints(obj_points[list_idx], rvec_aruco, tvec_aruco, camera_matrix, dist_coeffs)
@@ -242,7 +228,6 @@ if __name__ == '__main__':
                     # imagePointsCorners: [[274.0870951, 196.669700], [302.41902, 202.462821], [292.807514, 225.908426], [263.7825, 219.728288]]
                     # corners: [[[274.1794 , 196.55408], [302.33575, 202.57216], [292.88254, 225.79572], [263.69882, 219.8472 ]]]
                     # TODO since they are so close, it is crazy to use solvePnP? Explain why
-                    # import pdb;pdb.set_trace()
 
                     # TODO even an aruco board with solve pnp would help here right?
                     # TODO glue the aruco marker to see if that helps much. 
@@ -278,6 +263,8 @@ if __name__ == '__main__':
 
             cv2.imshow("image", images)
             # cv2.imshow('undistorted', dst)
+
+            ###### user input below
             k = cv2.waitKey(1)
 
             if k == ord('q'):
@@ -285,10 +272,13 @@ if __name__ == '__main__':
                 pipeline.stop()
                 break
 
-            # if k == ord(''):
+            if k == ord('d'):
+                # d for debug
+                import pdb;pdb.set_trace()
 
             # TODO everything below into function. It will even help the debugging process
             if k == ord('o'):
+                # o for open3D visualisation and solvePnP
                 cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img,
                                             pinhole_camera_intrinsic, visualise=False)
                 # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, 0.0)  # TODO do I need this or not?
@@ -339,6 +329,8 @@ if __name__ == '__main__':
 
                 # TODO better understand insides of that function and have good descriptions of cam2arm vs arm2cam.
                 cam2arm_opt, arm2cam_opt, _, _, _ = create_homogenous_transformations(tvec_pnp_opt, rvec_pnp_opt)
+                
+                
                 mesh_box_opt = o3d.geometry.TriangleMesh.create_box(width=1.0, height=1.0, depth=0.003)
                 mesh_box_opt.paint_uniform_color([1, 0.706, 0])
                 mesh_box_opt.transform(arm2cam_opt)

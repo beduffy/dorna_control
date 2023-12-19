@@ -56,6 +56,7 @@ def aruco_detect_draw_get_transforms(gray_data, camera_color_img, aruco_dict, pa
 
 
 def show_matplotlib_all_aruco(aruco_dict):
+    # TODO FileNotFoundError: [Errno 2] No such file or directory: 'data/markers.pdf' because I ran in scripts. Stop using absolute paths
     fig = plt.figure()
     nx = 4
     ny = 3
