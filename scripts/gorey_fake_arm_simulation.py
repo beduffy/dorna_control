@@ -22,42 +22,6 @@ from scipy import optimize
 
 from lib.vision import euler_yzx_to_axis_angle, rotationMatrixToEulerAngles, create_homogenous_transformations
 
-# https://www.geeksforgeeks.org/calibratehandeye-python-opencv/
-gripper_t = np.array([[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [ 
-                       1.0, 1.0, 0.0], [1.0, 0.0, 0.0]]) 
-  
-eye_coords = np.array([[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], 
-                       [1.0, 1.0, 0.0], [1.0, 0.0, 0.0]]) 
-  
-# rotation matrix between the target and camera 
-R_target2cam = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [ 
-                        0.0, 0.0, 1.0], [0.0, 0.0, 0.0]]) 
-  
-# translation vector between the target and camera 
-t_target2cam = np.array([0.0, 0.0, 0.0, 0.0]) 
-  
-# transformation matrix 
-R, T = cv2.calibrateHandEye(gripper_t, eye_coords, 
-                            R_target2cam, t_target2cam) 
-  
-# TODO but docs say order of inputs is: Well first two could be both rotation and translation in 3vecs???
-'''
-
-void cv::calibrateHandEye	(	InputArrayOfArrays 	R_gripper2base,
-InputArrayOfArrays 	t_gripper2base,
-InputArrayOfArrays 	R_target2cam,
-InputArrayOfArrays 	t_target2cam,
-OutputArray 	R_cam2gripper,
-OutputArray 	t_cam2gripper,
-HandEyeCalibrationMethod 	method = CALIB_HAND_EYE_TSAI 
-)		
-
-'''
-
-print(R)
-print(T)
-
-
 mesh_box_opt = o3d.geometry.TriangleMesh.create_box(width=0.1, height=0.1, depth=0.003)
 mesh_box_opt.paint_uniform_color([1, 0, 0])
 
@@ -165,8 +129,10 @@ for idx in range(gripper_t.shape[0]):
 # A minimum of 2 motions with non parallel rotation axes are necessary to determine the hand-eye transformation. 
 # So at least 3 different poses are required, but it is strongly recommended to use many more poses.
 
+# https://www.geeksforgeeks.org/calibratehandeye-python-opencv/
+
 # transformation matrix 
-# T, R = cv2.calibrateHandEye(gripper_t, eye_coords, 
+# T, R = cv2.calibrateHandEye(gripper_t, eye_coords,  # TODO but docs say order of inputs is: Well first two could be both rotation and translation in 3vecs???
 #                             R_target2cam, t_target2cam) 
 # R, T = cv2.calibrateHandEye(hand_rotations, gripper_t, 
 #                             hand_rotations, gripper_t)  # creates identity, which is good
