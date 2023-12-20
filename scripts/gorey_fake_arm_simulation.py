@@ -23,7 +23,7 @@ from scipy import optimize
 from lib.vision import isclose, dist, isRotationMatrix, rotationMatrixToEulerAngles, create_homogenous_transformations
 
 # https://www.geeksforgeeks.org/calibratehandeye-python-opencv/
-hand_coords = np.array([[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [ 
+gripper_t = np.array([[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [ 
                        1.0, 1.0, 0.0], [1.0, 0.0, 0.0]]) 
   
 eye_coords = np.array([[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], 
@@ -37,7 +37,7 @@ R_target2cam = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [
 t_target2cam = np.array([0.0, 0.0, 0.0, 0.0]) 
   
 # transformation matrix 
-R, T = cv2.calibrateHandEye(hand_coords, eye_coords, 
+R, T = cv2.calibrateHandEye(gripper_t, eye_coords, 
                             R_target2cam, t_target2cam) 
   
 # TODO but docs say order of inputs is: Well first two could be both rotation and translation in 3vecs???
@@ -116,7 +116,8 @@ camera_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size
 # I want camera to the right, pointing to the left 45 degrees left in yaw and 45 degrees down
 z, x, y, angle = euler_yzx_to_axis_angle(np.pi / 2, -np.pi / 2, 0)
 rvec = np.array([x, y, z])
-tvec = np.array([0.0, 0.3, 0.4])   # TODO why does 0.3 bring it down but 
+camera_position_rel_to_origin = np.array([0.0, 0.3, 0.4])
+tvec = camera_position_rel_to_origin   # TODO why does 0.3 bring it down but 
 cam2_arm, arm2_cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
 # camera_transformation = np.array(cam2_arm)
 camera_transformation = np.array(arm2_cam)  # makes more intuitive sense, 0.3 tvec brings bigger coordinate frame forwards. 
@@ -140,28 +141,63 @@ print('roll pitch yaw camera: ', roll_camera, pitch_camera, yaw_camera)
 
 
 
-hand_coords = np.array([[0.3, 0.0, 0.0], [0.4, 0.0, 0.0], [0.5, 0.0, 0.0]]) 
+gripper_t = np.array([[0.3, 0.0, 0.0], [0.4, 0.0, 0.0], [0.5, 0.0, 0.0], [0.6, 0.0, 0.0]]) 
   
-hand_rotations = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], 
-                            [0.0, 0.0, 0.0]]) 
+# hand_rotations = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], 
+#                             [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])  # non parallel motions make output be identity. ahhh
+hand_rotations = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.3], 
+                            [0.0, 0.0, 0.1], [0.0, 0.2, 0.0]]) 
   
-# rotation matrix between the target and camera 
-R_target2cam = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [ 
-                        0.0, 0.0, 1.0], [0.0, 0.0, 0.0]]) 
+# # rotation matrix between the target and camera 
+# R_target2cam = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [ 
+#                         0.0, 0.0, 1.0], [0.0, 0.0, 0.0]]) 
   
-# translation vector between the target and camera 
-t_target2cam = np.array([0.0, 0.0, 0.0, 0.0]) 
+# # translation vector between the target and camera 
+# t_target2cam = np.array([0.0, 0.0, 0.0, 0.0]) 
+
+# camera_position_rel_to_origin = np.array([0.0, 0.3, 0.4])
+t_target2cam = []
+R_target2cam = []
+print('camera_position_rel_to_origin: ', camera_position_rel_to_origin)
+for idx in range(gripper_t.shape[0]):
+    # print(idx, gripper_t[idx])
+    diff_in_translation = camera_position_rel_to_origin - gripper_t[idx]
+    # diff_in_translation = gripper_t[idx] - camera_position_rel_to_origin
+    print(idx, gripper_t[idx])
+    print(diff_in_translation)
+    t_target2cam.append(diff_in_translation)
+    R_target2cam.append(R_tc)
+
+    # 0 [0.3 0.  0. ]
+    # [-0.3  0.3  0.4]  # seems reasonable. We need to subtract 0.3 in x, move 0.3 to the right and 0.4 up in z
+    # 1 [0.4 0.  0. ]
+    # [-0.4  0.3  0.4]
+    # 2 [0.5 0.  0. ]
+    # [-0.5  0.3  0.4]
+
 
 # https://docs.opencv.org/4.x/d9/d0c/group__calib3d.html#gaebfc1c9f7434196a374c382abf43439b
 # InputArrayOfArrays 	R_gripper2base,
 # InputArrayOfArrays 	t_gripper2base,
 # InputArrayOfArrays 	R_target2cam,
 # InputArrayOfArrays 	t_target2cam,
+
+# R_gripper2base	Rotation part extracted from the homogeneous matrix that transforms a point expressed in the gripper frame to the robot base frame ( bTg). This is a vector (vector<Mat>) that contains the rotation, (3x3) rotation matrices or (3x1) rotation vectors, for all the transformations from gripper frame to robot base frame.
+# t_gripper2base	Translation part extracted from the homogeneous matrix that transforms a point expressed in the gripper frame to the robot base frame ( bTg). This is a vector (vector<Mat>) that contains the (3x1) translation vectors for all the transformations from gripper frame to robot base frame.
+# R_target2cam	Rotation part extracted from the homogeneous matrix that transforms a point expressed in the target frame to the camera frame ( cTt). This is a vector (vector<Mat>) that contains the rotation, (3x3) rotation matrices or (3x1) rotation vectors, for all the transformations from calibration target frame to camera frame.
+# t_target2cam	Rotation part extracted from the homogeneous matrix that transforms a point expressed in the target frame to the camera frame ( cTt). This is a vector (vector<Mat>) that contains the (3x1) translation vectors for all the transformations from calibration target frame to camera frame.
+
+# A minimum of 2 motions with non parallel rotation axes are necessary to determine the hand-eye transformation. 
+# So at least 3 different poses are required, but it is strongly recommended to use many more poses.
+
 # transformation matrix 
-# T, R = cv2.calibrateHandEye(hand_coords, eye_coords, 
+# T, R = cv2.calibrateHandEye(gripper_t, eye_coords, 
 #                             R_target2cam, t_target2cam) 
-R, T = cv2.calibrateHandEye(hand_rotations, hand_coords, 
-                            hand_rotations, hand_coords) 
+# R, T = cv2.calibrateHandEye(hand_rotations, gripper_t, 
+#                             hand_rotations, gripper_t)  # creates identity, which is good
+R, T = cv2.calibrateHandEye(hand_rotations, gripper_t,   # probably done unless inverse TODO prove it. if gripper is 0.3 forward do I need to subtract 0.3 to get to robot base frame? but gripper frame is 0.3 forward
+                            R_target2cam, t_target2cam)
+print('\nR and T')
 print(R)
 print(T)
 
