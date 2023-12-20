@@ -22,7 +22,46 @@ from scipy import optimize
 
 from lib.vision import isclose, dist, isRotationMatrix, rotationMatrixToEulerAngles, create_homogenous_transformations
 
+# https://www.geeksforgeeks.org/calibratehandeye-python-opencv/
+hand_coords = np.array([[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [ 
+                       1.0, 1.0, 0.0], [1.0, 0.0, 0.0]]) 
+  
+eye_coords = np.array([[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], 
+                       [1.0, 1.0, 0.0], [1.0, 0.0, 0.0]]) 
+  
+# rotation matrix between the target and camera 
+R_target2cam = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [ 
+                        0.0, 0.0, 1.0], [0.0, 0.0, 0.0]]) 
+  
+# translation vector between the target and camera 
+t_target2cam = np.array([0.0, 0.0, 0.0, 0.0]) 
+  
+# transformation matrix 
+R, T = cv2.calibrateHandEye(hand_coords, eye_coords, 
+                            R_target2cam, t_target2cam) 
+  
+# TODO but docs say order of inputs is: Well first two could be both rotation and translation in 3vecs???
+'''
 
+void cv::calibrateHandEye	(	InputArrayOfArrays 	R_gripper2base,
+InputArrayOfArrays 	t_gripper2base,
+InputArrayOfArrays 	R_target2cam,
+InputArrayOfArrays 	t_target2cam,
+OutputArray 	R_cam2gripper,
+OutputArray 	t_cam2gripper,
+HandEyeCalibrationMethod 	method = CALIB_HAND_EYE_TSAI 
+)		
+
+'''
+
+print(R)
+print(T)
+
+
+
+
+
+# TODO put into transformations library and same with rotationMatrixToEulerAngles, create_homogenous_transformations
 # https://stackoverflow.com/questions/58997792/how-do-you-convert-euler-angles-to-the-axis-angle-representation-in-python
 def euler_yzx_to_axis_angle(z_e, x_e, y_e, normalize=True):
     # Assuming the angles are in radians.
@@ -99,9 +138,45 @@ print('roll pitch yaw marker: ', roll_marker, pitch_marker, yaw_marker)
 roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(R_flip * R_ct)  # todo no flip needed?
 print('roll pitch yaw camera: ', roll_camera, pitch_camera, yaw_camera)
 
-arm_position_coord_frames = [coordinate_frame_1, coordinate_frame_2, coordinate_frame_3]
 
-list_of_geometry_elements = [origin_frame, camera_coordinate_frame] + arm_position_coord_frames
+
+hand_coords = np.array([[0.3, 0.0, 0.0], [0.4, 0.0, 0.0], [0.5, 0.0, 0.0]]) 
+  
+hand_rotations = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], 
+                            [0.0, 0.0, 0.0]]) 
+  
+# rotation matrix between the target and camera 
+R_target2cam = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [ 
+                        0.0, 0.0, 1.0], [0.0, 0.0, 0.0]]) 
+  
+# translation vector between the target and camera 
+t_target2cam = np.array([0.0, 0.0, 0.0, 0.0]) 
+
+# https://docs.opencv.org/4.x/d9/d0c/group__calib3d.html#gaebfc1c9f7434196a374c382abf43439b
+# InputArrayOfArrays 	R_gripper2base,
+# InputArrayOfArrays 	t_gripper2base,
+# InputArrayOfArrays 	R_target2cam,
+# InputArrayOfArrays 	t_target2cam,
+# transformation matrix 
+# T, R = cv2.calibrateHandEye(hand_coords, eye_coords, 
+#                             R_target2cam, t_target2cam) 
+R, T = cv2.calibrateHandEye(hand_rotations, hand_coords, 
+                            hand_rotations, hand_coords) 
+print(R)
+print(T)
+
+estimated_cam2_arm_transform = np.identity(4)
+estimated_cam2_arm_transform[:3, :3] = R
+estimated_cam2_arm_transform[0, 3] = T[0]
+estimated_cam2_arm_transform[1, 3] = T[1]
+estimated_cam2_arm_transform[2, 3] = T[2]
+
+estimated_camera_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size * 1.5, origin=[0.0, 0.0, 0.0])
+estimated_camera_coordinate_frame.transform(estimated_cam2_arm_transform)
+
+
+arm_position_coord_frames = [coordinate_frame_1, coordinate_frame_2, coordinate_frame_3]
+list_of_geometry_elements = [origin_frame, camera_coordinate_frame, estimated_camera_coordinate_frame] + arm_position_coord_frames
 o3d.visualization.draw_geometries(list_of_geometry_elements)
 
 
