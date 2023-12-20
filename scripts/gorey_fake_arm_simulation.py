@@ -145,8 +145,16 @@ gripper_t = np.array([[0.3, 0.0, 0.0], [0.4, 0.0, 0.0], [0.5, 0.0, 0.0], [0.6, 0
   
 # hand_rotations = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], 
 #                             [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])  # non parallel motions make output be identity. ahhh
-hand_rotations = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.3], 
-                            [0.0, 0.0, 0.1], [0.0, 0.2, 0.0]]) 
+# hand_rotations = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.3], 
+#                             [0.0, 0.0, 0.1], [0.0, 0.2, 0.0]]) 
+
+# only rotation in roll since that won't ruin my simple translation. But they're still parallel? well only the x axis?
+hand_rotations = []
+rotations_in_roll = [0.1, -0.1, 0.2, 0]
+for i in range(gripper_t.shape[0]):
+    z, x, y, angle = euler_yzx_to_axis_angle(0, 0, rotations_in_roll[i])
+    hand_rotations.append(np.array([x, y, z]))
+hand_rotations = np.array(hand_rotations)
   
 # # rotation matrix between the target and camera 
 # R_target2cam = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [ 
