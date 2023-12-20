@@ -33,8 +33,6 @@ coordinate_frame_3 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size
 
 camera_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size * 1.3, origin=[0.0, 0.0, 0.0])
 
-# TODO we can obviously go from rotation axis -> rotation matrix -> euler angles (two versions). But how to go backwards?
-
 # rvec = np.array([1.0, 1.0, 1.0])
 # z, x, y, angle = euler_yzx_to_axis_angle(np.pi / 2, 0, 0)  # pointing left in yaw, 45 deg. red.
 # z, x, y, angle = euler_yzx_to_axis_angle(0, np.pi / 2, 0)  # pointing up in pitch 45 degrees. 
