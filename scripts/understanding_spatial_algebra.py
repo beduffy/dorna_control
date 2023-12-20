@@ -60,25 +60,33 @@ print(first_transformation_inverse)
 condition = all(np.isclose(([-0.3, 0.0, 0.0]), np.array([-0.30000003, 0.00000000001, 0.00000000001])))
 assert_condition_and_print(condition)
 
-# testing understanding of transformation and inverse transformation
+# import pdb;pdb.set_trace()
+####### testing understanding of transformation and inverse transformation
 # condition = all(np.isclose(np.dot(origin_np, first_transformation)[0:3], np.array([-0.3, 0.0, 0.0])))  # my first understanding was wrong
-# Multiplying a point by homogenous matrix transformation brings a point from origin frame to F1 frame
-condition = all(np.isclose(np.dot(origin_np, first_transformation)[0:3], np.array([0.0, 0.0, 0.0])))
+# Multiplying a point by homogenous matrix transformation brings a point from origin frame to F1 frame e.g. [0, 0, 0] -> [0.3, 0, 0]
+# p_OF1_O meaning "position of F1 measured from origin expressed in origin frame"
+p_OF1_O = np.dot(first_transformation, origin_np)[0:3]
+condition = all(np.isclose(p_OF1_O, np.array([0.3, 0.0, 0.0])))
+print('Transformed point (p_OF1_O): ', p_OF1_O)
 assert_condition_and_print(condition)
 
-# Multiplying a point by it's inverse transform brings a point from F1 frame to origin frame
-print(np.dot(origin_np, first_transformation_inverse)[0:3])  # omg, it has to be the other way around
-import pdb;pdb.set_trace()
-condition = all(np.isclose(np.dot(origin_np, first_transformation_inverse)[0:3], np.array([-0.3, 0.0, 0.0])))
+# Multiplying a point by it's inverse transform brings a point from F1 frame to origin frame e.g. [0, 0, 0] -> [-0.3, 0, 0] 
+# print(np.dot(origin_np, first_transformation_inverse)[0:3])  # omg, this gives [0, 0, 0] it has to be the other way around
+# TODO wait, what does this mean? are we in the origin frame now or still in F1 frame? Wait, it's all in the notion:
+# p_BA_C means "point/position of A measured from B expressed in C". So the below is:
+# p_F1O_O meaning "position of origin measured from F1 expressed in origin frame" # TODO is it expressed in origin frame or not?
+p_F1O_O = np.dot(first_transformation_inverse, origin_np)[0:3]
+print('Transformed point (p_F1O_O): ', p_F1O_O)
+condition = all(np.isclose(p_F1O_O, np.array([-0.3, 0.0, 0.0])))
 assert_condition_and_print(condition)
 
-condition = all(np.isclose(np.dot(np.array([0.3, 0.0, 0.0, 1.0]), first_transformation)[0:3], np.array([0.3, 0.0, 0.0])))
+condition = all(np.isclose(np.dot(first_transformation, np.array([0.3, 0.0, 0.0, 1.0]))[0:3], np.array([0.6, 0.0, 0.0])))
 assert_condition_and_print(condition)
 
-condition = all(np.isclose(np.dot(np.array([-0.3, 0.0, 0.0, 1.0]), first_transformation)[0:3], np.array([-0.3, 0.0, 0.0])))
+condition = all(np.isclose(np.dot(first_transformation, np.array([-0.3, 0.0, 0.0, 1.0]))[0:3], np.array([0.0, 0.0, 0.0])))
 assert_condition_and_print(condition)
 
-condition = all(np.isclose(np.dot(np.array([-0.3, 0.0, 0.0, 1.0]), first_transformation_inverse)[0:3], np.array([-0.3, 0.0, 0.0])))
+condition = all(np.isclose(np.dot(first_transformation_inverse, np.array([-0.3, 0.0, 0.0, 1.0]))[0:3], np.array([-0.6, 0.0, 0.0])))
 assert_condition_and_print(condition)
 
 
