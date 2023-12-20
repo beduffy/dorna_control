@@ -28,6 +28,8 @@ def assert_condition_and_print(condition):
 
 # TODO create multiple transformations. Compose and join them together into one transformation 
 # and easily understand transforming between two frames
+# https://manipulation.csail.mit.edu/pick.html
+
 
 size = 0.1
 # origin frame
@@ -79,6 +81,8 @@ f2_frame.transform(joined_f1_f2_transformation)
 inverse_joined_f1_f2_transformation = get_inverse_homogenous_transform(joined_f1_f2_transformation)
 
 
+# TODO wait poses are not expressed in anything? but points are... But what am I dealing with?
+# Russ: We do not use the "expressed in" frame subscript for pose; we always want the pose expressed in the reference frame.
 
 
 # import pdb;pdb.set_trace()
@@ -92,6 +96,11 @@ print('First transformation inverse (this brings points from origin frame to F1 
 print(first_transformation_inverse)
 print('Second transformation from frame F1 to F2 (this brings points from F1 to F2 e.g. ):')
 print(second_transformation)
+
+# From Russ notes:
+# Multiplication by a rotation can be used to change the "expressed in" frame:
+# You might be surprised that a rotation alone is enough to change the expressed-in frame, but it's true. 
+# The position of the expressed-in frame does not affect the relative position between two points.
 
 # testing numpy is close float check
 condition = all(np.isclose(([-0.3, 0.0, 0.0]), np.array([-0.30000003, 0.00000000001, 0.00000000001])))
@@ -132,7 +141,7 @@ assert_condition_and_print(condition)
 
 # brings points from f2 to origin frame. Here's were things get funky. So we rotated 90 degrees left in yaw. So yeah:
 # we have to go back -0.3 in x and then y is positive because we rotated!!!
-p_F2O_O = np.dot(inverse_joined_f1_f2_transformation, np.array([0.0, 0.0, 0.0, 1.0]))[0:3]  # TODO expressed in F1
+p_F2O_O = np.dot(inverse_joined_f1_f2_transformation, np.array([0.0, 0.0, 0.0, 1.0]))[0:3]  # TODO expressed in F2
 print(p_F2O_O)
 condition = all(np.isclose(p_F2O_O, np.array([-0.3, 0.3, 0.0])))
 assert_condition_and_print(condition)
