@@ -155,7 +155,11 @@ for i in range(gripper_t.shape[0]):
     z, x, y, angle = euler_yzx_to_axis_angle(0, 0, rotations_in_roll[i])
     hand_rotations.append(np.array([x, y, z]))
 hand_rotations = np.array(hand_rotations)
-  
+
+# TODO study spatial algebra. Find transformation between any two coordinate frames
+# TODO nah, I create the transformation, so just create 3-6+ non-stupid transformations (translation is always easy), rotation matrices I'm finding above
+# TODO well continuing. Easy to find all transformation from origin/arm base to gripper. a bit harder to find from camera to gripper. Can I just add both? probably yes! 
+
 # # rotation matrix between the target and camera 
 # R_target2cam = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [ 
 #                         0.0, 0.0, 1.0], [0.0, 0.0, 0.0]]) 
