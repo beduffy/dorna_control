@@ -20,8 +20,11 @@ from mpl_toolkits import mplot3d
 import matplotlib as mpl
 from scipy import optimize
 
-from lib.vision import euler_yzx_to_axis_angle, rotationMatrixToEulerAngles, create_homogenous_transformations
+from lib.vision import euler_yzx_to_axis_angle, rotationMatrixToEulerAngles, create_homogenous_transformations, get_inverse_homogenous_transform
 
+def assert_condition_and_print(condition):
+    print(condition)
+    assert condition
 
 # TODO create multiple transformations. Compose and join them together into one transformation 
 # and easily understand transforming between two frames
@@ -29,17 +32,19 @@ from lib.vision import euler_yzx_to_axis_angle, rotationMatrixToEulerAngles, cre
 size = 0.1
 # origin frame
 origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.0, 0.0, 0.0])
+origin_np = np.array([0.0, 0.0, 0.0, 1.0])
 
 # first transformation into frame F1
 translate = [0.3, 0, 0]
 first_transformation = np.identity(4)
-
-# first_transformation[:3, :3] = np.identity(3)  # no transformation
+# first_transformation[:3, :3] = np.identity(3)  # no rotation
 first_transformation[0, 3] = translate[0]
 first_transformation[1, 3] = translate[1]
 first_transformation[2, 3] = translate[2]
+f1_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.0, 0.0, 0.0])
+f1_frame.transform(first_transformation)
 
-origin_np = np.array([0.0, 0.0, 0.0, 1.0])
+first_transformation_inverse = get_inverse_homogenous_transform(first_transformation)
 
 # import pdb;pdb.set_trace()
 
@@ -48,28 +53,38 @@ print(first_transformation.shape)
 
 print('First transformation, frame F1 (this brings points from origin frame to F1):')
 print(first_transformation)
+print('First transformation inverse,:')
+print(first_transformation_inverse)
 
 # testing numpy is close float check
 condition = all(np.isclose(([-0.3, 0.0, 0.0]), np.array([-0.30000003, 0.00000000001, 0.00000000001])))
-print(condition)
-assert condition
+assert_condition_and_print(condition)
 
 # testing understanding of transformation and inverse transformation
 # condition = all(np.isclose(np.dot(origin_np, first_transformation)[0:3], np.array([-0.3, 0.0, 0.0])))  # my first understanding was wrong
 # Multiplying a point by homogenous matrix transformation brings a point from origin frame to F1 frame
 condition = all(np.isclose(np.dot(origin_np, first_transformation)[0:3], np.array([0.0, 0.0, 0.0])))
-print(condition)
-assert condition
+assert_condition_and_print(condition)
+
+# Multiplying a point by it's inverse transform brings a point from F1 frame to origin frame
+print(np.dot(origin_np, first_transformation_inverse)[0:3])  # omg, it has to be the other way around
+import pdb;pdb.set_trace()
+condition = all(np.isclose(np.dot(origin_np, first_transformation_inverse)[0:3], np.array([-0.3, 0.0, 0.0])))
+assert_condition_and_print(condition)
 
 condition = all(np.isclose(np.dot(np.array([0.3, 0.0, 0.0, 1.0]), first_transformation)[0:3], np.array([0.3, 0.0, 0.0])))
-print(condition)
-assert condition
+assert_condition_and_print(condition)
 
 condition = all(np.isclose(np.dot(np.array([-0.3, 0.0, 0.0, 1.0]), first_transformation)[0:3], np.array([-0.3, 0.0, 0.0])))
-print(condition)
-assert condition
+assert_condition_and_print(condition)
+
+condition = all(np.isclose(np.dot(np.array([-0.3, 0.0, 0.0, 1.0]), first_transformation_inverse)[0:3], np.array([-0.3, 0.0, 0.0])))
+assert_condition_and_print(condition)
 
 
+
+list_of_geometry_elements = [origin_frame, f1_frame]
+o3d.visualization.draw_geometries(list_of_geometry_elements)
 
 
 
