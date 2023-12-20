@@ -39,8 +39,8 @@ camera_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size
 # z, x, y, angle = euler_yzx_to_axis_angle(0, 0, np.pi / 2)  # rolling right 45 degrees.
 
 # I want camera to the right, pointing to the left 45 degrees left in yaw and 45 degrees down
-z, x, y, angle = euler_yzx_to_axis_angle(np.pi / 2, -np.pi / 2, 0)
-rvec = np.array([x, y, z])
+z, x, y, angle = euler_yzx_to_axis_angle(np.pi / 2, -np.pi / 2, 0)  # TODO shouldn't pi / 2 be 90 degrees and not 45??!?!!? yep
+rvec = np.array([x, y, z])  
 camera_position_rel_to_origin = np.array([0.0, 0.3, 0.4])
 tvec = camera_position_rel_to_origin   # TODO why does 0.3 bring it down but 
 cam2_arm, arm2_cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
