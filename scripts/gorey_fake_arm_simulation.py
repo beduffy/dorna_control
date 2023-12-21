@@ -30,10 +30,11 @@ origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, orig
 # TODO should be transforming all from origin. ok done below. 
 
 gripper_euler_angles = [
-    [0, 0, 0],
-    [0, 0, 0],
-    [0, 0, 0],
+    [0.1, 0, 0],
+    [0.2, 0, 0],
+    [0.3, 0, 0],
 ]
+# if I only changed rolls then we get 
 gripper_translations = [
     [0.3, 0.0, 0.0],
     [0.4, 0.0, 0.0],
@@ -41,19 +42,23 @@ gripper_translations = [
 ]
 
 coordinate_frames_o3d = []
-all_transformations = []
+all_transformations_to_gripper = []
+all_inverse_transformations_to_gripper = []
 for eul_angles, translate in zip(gripper_euler_angles, gripper_translations):
     transformation = np.identity(4)
-    transformation[:3, :3] = np.identity(3)  # no rotation
-    # TODO eul_angles
+    # transformation[:3, :3] = np.identity(3)  # no rotation
+    r = Rotation.from_euler("xyz", eul_angles, degrees=False)  # roll pitch yaw = xyz  
+    new_rotation_matrix = r.as_matrix()
+    transformation[:3, :3] = new_rotation_matrix
     transformation[0, 3] = translate[0]
     transformation[1, 3] = translate[1]
     transformation[2, 3] = translate[2]
     transformation_inverse = get_inverse_homogenous_transform(transformation)
+    all_inverse_transformations_to_gripper.append(transformation_inverse)
 
     coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.0, 0.0, 0.0])
     coordinate_frame.transform(transformation)
-    all_transformations.append(transformation)
+    all_transformations_to_gripper.append(transformation)
 
     coordinate_frames_o3d.append(coordinate_frame)
 
@@ -102,21 +107,38 @@ camera_coordinate_frame.transform(camera_transformation)
 
 all_transformation_target2cam = []  # transforms a point expressed in the target frame to the camera frame ( cTt)
 all_transformation_cam2target = []  # therefore transforms a point in the camera frame to the target frame
-for transformation in all_transformations:
-    transformation_from_camera_to_coord_frame_1 = np.dot(camera_inverse_transformation, transformation)
+for transformation in all_transformations_to_gripper:
+    transformation_from_camera_to_coord_frame = np.dot(camera_inverse_transformation, transformation)
     # np.dot(transformation_from_camera_to_coord_frame_1, np.array([0.0, 0.0, 0.0, 1.0]))  # unituitive numbers due to rotation
     # the above takes a point in camera frame to target frame
-    all_transformation_cam2target.append(transformation_from_camera_to_coord_frame_1)
+    all_transformation_cam2target.append(transformation_from_camera_to_coord_frame)
 
-    inverse_transformation_from_camera_to_coord_frame_1 = get_inverse_homogenous_transform(transformation_from_camera_to_coord_frame_1)
-    # np.dot(inverse_transformation_from_camera_to_coord_frame_1, np.array([0.0, 0.0, 0.0, 1.0])) 
+    inverse_transformation_from_camera_to_coord_frame = get_inverse_homogenous_transform(transformation_from_camera_to_coord_frame)
+    print(np.dot(inverse_transformation_from_camera_to_coord_frame, np.array([0.0, 0.0, 0.0, 1.0])))
     # array([-0.3,  0.3,  0.4,  1. ])  # correct! for first frame. Yes! 
     # the above takes a point in target frame (origin 0, 0, 0) to camera frame by going back -0.3, right 0.3 and up in z 0.4
 
-    all_transformation_target2cam.append(inverse_transformation_from_camera_to_coord_frame_1)
+    all_transformation_target2cam.append(inverse_transformation_from_camera_to_coord_frame)
+
+# extract R_target2cam and t_target2cam
+R_target2cam = []
+t_target2cam = []
+for transformation in all_transformation_target2cam:
+    # TODO below is a source of error, double check
+    R_target2cam.append(transformation[:3, :3])
+    t_target2cam.append(transformation[:3, 3])
 
 
-import pdb;pdb.set_trace()
+R_gripper2base = []
+t_gripper2base = []
+# TODO needs to be inverted?
+# for transformation in all_transformations_to_gripper:
+for transformation in all_inverse_transformations_to_gripper:  # inversely correctly bring [0,0,0] -> [-0.3, 0, 0] to go from gripper to base
+    # import pdb;pdb.set_trace()
+    # TODO below is a source of error, double check
+    R_gripper2base.append(transformation[:3, :3])
+    t_gripper2base.append(transformation[:3, 3])
+
 
 # coord_frame
 
@@ -125,7 +147,23 @@ import pdb;pdb.set_trace()
 # origin_frame_transformed_from_camera_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size * 1.3, origin=[0.0, 0.0, 0.0])
 # camera_inverse_transformation
 
+# R_gripper2base	Rotation part extracted from the homogeneous matrix that transforms a point expressed in the gripper frame to the robot base frame ( bTg). This is a vector (vector<Mat>) that contains the rotation, (3x3) rotation matrices or (3x1) rotation vectors, for all the transformations from gripper frame to robot base frame.
+# t_gripper2base	Translation part extracted from the homogeneous matrix that transforms a point expressed in the gripper frame to the robot base frame ( bTg). This is a vector (vector<Mat>) that contains the (3x1) translation vectors for all the transformations from gripper frame to robot base frame.
+# R_target2cam	Rotation part extracted from the homogeneous matrix that transforms a point expressed in the target frame to the camera frame ( cTt). This is a vector (vector<Mat>) that contains the rotation, (3x3) rotation matrices or (3x1) rotation vectors, for all the transformations from calibration target frame to camera frame.
+# t_target2cam	Rotation part extracted from the homogeneous matrix that transforms a point expressed in the target frame to the camera frame ( cTt). This is a vector (vector<Mat>) that contains the (3x1) translation vectors for all the transformations from calibration target frame to camera frame.
 
+
+
+
+R, T = cv2.calibrateHandEye(R_gripper2base, t_gripper2base,
+                            R_target2cam, t_target2cam)
+print('\nR and T')
+print(R)
+print(T)
+
+# We know ground truth
+print('Ground truth:')
+print(camera_transformation)
 
 
 
