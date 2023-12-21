@@ -56,21 +56,20 @@ def rtvec_from_matrix(M):
 size = 0.1
 origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.0, 0.0, 0.0])
 
-# TODO should be transforming all from origin. ok done below. 
+# 3 points works for when no rotation in camera, but fails when there is
+# gripper_euler_angles = [
+#     [0.1, 0, 0],
+#     [0.2, 0, 0],
+#     [0.3, 0, 0],
+# ]
+# # if I only changed rolls then we get nice expected effects
+# gripper_translations = [
+#     [0.3, 0.0, 0.0],
+#     [0.4, 0.0, 0.0],
+#     [0.5, 0.0, 0.0],
+# ]
 
-gripper_euler_angles = [
-    [0.1, 0, 0],
-    [0.2, 0, 0],
-    [0.3, 0, 0],
-]
-# if I only changed rolls then we get nice expected effects
-gripper_translations = [
-    [0.3, 0.0, 0.0],
-    [0.4, 0.0, 0.0],
-    [0.5, 0.0, 0.0],
-]
-
-# # trying more manually specified random  poses
+# # # trying more manually specified random  poses
 # gripper_euler_angles = [
 #     [0.1, 0, 0.5],
 #     [0.2, 0.1, 0.6],
@@ -90,13 +89,13 @@ gripper_translations = [
 # ]
 
 # random poses
-# num_poses = 10
-# gripper_euler_angles = []
-# gripper_translations = []
-# size_of_random_vecs = (3,)
-# for i in range(num_poses):
-#     gripper_euler_angles.append(np.random.uniform(size=size_of_random_vecs).tolist())
-#     gripper_translations.append(np.random.uniform(size=size_of_random_vecs).tolist())
+num_poses = 10
+gripper_euler_angles = []
+gripper_translations = []
+size_of_random_vecs = (3,)
+for i in range(num_poses):
+    gripper_euler_angles.append(np.random.uniform(size=size_of_random_vecs).tolist())
+    gripper_translations.append(np.random.uniform(size=size_of_random_vecs).tolist())
 
 # Calculate all gripper frames and transformations
 coordinate_frames_o3d = []
@@ -130,6 +129,7 @@ for eul_angles, translate in zip(gripper_euler_angles, gripper_translations):
 
 # I want camera to the right, pointing to the left 45 degrees left in yaw and 45 degrees down
 z, x, y, angle = euler_yzx_to_axis_angle(np.pi / 2, -np.pi / 2, 0)  # TODO shouldn't pi / 2 be 90 degrees and not 45??!?!!? yep
+z, x, y, angle = euler_yzx_to_axis_angle(np.pi / 2, -np.pi / 2, np.pi)  # TODO shouldn't pi / 2 be 90 degrees and not 45??!?!!? yep
 
 
  
@@ -149,7 +149,7 @@ rvec = np.array([x, y, z])
 
 # TODO wait i don't even need field of view since no camera in these experiments!!!!! It's just math and optimisation. 
 # TODO So i could chose to not rotate camera for now just to verify everything! 
-# rvec = np.array([0.0, 0.0, 0.0])
+# rvec = np.array([1.0, 0.0, 0.0])
 camera_position_rel_to_origin = np.array([0.0, 0.3, 0.4])
 tvec = camera_position_rel_to_origin   # TODO why does 0.3 bring it down but 
 cam2_arm, arm2_cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
@@ -184,16 +184,15 @@ for transformation in all_transformations_to_gripper:
     # array([-0.3,  0.3,  0.4,  1. ])  # correct! for first frame. Yes! 
     # the above takes a point in target frame (origin 0, 0, 0) to camera frame by going back -0.3, right 0.3 and up in z 0.4
 
-    # all_transformation_target2cam.append(inverse_transformation_from_camera_to_coord_frame)
+    # all_transformation_target2cam.append(inverse_transformation_from_camera_to_coord_frame)  # this was wrong, my understanding of cam2target was wrong. 
     
     
     
     
     # TODO WTF?
-    
-    
-    
-    
+    # TODO are docs correct?!?! 
+    # but i literally called it transformation_from_camera_to_coord_frame -> cam2target?
+    # so we take points in cam frame to target frame. But docs say points in target frame to camera frame, 
     all_transformation_target2cam.append(transformation_from_camera_to_coord_frame)
 
 # extract R_target2cam and t_target2cam
@@ -243,7 +242,7 @@ for transformation in all_inverse_transformations_to_gripper:  # inversely corre
 # calibrateHandEye(R_gripper2base, t_gripper2base, R_target2cam, t_target2cam, R_cam2gripper_est, t_cam2gripper_est, methods[idx]);
 
 method = cv2.CALIB_HAND_EYE_TSAI  # default
-# method = cv2.CALIB_HAND_EYE_DANIILIDIS
+# method = cv2.CALIB_HAND_EYE_DANIILIDIS  # tried both, they both work
 
 # seems to always be close to 0. So at least the below has better numbers
 # R, T = cv2.calibrateHandEye(R_gripper2base, t_gripper2base,  # what should be done for eye-in-hand
@@ -253,16 +252,21 @@ method = cv2.CALIB_HAND_EYE_TSAI  # default
 # print(T)
 R, T = cv2.calibrateHandEye(R_base2gripper, t_base2gripper,
                             R_target2cam, t_target2cam, method=method)
-print('\nR and T for eye-to-hand')
-print(R)
-print(T)
+print('\nR and T for eye-to-hand. cam2base transform:')
+full_homo_RT = np.identity(4)
+full_homo_RT[:3, :3] = R
+full_homo_RT[:3, 3] = T.T
+print(full_homo_RT)
 
 # We know ground truth
 print('Ground truth (camera_transform)')
 print(camera_transformation)
-print('Ground truth (inverse camera_transform)')
-print(camera_inverse_transformation)
+# print('Ground truth (inverse camera_transform)')
+# print(camera_inverse_transformation)
 
+
+
+# TODO given everything I've learned I should check what I did wrong with dorna_handeye
 
 arm_position_coord_frames = coordinate_frames_o3d
 list_of_geometry_elements = [origin_frame, camera_coordinate_frame] + arm_position_coord_frames
