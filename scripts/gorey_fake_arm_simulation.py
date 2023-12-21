@@ -23,6 +23,35 @@ from scipy.spatial.transform import Rotation
 
 from lib.vision import euler_yzx_to_axis_angle, rotationMatrixToEulerAngles, create_homogenous_transformations, get_inverse_homogenous_transform
 
+np.set_printoptions(suppress = True)
+
+# TODO read
+# OPENCV official unit test is essentially doing what I'm doing here: https://github.com/opencv/opencv/blob/b5a9a6793b3622b01fe6c7b025f85074fec99491/modules/calib3d/test/test_calibration_hand_eye.cpp#L145
+# yeah when they run eye to hand they run:
+# calibrateHandEye(R_base2gripper, t_base2gripper, R_target2cam, t_target2cam, R_cam2base_est, t_cam2base_est, methods[idx]);
+# otherwise they do 
+# calibrateHandEye(R_gripper2base, t_gripper2base, R_target2cam, t_target2cam, R_cam2gripper_est, t_cam2gripper_est, methods[idx]);
+# I could just reimplement it all? but then im learning less
+
+# calibrateRobotWorldHandEye whats the difference with TODO : https://docs.opencv.org/4.x/d9/d0c/group__calib3d.html#ga41b1a8dd70eae371eba707d101729c36
+
+# https://forum.opencv.org/t/eye-to-hand-calibration/5690/2
+# TODO be very careful going from euler to rotation matrix! even numerical problems. 
+# TODO nice functions in there TODO USE?
+# TODO more functions in there1
+def matrix_from_rtvec(rvec, tvec):
+    (R, jac) = cv2.Rodrigues(rvec) # ignore the jacobian
+    M = np.eye(4)
+    M[0:3, 0:3] = R
+    M[0:3, 3] = tvec.squeeze() # 1-D vector, row vector, column vector, whatever
+    return M
+
+def rtvec_from_matrix(M):
+    (rvec, jac) = cv2.Rodrigues(M[0:3, 0:3]) # ignore the jacobian
+    tvec = M[0:3, 3]
+    assert M[3] == [0,0,0,1], M # sanity check
+    return (rvec, tvec)
+
 
 size = 0.1
 origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.0, 0.0, 0.0])
@@ -34,13 +63,42 @@ gripper_euler_angles = [
     [0.2, 0, 0],
     [0.3, 0, 0],
 ]
-# if I only changed rolls then we get 
+# if I only changed rolls then we get nice expected effects
 gripper_translations = [
     [0.3, 0.0, 0.0],
     [0.4, 0.0, 0.0],
-    [0.5, 0.0, 0.0]
+    [0.5, 0.0, 0.0],
 ]
 
+# # trying more manually specified random  poses
+# gripper_euler_angles = [
+#     [0.1, 0, 0.5],
+#     [0.2, 0.1, 0.6],
+#     [0.3, 0.2, 0.9],
+#     [0.3, 0.5, 0.6],
+#     [0.4, 0.2, 0.7],
+#     [0.6, 0.7, 0.9],
+# ]
+# # if I only changed rolls then we get nice expected effects
+# gripper_translations = [
+#     [0.3, 0.0, 0.0],
+#     [0.4, 0.5, 0.6],
+#     [0.5, 0.7, 0.2],
+#     [0.5, 0.4, 0.2],
+#     [0.7, 0.1, 0.0],
+#     [0.5, 0.3, 0.4],
+# ]
+
+# random poses
+# num_poses = 10
+# gripper_euler_angles = []
+# gripper_translations = []
+# size_of_random_vecs = (3,)
+# for i in range(num_poses):
+#     gripper_euler_angles.append(np.random.uniform(size=size_of_random_vecs).tolist())
+#     gripper_translations.append(np.random.uniform(size=size_of_random_vecs).tolist())
+
+# Calculate all gripper frames and transformations
 coordinate_frames_o3d = []
 all_transformations_to_gripper = []
 all_inverse_transformations_to_gripper = []
@@ -63,12 +121,6 @@ for eul_angles, translate in zip(gripper_euler_angles, gripper_translations):
     coordinate_frames_o3d.append(coordinate_frame)
 
 
-
-angles = [0, 0, np.pi / 2]  # TODO 2pi is full circle. pi 180, pi / 2 90
-r = Rotation.from_euler("xyz", angles, degrees=False)  # roll pitch yaw = xyz  # TODO why is matrix numbers looking very scientific and small?
-new_rotation_matrix = r.as_matrix()
-
-
 ####### camera transform and frame
 
 # rvec = np.array([1.0, 1.0, 1.0])
@@ -80,11 +132,24 @@ new_rotation_matrix = r.as_matrix()
 z, x, y, angle = euler_yzx_to_axis_angle(np.pi / 2, -np.pi / 2, 0)  # TODO shouldn't pi / 2 be 90 degrees and not 45??!?!!? yep
 
 
+ 
+rvec = np.array([x, y, z])
+
+
+
+
+
+
+
+
+
+
+
+
 
 # TODO wait i don't even need field of view since no camera in these experiments!!!!! It's just math and optimisation. 
 # TODO So i could chose to not rotate camera for now just to verify everything! 
- 
-rvec = np.array([x, y, z])  
+# rvec = np.array([0.0, 0.0, 0.0])
 camera_position_rel_to_origin = np.array([0.0, 0.3, 0.4])
 tvec = camera_position_rel_to_origin   # TODO why does 0.3 bring it down but 
 cam2_arm, arm2_cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
@@ -95,7 +160,7 @@ camera_transformation = np.array(arm2_cam)  # makes more intuitive sense than ca
 # array([0. , 0.3, 0.4, 1. ])
 # np.dot(camera_inverse_transformation, np.array([0.0, 0.0, 0.0, 1.0]))
 # array([ 0.32475319,  0.04756196, -0.37719123,  1.        ])   # unintuitive due to rotation but makes sense
-# np.dot(camera_transformation, camera_inverse_transformation) brings back to identity.
+# np.dot(camera_transformation, camera_inverse_transformation) is identity.
 
 camera_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size * 1.3, origin=[0.0, 0.0, 0.0])
 camera_coordinate_frame.transform(camera_transformation)
@@ -103,22 +168,33 @@ camera_coordinate_frame.transform(camera_transformation)
 
 # Create new transformation from camera to origin_frame, coord_frame_1, coord_frame_2, coord_frame_3 and prove it is fine by plotting new coord frames
 # TODO how? well i could just dot product. np.dot(camera_inverse_transformation, transformations[0]). 
-# 
+# TODO how to visualise though? I think it's fine
 
 all_transformation_target2cam = []  # transforms a point expressed in the target frame to the camera frame ( cTt)
 all_transformation_cam2target = []  # therefore transforms a point in the camera frame to the target frame
 for transformation in all_transformations_to_gripper:
+    # Composing from camera to origin (cam2arm) and then normal transformation. 
     transformation_from_camera_to_coord_frame = np.dot(camera_inverse_transformation, transformation)
     # np.dot(transformation_from_camera_to_coord_frame_1, np.array([0.0, 0.0, 0.0, 1.0]))  # unituitive numbers due to rotation
     # the above takes a point in camera frame to target frame
     all_transformation_cam2target.append(transformation_from_camera_to_coord_frame)
 
     inverse_transformation_from_camera_to_coord_frame = get_inverse_homogenous_transform(transformation_from_camera_to_coord_frame)
-    print(np.dot(inverse_transformation_from_camera_to_coord_frame, np.array([0.0, 0.0, 0.0, 1.0])))
+    print('inverse tranforming origin (from coord frame to camera):', np.dot(inverse_transformation_from_camera_to_coord_frame, np.array([0.0, 0.0, 0.0, 1.0])))
     # array([-0.3,  0.3,  0.4,  1. ])  # correct! for first frame. Yes! 
     # the above takes a point in target frame (origin 0, 0, 0) to camera frame by going back -0.3, right 0.3 and up in z 0.4
 
-    all_transformation_target2cam.append(inverse_transformation_from_camera_to_coord_frame)
+    # all_transformation_target2cam.append(inverse_transformation_from_camera_to_coord_frame)
+    
+    
+    
+    
+    # TODO WTF?
+    
+    
+    
+    
+    all_transformation_target2cam.append(transformation_from_camera_to_coord_frame)
 
 # extract R_target2cam and t_target2cam
 R_target2cam = []
@@ -131,40 +207,61 @@ for transformation in all_transformation_target2cam:
 
 R_gripper2base = []
 t_gripper2base = []
-# TODO needs to be inverted?
-# for transformation in all_transformations_to_gripper:
-for transformation in all_inverse_transformations_to_gripper:  # inversely correctly bring [0,0,0] -> [-0.3, 0, 0] to go from gripper to base
-    # import pdb;pdb.set_trace()
+# TODO needs to be inverted? only for eye in hand
+for transformation in all_transformations_to_gripper:
     # TODO below is a source of error, double check
     R_gripper2base.append(transformation[:3, :3])
     t_gripper2base.append(transformation[:3, 3])
 
+R_base2gripper = []
+t_base2gripper = []
+for transformation in all_inverse_transformations_to_gripper:  # inversely correctly bring [0,0,0] -> [-0.3, 0, 0] to go from gripper to base
+    # TODO below is a source of error, double check
+    R_base2gripper.append(transformation[:3, :3])
+    t_base2gripper.append(transformation[:3, 3])
 
-# coord_frame
+
 
 # TODO now sure how to plot and prove my point since everything is origin relative?
 # Here all around im assuming target and gripper are same thing
 # origin_frame_transformed_from_camera_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size * 1.3, origin=[0.0, 0.0, 0.0])
 # camera_inverse_transformation
 
+
+# TODO study function deeply: simulateDataEyeToHand
 # R_gripper2base	Rotation part extracted from the homogeneous matrix that transforms a point expressed in the gripper frame to the robot base frame ( bTg). This is a vector (vector<Mat>) that contains the rotation, (3x3) rotation matrices or (3x1) rotation vectors, for all the transformations from gripper frame to robot base frame.
 # t_gripper2base	Translation part extracted from the homogeneous matrix that transforms a point expressed in the gripper frame to the robot base frame ( bTg). This is a vector (vector<Mat>) that contains the (3x1) translation vectors for all the transformations from gripper frame to robot base frame.
 # R_target2cam	Rotation part extracted from the homogeneous matrix that transforms a point expressed in the target frame to the camera frame ( cTt). This is a vector (vector<Mat>) that contains the rotation, (3x3) rotation matrices or (3x1) rotation vectors, for all the transformations from calibration target frame to camera frame.
-# t_target2cam	Rotation part extracted from the homogeneous matrix that transforms a point expressed in the target frame to the camera frame ( cTt). This is a vector (vector<Mat>) that contains the (3x1) translation vectors for all the transformations from calibration target frame to camera frame.
+# t_target2cam	# TODO typo in docs here Rotation part extracted from the homogeneous matrix that transforms a point expressed in the target frame to the camera frame ( cTt). This is a vector (vector<Mat>) that contains the (3x1) translation vectors for all the transformations from calibration target frame to camera frame.
 
+# output should be  ->	R_cam2gripper, t_cam2gripper  for eye in hand
+# but for eye to hand: R_cam2base_est, t_cam2base_est from unit tests in opencv
 
+# yeah when they run eye to hand they run:
+# calibrateHandEye(R_base2gripper, t_base2gripper, R_target2cam, t_target2cam, R_cam2base_est, t_cam2base_est, methods[idx]);
+# otherwise they do for eye in hand
+# calibrateHandEye(R_gripper2base, t_gripper2base, R_target2cam, t_target2cam, R_cam2gripper_est, t_cam2gripper_est, methods[idx]);
 
+method = cv2.CALIB_HAND_EYE_TSAI  # default
+# method = cv2.CALIB_HAND_EYE_DANIILIDIS
 
-R, T = cv2.calibrateHandEye(R_gripper2base, t_gripper2base,
-                            R_target2cam, t_target2cam)
-print('\nR and T')
+# seems to always be close to 0. So at least the below has better numbers
+# R, T = cv2.calibrateHandEye(R_gripper2base, t_gripper2base,  # what should be done for eye-in-hand
+#                             R_target2cam, t_target2cam, method=method)
+# print('\nR and T for eye-in-hand')
+# print(R)
+# print(T)
+R, T = cv2.calibrateHandEye(R_base2gripper, t_base2gripper,
+                            R_target2cam, t_target2cam, method=method)
+print('\nR and T for eye-to-hand')
 print(R)
 print(T)
 
 # We know ground truth
-print('Ground truth:')
+print('Ground truth (camera_transform)')
 print(camera_transformation)
-
+print('Ground truth (inverse camera_transform)')
+print(camera_inverse_transformation)
 
 
 arm_position_coord_frames = coordinate_frames_o3d
