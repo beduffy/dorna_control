@@ -19,19 +19,52 @@ import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
 import matplotlib as mpl
 from scipy import optimize
+from scipy.spatial.transform import Rotation
 
-from lib.vision import euler_yzx_to_axis_angle, rotationMatrixToEulerAngles, create_homogenous_transformations
+from lib.vision import euler_yzx_to_axis_angle, rotationMatrixToEulerAngles, create_homogenous_transformations, get_inverse_homogenous_transform
 
-mesh_box_opt = o3d.geometry.TriangleMesh.create_box(width=0.1, height=0.1, depth=0.003)
-mesh_box_opt.paint_uniform_color([1, 0, 0])
 
 size = 0.1
 origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.0, 0.0, 0.0])
-coordinate_frame_1 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.3, 0.0, 0.0])
-coordinate_frame_2 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.4, 0.0, 0.0])
-coordinate_frame_3 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.5, 0.0, 0.0])
 
-camera_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size * 1.3, origin=[0.0, 0.0, 0.0])
+# TODO should be transforming all from origin. ok done below. 
+
+gripper_euler_angles = [
+    [0, 0, 0],
+    [0, 0, 0],
+    [0, 0, 0],
+]
+gripper_translations = [
+    [0.3, 0.0, 0.0],
+    [0.4, 0.0, 0.0],
+    [0.5, 0.0, 0.0]
+]
+
+coordinate_frames_o3d = []
+all_transformations = []
+for eul_angles, translate in zip(gripper_euler_angles, gripper_translations):
+    transformation = np.identity(4)
+    transformation[:3, :3] = np.identity(3)  # no rotation
+    # TODO eul_angles
+    transformation[0, 3] = translate[0]
+    transformation[1, 3] = translate[1]
+    transformation[2, 3] = translate[2]
+    transformation_inverse = get_inverse_homogenous_transform(transformation)
+
+    coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.0, 0.0, 0.0])
+    coordinate_frame.transform(transformation)
+    all_transformations.append(transformation)
+
+    coordinate_frames_o3d.append(coordinate_frame)
+
+
+
+angles = [0, 0, np.pi / 2]  # TODO 2pi is full circle. pi 180, pi / 2 90
+r = Rotation.from_euler("xyz", angles, degrees=False)  # roll pitch yaw = xyz  # TODO why is matrix numbers looking very scientific and small?
+new_rotation_matrix = r.as_matrix()
+
+
+####### camera transform and frame
 
 # rvec = np.array([1.0, 1.0, 1.0])
 # z, x, y, angle = euler_yzx_to_axis_angle(np.pi / 2, 0, 0)  # pointing left in yaw, 45 deg. red.
@@ -40,30 +73,92 @@ camera_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size
 
 # I want camera to the right, pointing to the left 45 degrees left in yaw and 45 degrees down
 z, x, y, angle = euler_yzx_to_axis_angle(np.pi / 2, -np.pi / 2, 0)  # TODO shouldn't pi / 2 be 90 degrees and not 45??!?!!? yep
+
+
+
+# TODO wait i don't even need field of view since no camera in these experiments!!!!! It's just math and optimisation. 
+# TODO So i could chose to not rotate camera for now just to verify everything! 
+ 
 rvec = np.array([x, y, z])  
 camera_position_rel_to_origin = np.array([0.0, 0.3, 0.4])
 tvec = camera_position_rel_to_origin   # TODO why does 0.3 bring it down but 
 cam2_arm, arm2_cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
-# camera_transformation = np.array(cam2_arm)
-camera_transformation = np.array(arm2_cam)  # makes more intuitive sense, 0.3 tvec brings bigger coordinate frame forwards. 
+camera_inverse_transformation = np.array(cam2_arm)
+camera_transformation = np.array(arm2_cam)  # makes more intuitive sense than cam2arm?, 0.3 tvec brings bigger coordinate frame forwards.?
+# camera_transformation brings points from origin to camera frame but expressed and relative to origin. arm2cam kinda means origin points in arm frame to weird rotated camera frame
+# np.dot(camera_transformation, np.array([0.0, 0.0, 0.0, 1.0]))
+# array([0. , 0.3, 0.4, 1. ])
+# np.dot(camera_inverse_transformation, np.array([0.0, 0.0, 0.0, 1.0]))
+# array([ 0.32475319,  0.04756196, -0.37719123,  1.        ])   # unintuitive due to rotation but makes sense
+# np.dot(camera_transformation, camera_inverse_transformation) brings back to identity.
 
+camera_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size * 1.3, origin=[0.0, 0.0, 0.0])
 camera_coordinate_frame.transform(camera_transformation)
 
+
+# Create new transformation from camera to origin_frame, coord_frame_1, coord_frame_2, coord_frame_3 and prove it is fine by plotting new coord frames
+# TODO how? well i could just dot product. np.dot(camera_inverse_transformation, transformations[0]). 
+# 
+
+all_transformation_target2cam = []  # transforms a point expressed in the target frame to the camera frame ( cTt)
+all_transformation_cam2target = []  # therefore transforms a point in the camera frame to the target frame
+for transformation in all_transformations:
+    transformation_from_camera_to_coord_frame_1 = np.dot(camera_inverse_transformation, transformation)
+    # np.dot(transformation_from_camera_to_coord_frame_1, np.array([0.0, 0.0, 0.0, 1.0]))  # unituitive numbers due to rotation
+    # the above takes a point in camera frame to target frame
+    all_transformation_cam2target.append(transformation_from_camera_to_coord_frame_1)
+
+    inverse_transformation_from_camera_to_coord_frame_1 = get_inverse_homogenous_transform(transformation_from_camera_to_coord_frame_1)
+    # np.dot(inverse_transformation_from_camera_to_coord_frame_1, np.array([0.0, 0.0, 0.0, 1.0])) 
+    # array([-0.3,  0.3,  0.4,  1. ])  # correct! for first frame. Yes! 
+    # the above takes a point in target frame (origin 0, 0, 0) to camera frame by going back -0.3, right 0.3 and up in z 0.4
+
+    all_transformation_target2cam.append(inverse_transformation_from_camera_to_coord_frame_1)
+
+
+import pdb;pdb.set_trace()
+
+# coord_frame
+
+# TODO now sure how to plot and prove my point since everything is origin relative?
+# Here all around im assuming target and gripper are same thing
+# origin_frame_transformed_from_camera_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size * 1.3, origin=[0.0, 0.0, 0.0])
+# camera_inverse_transformation
+
+
+
+
+
+arm_position_coord_frames = coordinate_frames_o3d
+list_of_geometry_elements = [origin_frame, camera_coordinate_frame] + arm_position_coord_frames
+# list_of_geometry_elements = [origin_frame_transformed_from_camera_frame, camera_coordinate_frame] + arm_position_coord_frames
+o3d.visualization.draw_geometries(list_of_geometry_elements)
+
+
+
+
+
+sys.exit()
+
 #--- 180 deg rotation matrix around the x axis
-R_flip       = np.zeros((3, 3), dtype=np.float32)
-R_flip[0, 0] =  1.0
-R_flip[1, 1] = -1.0
-R_flip[2, 2] = -1.0
+# R_flip       = np.zeros((3, 3), dtype=np.float32)
+# R_flip[0, 0] =  1.0
+# R_flip[1, 1] = -1.0
+# R_flip[2, 2] = -1.0
 
-# TODO I need to understand conversion between all rotation types better
-# TODO why are both below the same?
-# -- Get the attitude in terms of euler 321 (Needs to be flipped first)
-roll_marker, pitch_marker, yaw_marker = rotationMatrixToEulerAngles(R_flip * R_tc)
-print('roll pitch yaw marker: ', roll_marker, pitch_marker, yaw_marker)
-# -- Get the attitude of the camera respect to the frame
-roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(R_flip * R_ct)  # todo no flip needed?
-print('roll pitch yaw camera: ', roll_camera, pitch_camera, yaw_camera)
+# # TODO I need to understand conversion between all rotation types better
+# # TODO why are both below the same?
+# # -- Get the attitude in terms of euler 321 (Needs to be flipped first)
+# roll_marker, pitch_marker, yaw_marker = rotationMatrixToEulerAngles(R_flip * R_tc)
+# print('roll pitch yaw marker: ', roll_marker, pitch_marker, yaw_marker)
+# # -- Get the attitude of the camera respect to the frame
+# roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(R_flip * R_ct)  # todo no flip needed?
+# print('roll pitch yaw camera: ', roll_camera, pitch_camera, yaw_camera)
 
+
+
+
+################# hand eye
 
 
 gripper_t = np.array([[0.3, 0.0, 0.0], [0.4, 0.0, 0.0], [0.5, 0.0, 0.0], [0.6, 0.0, 0.0]]) 
@@ -150,7 +245,8 @@ estimated_camera_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_
 estimated_camera_coordinate_frame.transform(estimated_cam2_arm_transform)
 
 
-arm_position_coord_frames = [coordinate_frame_1, coordinate_frame_2, coordinate_frame_3]
+# arm_position_coord_frames = [coordinate_frame_1, coordinate_frame_2, coordinate_frame_3]
+arm_position_coord_frames = coordinate_frames_o3d
 list_of_geometry_elements = [origin_frame, camera_coordinate_frame, estimated_camera_coordinate_frame] + arm_position_coord_frames
 o3d.visualization.draw_geometries(list_of_geometry_elements)
 
