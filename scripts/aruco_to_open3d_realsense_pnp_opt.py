@@ -5,12 +5,7 @@ from glob import glob
 import math
 from collections import deque
 
-try:
-    import open3d as o3d
-    from skimage.measure import find_contours
-except Exception as e:
-    print(e)
-    print('Tried to import open3d or skimage but not installed')
+import open3d as o3d
 import pyrealsense2 as rs
 from cv2 import aruco
 import cv2
@@ -295,7 +290,7 @@ if __name__ == '__main__':
                 # o for open3D visualisation and solvePnP
                 cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img,
                                                  pinhole_camera_intrinsic, visualise=False)
-                # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, 0.0)  # TODO do I need this or not?
+                # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm)  # TODO do I need this or not?
 
                 aruco_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
                                         size=size, origin=[0.0, 0.0, 0.0])

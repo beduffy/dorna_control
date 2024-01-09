@@ -9,12 +9,7 @@ from glob import glob
 
 import numpy as np
 import cv2
-try:
-    import open3d as o3d
-    from skimage.measure import find_contours
-except Exception as e:
-    print(e)
-    print('Tried to import open3d or skimage but not installed')
+import open3d as o3d
 
 from lib.vision import get_inverse_homogenous_transform
 

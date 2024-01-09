@@ -9,7 +9,6 @@ import pyrealsense2 as rs
 import torch  # if this is imported before realsense profile = pipeline.start(config) fails...
 import torchvision
 import numpy as np
-from skimage.measure import find_contours
 import matplotlib.pyplot as plt
 from matplotlib import patches, lines
 from matplotlib.patches import Polygon

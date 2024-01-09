@@ -5,12 +5,7 @@ from glob import glob
 import math
 from collections import deque
 
-try:
-    import open3d as o3d
-    from skimage.measure import find_contours
-except Exception as e:
-    print(e)
-    print('Tried to import open3d or skimage but not installed')
+import open3d as o3d
 import pyrealsense2 as rs
 from cv2 import aruco
 import cv2

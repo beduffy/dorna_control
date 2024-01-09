@@ -1,11 +1,10 @@
 import math
 
-# import cv2
+import cv2
 import numpy as np
 import pyrealsense2 as rs
 try:
     import open3d as o3d
-    from skimage.measure import find_contours
 except Exception as e:
     print(e)
     print('Tried to import open3d or skimage but not installed')
@@ -61,7 +60,7 @@ def i_k(xyz, toolhead_x_length=193):
         L = np.round(L, 13) # ???
         # not valid
         if L > (l_shoulder_to_elbow + l_elbow_to_wrist) or l_shoulder_to_elbow > (l_elbow_to_wrist + L) or l_elbow_to_wrist > (l_shoulder_to_elbow + L):  # in this case there is no solution
-            print('Returning None because this shit sucks')
+            print('Returning None from i_k because it is not valid forthis position')
             # import pdb;pdb.set_trace()
             return None
 
@@ -273,7 +272,7 @@ if __name__ == '__main__':
             # TODO never understood how this relates, if origin looks good but cam2arm is bad?
             # transforming rgbd pointcloud using bad cam2arm means what? . What is the thing changing again?
 
-            full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, cam2arm, 0.0)
+            full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, cam2arm)
 
             plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=[full_arm_pcd, coordinate_frame, coordinate_frame_shoulder_height])
         except Exception as e:

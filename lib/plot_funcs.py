@@ -6,12 +6,8 @@ import matplotlib.pyplot as plt
 from matplotlib import patches, lines
 from matplotlib.patches import Polygon
 import numpy as np
-try:
-    import open3d as o3d
-    from skimage.measure import find_contours
-except Exception as e:
-    print(e)
-    print('Tried to import open3d or skimage but not installed')
+import open3d as o3d
+from skimage.measure import find_contours
 
 from line_mesh import LineMesh
 # from lib.utilities.line_mesh import LineMesh

@@ -1,12 +1,8 @@
-try:
-    import open3d as o3d
-    from skimage.measure import find_contours
-except Exception as e:
-    print(e)
-    print('Tried to import open3d or skimage but not installed')
-
-from line_mesh import LineMesh
+import open3d as o3d
 import numpy as np
+
+# from line_mesh import LineMesh
+from lib.line_mesh import LineMesh
 
 
 def create_sphere_at_pos(pos, radius=4, color=[1.0, 0.0, 0.0]):
@@ -113,9 +109,9 @@ def plot_open3d_Dorna(joint_and_link_positions, extra_geometry_elements=None):
     coordinate_frame_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame()
     coordinate_frame_mesh.scale(100, center=(0, 0, 0))
     list_of_geometry_elements = [line_set, *line_mesh1_geoms] + all_spheres + [coordinate_frame_mesh]
-    print(list_of_geometry_elements)
     if extra_geometry_elements:
         list_of_geometry_elements.extend(extra_geometry_elements)
+    print(list_of_geometry_elements)
     o3d.visualization.draw_geometries(list_of_geometry_elements)  # todo eventually nonblocking version
 
 if  __name__ == '__main__':
