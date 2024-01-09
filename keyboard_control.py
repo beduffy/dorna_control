@@ -509,7 +509,6 @@ if __name__=="__main__":
 		# twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
 		# pub.publish(twist)
 
-		# TODO could whole file be a flask server as well? And then other files could just GET/POST anything above?
 		# TODO origibot gripper actually goes lower than center. I need to hack inside of dorna to fix that? or add offset elsewhere? 20mm downwards relative to center!
 		# TODO z command while keeping same xy as a good pre-pick pose
 

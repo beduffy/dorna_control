@@ -29,7 +29,7 @@ from lib.vision import isclose, dist, isRotationMatrix, rotationMatrixToEulerAng
 from lib.vision_config import pinhole_camera_intrinsic
 from lib.vision_config import camera_matrix, dist_coeffs
 from lib.realsense_helper import setup_start_realsense, realsense_get_frames, run_10_frames_to_wait_for_auto_exposure
-from lib.aruco_helper import create_aruco_params, create_charuco_params, aruco_detect_draw_get_transforms
+from lib.aruco_helper import create_aruco_params, aruco_detect_draw_get_transforms
 from lib.handeye_opencv_wrapper import handeye_calibrate_opencv, load_all_handeye_data, plot_all_handeye_data
 from lib.dorna_kinematics import i_k, f_k
 # from lib.open3d_plot_dorna import plot_open3d_Dorna  # TODO why broken?
@@ -249,7 +249,7 @@ def click_callback(event, x, y, flags, param):
             else:
                 print('curr_arm_xyz is None')
         else:
-            print('no saved_cam2arm')
+            print('no saved_cam2arm. Needed for click')
 
     # if event == cv2.EVENT_MBUTTONUP:
     #     # cv2.circle(camera_color_img, (x, y), 100, (255, 255, 0), -1)  # TODO if I ever want this
@@ -263,7 +263,7 @@ def click_callback(event, x, y, flags, param):
     #     # IndexError: index 1258 is out of bounds for axis 0 with size 640
 
 
-def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruco=True):
+def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True):
     color_img = color_img.copy()
     depth_img = depth_img.copy()
     bgr_color_data = cv2.cvtColor(color_img, cv2.COLOR_RGB2BGR)
@@ -274,399 +274,342 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True, use_aruc
     frame_markers = aruco.drawDetectedMarkers(color_img, corners, ids)
     all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
 
-    if not use_aruco:
-        retval, charuco_corners, charuco_ids = cv2.aruco.interpolateCornersCharuco(corners, ids, gray_data, board,
-                                                                cameraMatrix=camera_matrix,
-                                                                distCoeffs=dist_coeffs)
-        if charuco_ids is not None:
-            # for i in range(charuco_ids.shape[0]):
-            #     cv2.circle(color_img, tuple(charuco_corners[i][0]), 7, color=(255, 255, 0))
-            #     cv2.circle(color_img, tuple(charuco_corners[i][0]), 7, color=(255, 255, 0))
-            retval, board_rvec, board_tvec = cv2.aruco.estimatePoseCharucoBoard(charuco_corners, charuco_ids, board, camera_matrix, dist_coeffs, all_rvec[0], all_tvec[0], useExtrinsicGuess=False)
-            # retval, board_rvec, board_tvec = cv2.aruco.estimatePoseCharucoBoard(charuco_corners, charuco_ids, board, camera_matrix, dist_coeffs)
+    # TODO im not using depth!!!!!! 
 
-            # try:
-            #     aruco.drawAxis(color_img, camera_matrix, dist_coeffs, board_rvec, board_tvec, 0.05)  # last param is axis length
-            # except Exception as e:
-            #     print(e)
-            #     tvec, rvec = None, None
-            tvec, rvec = board_tvec.squeeze(), board_rvec.squeeze()
+    if all_rvec is not None:
+        print(ids)
+        # retval, board_rvec, board_tvec = cv2.aruco.estimatePoseBoard(corners, ids, board, camera_matrix, dist_coeffs, all_rvec, all_tvec)
+        # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, board_rvec, board_tvec, 0.05)  # last param is axis length
 
+        # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, all_rvec[0], all_tvec[0], marker_length / 2)  # in middle
+        # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, all_rvec[0], all_tvec[0], 0)  # jumps around
+        
+        ids_list = [l[0] for l in ids.tolist()]
 
-            # TODO use charuco and a single x offset. no need to move it off the board, use the boards width and height and this way it's actually easier
+        if len(ids_list) >= 1:
+            corners_reordered = []
+            for corner_id in [1, 2, 3, 4]:
+                # for corner_id in [4]:  # TODO make it not crash if other aruco etc!!!
+                if corner_id in ids_list:
+                    corner_index = ids_list.index(corner_id) 
+                    corners_reordered.append(corners[corner_index])
+                    rvec_aruco, tvec_aruco = all_rvec[corner_index, 0, :], all_tvec[corner_index, 0, :]
+                    # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
+
+        found_correct_marker = False
+        # print(ids)
+        if id_on_shoulder_motor in ids:
+            # TODO is this even correct?!?!?! since 1 index vs 0 index?!?!? ahh because I found correct index?
+            shoulder_motor_marker_id = [l[0] for l in ids.tolist()].index(id_on_shoulder_motor) 
+            rvec, tvec = all_rvec[shoulder_motor_marker_id, 0, :], all_tvec[shoulder_motor_marker_id, 0, :]  # get first marker
+            found_correct_marker = True
         else:
-            tvec, rvec = None, None
-    elif use_aruco:
-        # TODO im not using depth!!!!!! 
+            print('Did not find shoulder marker')
+        # if found_correct_marker and rvec is not None and len(corners) == 4:  # TODO do not forget
+        # if found_correct_marker and rvec is not None and len(corners) == 2:  # TODO do not forget
+        if found_correct_marker and rvec is not None and len(corners) == 1:  # TODO do not forget
+            # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec, tvec, marker_length)
 
-        if all_rvec is not None:
-            # retval, board_rvec, board_tvec = cv2.aruco.estimatePoseBoard(corners, ids, board, camera_matrix, dist_coeffs, all_rvec, all_tvec)
-            # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, board_rvec, board_tvec, 0.05)  # last param is axis length
+            # draw arm origin axis as well
+            # roughly 96mm to arm and 41mm from there to centre of arm
 
-            # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, all_rvec[0], all_tvec[0], marker_length / 2)  # in middle
-            # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, all_rvec[0], all_tvec[0], 0)  # jumps around
+            # with some slightly off x-axis origin
+            # y_offset_for_id_1 = -0.13
+            # y_offset_for_id_3 = 0.127
+            # extra_y_offset_for_id_2 = -0.167
+            # extra_y_offset_for_id_4 = 0.173
+            # x_offset_for_id_2 = 0.2
+            # x_offset_for_id_4 = -0.2
+
+            # found with depth camera clicking
+            y_offset_for_id_1 = -0.175  # for big marker. # 0.0765 is dorna square width, so if I measure from edge of dorna instead (easier). 
+            # 0.175 - (0.0765 / 2) = 0.175 - 0.03825  = 0.13675m
+            extra_y_offset_for_id_2 = -0.166
+            y_offset_for_id_3 = 0.1214
+            extra_y_offset_for_id_4 = 0.169
+            x_offset_for_id_2 = 0.0
+            x_offset_for_id_4 = 0.0
+            
+            # project center into image with cyan? TODO what are we projecting, name it better
+            imagePoints, jacobian = cv2.projectPoints(np.array([0.0, y_offset_for_id_1, 0.0]), rvec, tvec, camera_matrix, dist_coeffs)
+            x, y = imagePoints.squeeze().tolist()
+            cv2.circle(color_img, (int(x), int(y)), 5, (255, 255, 0), -1)
+            
+            half_marker_len = marker_length / 2
+            top_left_first = np.array([-half_marker_len, half_marker_len + y_offset_for_id_1, 0.])
+            top_right_first = np.array([half_marker_len, half_marker_len + y_offset_for_id_1, 0.])
+            bottom_right_first = np.array([half_marker_len, -half_marker_len + y_offset_for_id_1, 0.])
+            bottom_left_first = np.array([-half_marker_len, -half_marker_len + y_offset_for_id_1, 0.])
+
+            top_left_second = np.array([-half_marker_len + x_offset_for_id_2, half_marker_len + extra_y_offset_for_id_2, 0.])
+            top_right_second = np.array([half_marker_len + x_offset_for_id_2, half_marker_len + extra_y_offset_for_id_2, 0.])
+            bottom_right_second = np.array([half_marker_len + x_offset_for_id_2, -half_marker_len + extra_y_offset_for_id_2, 0.])
+            bottom_left_second = np.array([-half_marker_len + x_offset_for_id_2, -half_marker_len + extra_y_offset_for_id_2, 0.])
+
+            top_left_third = np.array([-half_marker_len, half_marker_len + y_offset_for_id_3, 0.])
+            top_right_third = np.array([half_marker_len, half_marker_len + y_offset_for_id_3, 0.])
+            bottom_right_third = np.array([half_marker_len, -half_marker_len + y_offset_for_id_3, 0.])
+            bottom_left_third = np.array([-half_marker_len, -half_marker_len + y_offset_for_id_3, 0.])
+
+            top_left_fourth = np.array([-half_marker_len + x_offset_for_id_4, half_marker_len + extra_y_offset_for_id_4, 0.])
+            top_right_fourth = np.array([half_marker_len + x_offset_for_id_4, half_marker_len + extra_y_offset_for_id_4, 0.])
+            bottom_right_fourth = np.array([half_marker_len + x_offset_for_id_4, -half_marker_len + extra_y_offset_for_id_4, 0.])
+            bottom_left_fourth = np.array([-half_marker_len + x_offset_for_id_4, -half_marker_len + extra_y_offset_for_id_4, 0.])
+            
+            # the below ends up being the same as corners[shoulder_motor_marker_id]. As it should be
+            # top_left_first = np.array([-half_marker_len, half_marker_len, 0.])
+            # top_right_first = np.array([half_marker_len, half_marker_len, 0.])
+            # bottom_right_first = np.array([half_marker_len, -half_marker_len, 0.])
+            # bottom_left_first = np.array([-half_marker_len, -half_marker_len, 0.])
+
+            # TODO make sure order is correct if top left is always first and x is forward?!?!?!
+            corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first])
+            # corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first, 
+            #                               top_left_second, top_right_second, bottom_right_second, bottom_left_second])
+            # corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first, 
+            #                             top_left_second, top_right_second, bottom_right_second, bottom_left_second,
+            #                             top_left_third, top_right_third, bottom_right_third, bottom_left_third,
+            #                             top_left_fourth, top_right_fourth, bottom_right_fourth, bottom_left_fourth])
+            imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
+            for x, y in imagePointsCorners.squeeze().tolist():
+                cv2.circle(color_img, (int(x), int(y)), 5, (255, 255, 255), -1)
+            # x, y = imagePointsCorners.squeeze().tolist()
+            # cv2.circle(color_img, (int(x), int(y)), 5, (0, 0, 255), -1)
+
+            # TODO give initial guess. Did it help?
+            # marker_indices = [shoulder_motor_marker_id, 4]
+            # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, corners[shoulder_motor_marker_id], camera_matrix, dist_coeffs)
+            # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, corners[shoulder_motor_marker_id], camera_matrix, dist_coeffs, rvec, tvec)
+            # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, corners[marker_indices], camera_matrix, dist_coeffs, rvec, tvec)
+            # if there are only two, wrong could be wrong order
             
             ids_list = [l[0] for l in ids.tolist()]
 
-            if len(ids_list) >= 1:
+            if len(ids_list) > 1:
                 corners_reordered = []
+                # for corner_id in [x[0] for x in ids.tolist()]:
                 for corner_id in [1, 2, 3, 4]:
-                    # for corner_id in [4]:  # TODO make it not crash if other aruco etc!!!
-                    if corner_id in ids_list:
-                        corner_index = ids_list.index(corner_id) 
-                        corners_reordered.append(corners[corner_index])
-                        rvec_aruco, tvec_aruco = all_rvec[corner_index, 0, :], all_tvec[corner_index, 0, :]
-                        # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
-
-            found_correct_marker = False
-            # print(ids)
-            if id_on_shoulder_motor in ids:
-                # TODO is this even correct?!?!?! since 1 index vs 0 index?!?!? ahh because I found correct index?
-                shoulder_motor_marker_id = [l[0] for l in ids.tolist()].index(id_on_shoulder_motor) 
-                rvec, tvec = all_rvec[shoulder_motor_marker_id, 0, :], all_tvec[shoulder_motor_marker_id, 0, :]  # get first marker
-                found_correct_marker = True
-            # if found_correct_marker and rvec is not None and len(corners) == 4:  # TODO do not forget
-            # if found_correct_marker and rvec is not None and len(corners) == 2:  # TODO do not forget
-            if found_correct_marker and rvec is not None and len(corners) == 1:  # TODO do not forget
+                # for corner_id in [x[0] - 1 for x in ids.tolist()]:
+                    corner_index = ids_list.index(corner_id) 
+                    # corners_reordered.append(corners[corner_id])
+                    corners_reordered.append(corners[corner_index])
+                    rvec_aruco, tvec_aruco = all_rvec[corner_index, 0, :], all_tvec[corner_index, 0, :]
+                    # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
+            else:
+                corners_reordered = corners
                 # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec, tvec, marker_length)
 
-                # draw arm origin axis as well
-                # roughly 96mm to arm and 41mm from there to centre of arm
+            outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, corners[shoulder_motor_marker_id], camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
 
-                # with some slightly off x-axis origin
-                # y_offset_for_id_1 = -0.13
-                # y_offset_for_id_3 = 0.127
-                # extra_y_offset_for_id_2 = -0.167
-                # extra_y_offset_for_id_4 = 0.173
-                # x_offset_for_id_2 = 0.2
-                # x_offset_for_id_4 = -0.2
+            # TODO how to minimise eyeball error? glue and pencil?
+            # TODO why do some angles not work well? 
 
-                # found with depth camera clicking
-                y_offset_for_id_1 = -0.175  # for big marker. # 0.0765 is dorna square width, so if I measure from edge of dorna instead (easier). 
-                # 0.175 - (0.0765 / 2) = 0.175 - 0.03825  = 0.13675m
-                extra_y_offset_for_id_2 = -0.166
-                y_offset_for_id_3 = 0.1214
-                extra_y_offset_for_id_4 = 0.169
-                x_offset_for_id_2 = 0.0
-                x_offset_for_id_4 = 0.0
-                
-                # project center into image with cyan? TODO what are we projecting, name it better
-                imagePoints, jacobian = cv2.projectPoints(np.array([0.0, y_offset_for_id_1, 0.0]), rvec, tvec, camera_matrix, dist_coeffs)
-                x, y = imagePoints.squeeze().tolist()
-                cv2.circle(color_img, (int(x), int(y)), 5, (255, 255, 0), -1)
-                
-                half_marker_len = marker_length / 2
-                top_left_first = np.array([-half_marker_len, half_marker_len + y_offset_for_id_1, 0.])
-                top_right_first = np.array([half_marker_len, half_marker_len + y_offset_for_id_1, 0.])
-                bottom_right_first = np.array([half_marker_len, -half_marker_len + y_offset_for_id_1, 0.])
-                bottom_left_first = np.array([-half_marker_len, -half_marker_len + y_offset_for_id_1, 0.])
+            rvec = rvec_arm.squeeze()
+            tvec = tvec_arm.squeeze()
 
-                top_left_second = np.array([-half_marker_len + x_offset_for_id_2, half_marker_len + extra_y_offset_for_id_2, 0.])
-                top_right_second = np.array([half_marker_len + x_offset_for_id_2, half_marker_len + extra_y_offset_for_id_2, 0.])
-                bottom_right_second = np.array([half_marker_len + x_offset_for_id_2, -half_marker_len + extra_y_offset_for_id_2, 0.])
-                bottom_left_second = np.array([-half_marker_len + x_offset_for_id_2, -half_marker_len + extra_y_offset_for_id_2, 0.])
+            # draw circle over arm origin in camera image
+            imagePoints, jacobian = cv2.projectPoints(np.array([0.0, 0.0, 0.0]), rvec, tvec, camera_matrix, dist_coeffs)
+            x, y = imagePoints.squeeze().tolist()
+            cv2.circle(color_img, (int(x), int(y)), 5, (0, 0, 255), -1)
 
-                top_left_third = np.array([-half_marker_len, half_marker_len + y_offset_for_id_3, 0.])
-                top_right_third = np.array([half_marker_len, half_marker_len + y_offset_for_id_3, 0.])
-                bottom_right_third = np.array([half_marker_len, -half_marker_len + y_offset_for_id_3, 0.])
-                bottom_left_third = np.array([-half_marker_len, -half_marker_len + y_offset_for_id_3, 0.])
-
-                top_left_fourth = np.array([-half_marker_len + x_offset_for_id_4, half_marker_len + extra_y_offset_for_id_4, 0.])
-                top_right_fourth = np.array([half_marker_len + x_offset_for_id_4, half_marker_len + extra_y_offset_for_id_4, 0.])
-                bottom_right_fourth = np.array([half_marker_len + x_offset_for_id_4, -half_marker_len + extra_y_offset_for_id_4, 0.])
-                bottom_left_fourth = np.array([-half_marker_len + x_offset_for_id_4, -half_marker_len + extra_y_offset_for_id_4, 0.])
-                
-                # the below ends up being the same as corners[shoulder_motor_marker_id]. As it should be
-                # top_left_first = np.array([-half_marker_len, half_marker_len, 0.])
-                # top_right_first = np.array([half_marker_len, half_marker_len, 0.])
-                # bottom_right_first = np.array([half_marker_len, -half_marker_len, 0.])
-                # bottom_left_first = np.array([-half_marker_len, -half_marker_len, 0.])
-
-                # TODO make sure order is correct if top left is always first and x is forward?!?!?!
-                corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first])
-                # corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first, 
-                #                               top_left_second, top_right_second, bottom_right_second, bottom_left_second])
-                # corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first, 
-                #                             top_left_second, top_right_second, bottom_right_second, bottom_left_second,
-                #                             top_left_third, top_right_third, bottom_right_third, bottom_left_third,
-                #                             top_left_fourth, top_right_fourth, bottom_right_fourth, bottom_left_fourth])
-                imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
-                for x, y in imagePointsCorners.squeeze().tolist():
-                    cv2.circle(color_img, (int(x), int(y)), 5, (255, 255, 255), -1)
-                # x, y = imagePointsCorners.squeeze().tolist()
-                # cv2.circle(color_img, (int(x), int(y)), 5, (0, 0, 255), -1)
-
-                # TODO give initial guess. Did it help?
-                # marker_indices = [shoulder_motor_marker_id, 4]
-                # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, corners[shoulder_motor_marker_id], camera_matrix, dist_coeffs)
-                # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, corners[shoulder_motor_marker_id], camera_matrix, dist_coeffs, rvec, tvec)
-                # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, corners[marker_indices], camera_matrix, dist_coeffs, rvec, tvec)
-                # if there are only two, wrong could be wrong order
-                
-                ids_list = [l[0] for l in ids.tolist()]
-
-                if len(ids_list) > 1:
-                    corners_reordered = []
-                    # for corner_id in [x[0] for x in ids.tolist()]:
-                    for corner_id in [1, 2, 3, 4]:
-                    # for corner_id in [x[0] - 1 for x in ids.tolist()]:
-                        corner_index = ids_list.index(corner_id) 
-                        # corners_reordered.append(corners[corner_id])
-                        corners_reordered.append(corners[corner_index])
-                        rvec_aruco, tvec_aruco = all_rvec[corner_index, 0, :], all_tvec[corner_index, 0, :]
-                        # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
-                else:
-                    corners_reordered = corners
-                    # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec, tvec, marker_length)
-                
-                # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
-                # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_IPPE)
-                # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs)
-                # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_IPPE)
-                # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners_reordered).squeeze(), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
-                # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
-                outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, corners[shoulder_motor_marker_id], camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
-                # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, np.hstack(corners), camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_IPPE_SQUARE)
-                # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, corners[0], camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True, flags=cv2.SOLVEPNP_IPPE_SQUARE)
-                # outval, rvec_arm, tvec_arm = cv2.solvePnP(np.array([[0.0, -y_offset, 0.0]]), corners[shoulder_motor_marker_id], camera_matrix, dist_coeffs)
-
-                # TODO could I just use a charuco board instead???
-                # TODO how to minimise eyeball error? glue and pencil?
-                # TODO why do some angles not work well? 
-
-                rvec = rvec_arm.squeeze()
-                tvec = tvec_arm.squeeze()
-
-                # draw circle over arm origin in camera image
-                imagePoints, jacobian = cv2.projectPoints(np.array([0.0, 0.0, 0.0]), rvec, tvec, camera_matrix, dist_coeffs)
-                x, y = imagePoints.squeeze().tolist()
-                cv2.circle(color_img, (int(x), int(y)), 5, (0, 0, 255), -1)
-
-                # TODO would it ever be nice to always have it projected or only on click?
-                # imagePointsFK, jacobian = cv2.projectPoints(, rvec, tvec, camera_matrix, dist_coeffs)
-                # x_FK_pix, y_FK_pix = imagePointsFK.squeeze().tolist()
-                # FK_gripper_tip_projected_to_image = (int(round(x_FK_pix)), int(round(y_FK_pix)))
-            else:
-                # print('Not doing solvePnP')
-                tvec, rvec = None, None
-            
-            # TODO ahhhhhhh more markers doesn't help the above. It'd be better for me to collect the marker positions of 4-10 markers and run into solvepnp
-            # TODO as this says: https://stackoverflow.com/questions/51709522/unstable-values-in-aruco-pose-estimation
-            # TODO https://github.com/opencv/opencv_contrib/blob/master/modules/aruco/src/aruco.cpp
-            # https://stackoverflow.com/questions/51709522/unstable-values-in-aruco-pose-estimation
-            # TODO could use cube!!!
-            # https://pypi.org/project/apriltag/
-
-            # TODO read this: https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
-            """ 
-            As mentioned earlier, an approximate estimate of the pose ( \mathbf{R} and \mathbf{t} ) can be found using the DLT solution. 
-            A naive way to improve the DLT solution would be to randomly change the pose ( \mathbf{R} and \mathbf{t} ) slightly and 
-            check if the reprojection error decreases. 
-            If it does, we can accept the new estimate of the pose. 
-            We can keep perturbing \mathbf{R} and \mathbf{t} again and again to find better estimates. 
-            While this procedure will work, it will be very slow. 
-            Turns out there are principled ways to iteratively change the values of \mathbf{R} and \mathbf{t} so that the reprojection error decreases. 
-            One such method is called Levenberg-Marquardt optimization. Check out more details on Wikipedia.
-            """
-
-            # TODO smart way to weigh the aruco markers by their distance and fuse all the pose estimations.
-
-            # if estimate_pose:  # further refine pose of specific marker by
-            #     # TODO does the above get better with more markers or not?!?!?!?! it doesn't because it's individual markers
-
-            #     found_correct_marker = False
-            #     # TODO use initial guess as last all_rvec? This might help it be less jumpy?
-
-            #     if ids is not None: # and (use_aruco and id_on_shoulder_motor in ids):
-            #         if not use_aruco:
-            #             # print(len(corners))
-            #             # print(len(ids))
-            #             retval, charuco_corners, charuco_ids = cv2.aruco.interpolateCornersCharuco(corners, ids, gray_data, board,
-            #                                                                   cameraMatrix=camera_matrix,
-            #                                                                   distCoeffs=dist_coeffs)
-            #             if charuco_ids is not None:
-            #                 for i in range(charuco_ids.shape[0]):
-            #                     cv2.circle(color_img, tuple(charuco_corners[i][0]), 7, color=(255, 255, 0))
-            #             # cv2.circle(color_img, charuco_corners[0][0], 7, color=(255, 255, 0))
-            #         if use_aruco:
-            #             # retval, board_rvec, board_tvec = cv2.aruco.estimatePoseBoard(corners, ids, board, camera_matrix, dist_coeffs, all_rvec, all_tvec)
-            #             # retval, board_rvec, board_tvec = cv2.aruco.estimatePoseBoard(corners, ids, board, camera_matrix, dist_coeffs, None, None, useExtrinsicGuess=False)
-            #             # img = cv2.aruco.drawPlanarBoard(board, (300, 300))  # board, outSize[, img[, marginSize[, borderBits]]]  # TODO doesn't work, not showing things correctly?
-            #             pass
-            #         else:
-            #             # if board_rvec is not None:
-            #             #     retval, board_rvec, board_tvec = cv2.aruco.estimatePoseCharucoBoard(charuco_corners, charuco_ids, board, camera_matrix, dist_coeffs, board_rvec, board_tvec, useExtrinsicGuess=True)
-            #             # else:
-            #             retval, board_rvec, board_tvec = cv2.aruco.estimatePoseCharucoBoard(charuco_corners, charuco_ids, board, camera_matrix, dist_coeffs, all_rvec[0], all_tvec[0], useExtrinsicGuess=False)
-            #             # retval, board_rvec, board_tvec = cv2.aruco.estimatePoseCharucoBoard(charuco_corners, charuco_ids, board, camera_matrix, dist_coeffs)
-
-            #         if not use_aruco:  # TODO only charuco here
-            #             try:
-            #                 aruco.drawAxis(color_img, camera_matrix, dist_coeffs, board_rvec, board_tvec,
-            #                                0.05)  # last param is axis length
-            #             except Exception as e:
-            #                 print(e)
-
-            #         # retval, rvec, tvec = cv2.aruco.estimatePoseBoard
-            #         # -- ret = [rvec, tvec, ?]
-            #         # -- array of rotation and position of each marker in camera frame
-            #         # -- rvec = [[rvec_1], [rvec_2], ...]    attitude of the marker respect to camera frame
-            #         # -- tvec = [[tvec_1], [tvec_2], ...]    position of the marker in camera frame
-
-            #         if use_aruco:
-            #             if id_on_shoulder_motor in ids:
-            #                 shoulder_motor_marker_id = [l[0] for l in ids.tolist()].index(id_on_shoulder_motor)
-            #                 # TODO calculate tvec distance between all adjacent marker middles. Should be 0.0033!!!!!!!!!!!!!!! optimise something to make it so?
-            #                 # TODO and maybe intrinsics too?
-
-            #                 rvec, tvec = all_rvec[shoulder_motor_marker_id, 0, :], all_tvec[shoulder_motor_marker_id, 0, :]  # get first marker
-            #                 found_correct_marker = True
-            #         else:
-            #             rvec, tvec = board_rvec.squeeze(), board_tvec.squeeze()
-
-            #         # TODO if no markers it crashes still
-            #         if 'tvec' in locals():  # TODO how to avoid this?
-            #             cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
-
-            #             # -- Get the attitude in terms of euler 321 (Needs to be flipped first)
-            #             roll_marker, pitch_marker, yaw_marker = rotationMatrixToEulerAngles(
-            #                 R_flip * R_tc)
-
-            #             if use_aruco:
-            #                 if found_correct_marker:
-            #                     aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec, tvec, marker_length / 2)  # last param is axis length
-            #                     # experimentation with how tvec changes everything? a bit to the right
-            #                     # aruco.drawAxis(image, camera_matrix, dist_coeffs, rvec[i], tvec[i] + np.array([0.01, 0.01, 0]), marker_length)
-
-            #                     # get all 4 corners and ensure that their xyz in arm coordinates are correct
-            #                     c = corners[shoulder_motor_marker_id][0]  # should only be the shoulder motor marker id
-
-            #                     middle_pixel = np.array([int(round(c[:, 0].mean())), int(round(c[:, 1].mean()))])
-            #                     # convert_pixel_to_arm_coordinate(camera_depth_img, middle_pixel[0], middle_pixel[1], cam2arm)
-            #                     # marker_xyz_middle = convert_pixel_to_arm_coordinate(camera_depth_img, middle_pixel[0], middle_pixel[1], cam2arm, verbose=True)
-            #                     marker_xyz_middle = convert_pixel_to_arm_coordinate(camera_depth_img, middle_pixel[0], middle_pixel[1], cam2arm)
-
-            #                     # TODO optimise all 4 corners and then if that still doesn't work all 4x12 corners and then charuco or whatever
-            #                     # TODO see how much aruco and charuco board error are
-            #                     # TODO swap to charuco and the charuco id 0 should be the corner!!!!!!!!!!!!!!!!!!!!!!!!!!
-            #                     # TODO is rounding bad since everyone talks about sub-pixel accuracy? how else would i index?
-
-            #                     # 4 corners
-            #                     top_left_pixel = (int(round(c[0, 0])), int(round(c[0, 1])))
-            #                     top_right_pixel = (int(round(c[1, 0])), int(round(c[1, 1])))
-            #                     bottom_right_pixel = (int(round(c[2, 0])), int(round(c[2, 1])))
-            #                     bottom_left_pixel = (int(round(c[3, 0])), int(round(c[3, 1])))
-
-            #                     marker_xyz_top_left = convert_pixel_to_arm_coordinate(camera_depth_img, top_left_pixel[0], top_left_pixel[1], cam2arm)
-            #                     marker_xyz_top_right = convert_pixel_to_arm_coordinate(camera_depth_img, top_right_pixel[0], top_right_pixel[1], cam2arm)
-            #                     marker_xyz_bottom_right = convert_pixel_to_arm_coordinate(camera_depth_img, bottom_right_pixel[0], bottom_right_pixel[1], cam2arm)
-            #                     marker_xyz_bottom_left = convert_pixel_to_arm_coordinate(camera_depth_img, bottom_left_pixel[0], bottom_left_pixel[1], cam2arm)
-
-            #                     # print('\nMiddle marker xyz before optimisation: {}'.format(marker_xyz_middle))
-            #                     # print('Top left marker xyz before optimisation: {}'.format(marker_xyz_top_left))
-            #                     # print('Top Right marker xyz before optimisation: {}'.format(marker_xyz_top_right))
-            #                     # print('Bottom Right marker xyz before optimisation: {}'.format(marker_xyz_bottom_right))
-            #                     # print('Bottom Left marker xyz before optimisation: {}'.format(marker_xyz_bottom_left))
-
-            #                     pixel_positions_to_optimise = [middle_pixel, top_left_pixel, top_right_pixel,
-            #                                                    bottom_right_pixel, bottom_left_pixel]
-
-            #                     joined_input_array = np.hstack((tvec, rvec))
-
-            #                     # global cam_coords  # so get_rigid_transform_error can access it
-            #                     cam_coords = []
-            #                     for pixel in pixel_positions_to_optimise:
-            #                         cam_coord_spec = get_camera_coordinate(camera_depth_img, pixel[0], pixel[1])
-            #                         try:
-            #                             cam_coords.append(cam_coord_spec.reshape(1, 4))
-            #                         except Exception as e:
-            #                             print(e)
-            #                             print('0 z-depth value at camera coordinate. continuing loop')
-            #                             continue  # TODO not a loop anymore. But returning will break everything
-            #                             # return
-            #                         # TODO AttributeError: 'NoneType' object has no attribute 'reshape'
-            #                         # TODO probably because there is no depth at that part of the image. But it wasn't a problem before?
-
-            #                     # TODO should see how much my rigid body transform error changes with the same cam2arm!!!!
-            #                     cam_coords = np.concatenate(cam_coords)
-
-            #                     rigid_body_error_local = get_rigid_transform_error(joined_input_array, cam_coords)
-            #                     print('Rigid body transform error: {}'.format(rigid_body_error))
-
-
-            #             else:  # TODO fix all below so charuco works as well
-            #                 corner_3d_positions = []
-            #                 all_dist_2ds = []
-            #                 all_dist_3ds = []
-            #                 # print('Calculating error for each corner')
-            #                 if charuco_corners is not None:
-            #                     for cor in charuco_corners:
-            #                     # for cor in corners[0]:
-            #                         cv2.circle(color_img, tuple(cor[0]), 4, color=(0, 255, 0))
-
-            #                         corner_pixel = (int(round(cor[0, 0])), int(round(cor[0, 1])))
-            #                         corner_xyz_arm_coord = convert_pixel_to_arm_coordinate(camera_depth_img, corner_pixel[0],
-            #                                                                                corner_pixel[1], cam2arm)
-
-            #                         if corner_xyz_arm_coord is not None:
-            #                             # cv2.imshow("image", color_img)
-            #                             # cv2.waitKey(1)
-
-            #                             # TODO how to enforce z is 0? for everything...
-            #                             if len(corner_3d_positions) > 0:
-            #                                 allowable_y_difference = 0.0008
-            #                                 allowable_y_difference = 0.0012
-            #                                 # TODO TypeError: 'NoneType' object is not subscriptable happens if I cover board. Why?
-            #                                 if abs(corner_3d_positions[-1][1] - corner_xyz_arm_coord[1]) > (charuco_square_length - allowable_y_difference):
-            #                                     # print('Jumped row!!!')  # TODO not detecting all. Now it is since i changed to 0.0012?
-            #                                     jumped_row = True
-            #                                 else:
-            #                                     jumped_row = False
-
-            #                                 dist_3d_to_last_point = dist(corner_xyz_arm_coord, corner_3d_positions[-1])
-            #                                 dist_2d = dist(corner_xyz_arm_coord[:2], corner_3d_positions[-1][:2])
-            #                                 # print('Dist 3D {:.4f}. Dist 2D {:.4f}. Absolute error 3D: {:.4f}. Absolute error 2D: {:.4f}'.format(dist_3d_to_last_point, dist_2d, abs(dist_3d_to_last_point - distance_between_adjacent_corners), abs(dist_2d - distance_between_adjacent_corners)))
-            #                                 # TODO this happened once: TypeError: unsupported operand type(s) for -: 'NoneType' and 'float'
-            #                                 # if dist_2d < 0.05:  # to avoid adding cases when we swap row
-            #                                 if not jumped_row:  # to avoid adding cases when we swap row
-            #                                     all_dist_2ds.append(dist_2d)
-            #                                     all_dist_3ds.append(dist_3d_to_last_point)
-            #                                     if corner_3d_positions[-1][0] > corner_xyz_arm_coord[0]:
-            #                                         pass
-            #                                         # print('X to the right is smaller than the left!!!')  # TODO is it really that bad to happen 1-10% of the time?
-
-            #                             corner_3d_positions.append(corner_xyz_arm_coord)
-
-            #                     # print('Mean 3D absolute error: {}. Mean 2D absolute error: {}'.format(sum(all_dist_3ds) / len(all_dist_3ds),
-            #                     #                                         sum(all_dist_2ds) / len(all_dist_2ds)))
-
-            if tvec is None or rvec is None:
-                # print('tvec or vec is none')
-                found_correct_marker = False
-
-            if found_correct_marker:
-                # is this id1 or not. nope it isn't.
-                # tvec, rvec = all_tvec[0].squeeze(), all_rvec[0].squeeze()
-
-                # TODO typo below??? WILL IT BREAK THINGS and overwrite cam2arm or not?
-                # TODO the below repeats from basic_aruco_example.py
-                am2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
-                # cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
-
-                # -- Get the attitude in terms of euler 321 (Needs to be flipped first)
-                roll_marker, pitch_marker, yaw_marker = rotationMatrixToEulerAngles(opencv_aruco_image_text.R_flip * R_tc)
-                # -- Get the attitude of the camera respect to the frame
-                roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(opencv_aruco_image_text.R_flip * R_ct)  # todo no flip needed?
-
-                opencv_aruco_image_text.put_marker_text(camera_color_img, tvec, roll_marker, pitch_marker, yaw_marker)
-                opencv_aruco_image_text.put_camera_text(camera_color_img, pos_camera, roll_camera, pitch_camera, yaw_camera)
-                # opencv_aruco_image_text.put_avg_marker_text(camera_color_img, avg_6dof_pose)
-            
-                # return rigid_body_error_local, color_img, depth_img, pixel_positions_to_optimise, tvec, rvec, cam_coords
-                # TODO what to return? and to not make it ugly?
-                # return tvec, rvec
+            # TODO would it ever be nice to always have it projected or only on click?
+            # imagePointsFK, jacobian = cv2.projectPoints(, rvec, tvec, camera_matrix, dist_coeffs)
+            # x_FK_pix, y_FK_pix = imagePointsFK.squeeze().tolist()
+            # FK_gripper_tip_projected_to_image = (int(round(x_FK_pix)), int(round(y_FK_pix)))
         else:
+            # print('Not doing solvePnP')
             tvec, rvec = None, None
+        
+        # TODO ahhhhhhh more markers doesn't help the above. It'd be better for me to collect the marker positions of 4-10 markers and run into solvepnp
+        # TODO as this says: https://stackoverflow.com/questions/51709522/unstable-values-in-aruco-pose-estimation
+        # TODO https://github.com/opencv/opencv_contrib/blob/master/modules/aruco/src/aruco.cpp
+        # https://stackoverflow.com/questions/51709522/unstable-values-in-aruco-pose-estimation
+        # TODO could use cube!!!
+        # https://pypi.org/project/apriltag/
+
+        # TODO read this: https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
+        """ 
+        As mentioned earlier, an approximate estimate of the pose ( \mathbf{R} and \mathbf{t} ) can be found using the DLT solution. 
+        A naive way to improve the DLT solution would be to randomly change the pose ( \mathbf{R} and \mathbf{t} ) slightly and 
+        check if the reprojection error decreases. 
+        If it does, we can accept the new estimate of the pose. 
+        We can keep perturbing \mathbf{R} and \mathbf{t} again and again to find better estimates. 
+        While this procedure will work, it will be very slow. 
+        Turns out there are principled ways to iteratively change the values of \mathbf{R} and \mathbf{t} so that the reprojection error decreases. 
+        One such method is called Levenberg-Marquardt optimization. Check out more details on Wikipedia.
+        """
+
+        # TODO smart way to weigh the aruco markers by their distance and fuse all the pose estimations.
+
+        # if estimate_pose:  # further refine pose of specific marker by
+        #     # TODO does the above get better with more markers or not?!?!?!?! it doesn't because it's individual markers
+
+        #     found_correct_marker = False
+        #     # TODO use initial guess as last all_rvec? This might help it be less jumpy?
+
+        #     if ids is not None: # and (id_on_shoulder_motor in ids):
+    #             # retval, board_rvec, board_tvec = cv2.aruco.estimatePoseBoard(corners, ids, board, camera_matrix, dist_coeffs, all_rvec, all_tvec)
+    #             # retval, board_rvec, board_tvec = cv2.aruco.estimatePoseBoard(corners, ids, board, camera_matrix, dist_coeffs, None, None, useExtrinsicGuess=False)
+    #             # img = cv2.aruco.drawPlanarBoard(board, (300, 300))  # board, outSize[, img[, marginSize[, borderBits]]]  # TODO doesn't work, not showing things correctly?
+    #             pass
+        #     
+
+        #         # retval, rvec, tvec = cv2.aruco.estimatePoseBoard
+        #         # -- ret = [rvec, tvec, ?]
+        #         # -- array of rotation and position of each marker in camera frame
+        #         # -- rvec = [[rvec_1], [rvec_2], ...]    attitude of the marker respect to camera frame
+        #         # -- tvec = [[tvec_1], [tvec_2], ...]    position of the marker in camera frame
+
+    #             if id_on_shoulder_motor in ids:
+    #                 shoulder_motor_marker_id = [l[0] for l in ids.tolist()].index(id_on_shoulder_motor)
+    #                 # TODO calculate tvec distance between all adjacent marker middles. Should be 0.0033!!!!!!!!!!!!!!! optimise something to make it so?
+    #                 # TODO and maybe intrinsics too?
+
+    #                 rvec, tvec = all_rvec[shoulder_motor_marker_id, 0, :], all_tvec[shoulder_motor_marker_id, 0, :]  # get first marker
+    #                 found_correct_marker = True
+
+        #         # TODO if no markers it crashes still
+        #         if 'tvec' in locals():  # TODO how to avoid this?
+        #             cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
+
+        #             # -- Get the attitude in terms of euler 321 (Needs to be flipped first)
+        #             roll_marker, pitch_marker, yaw_marker = rotationMatrixToEulerAngles(
+        #                 R_flip * R_tc)
+
+        #                 if found_correct_marker:
+        #                     aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec, tvec, marker_length / 2)  # last param is axis length
+        #                     # experimentation with how tvec changes everything? a bit to the right
+        #                     # aruco.drawAxis(image, camera_matrix, dist_coeffs, rvec[i], tvec[i] + np.array([0.01, 0.01, 0]), marker_length)
+
+        #                     # get all 4 corners and ensure that their xyz in arm coordinates are correct
+        #                     c = corners[shoulder_motor_marker_id][0]  # should only be the shoulder motor marker id
+
+        #                     middle_pixel = np.array([int(round(c[:, 0].mean())), int(round(c[:, 1].mean()))])
+        #                     # convert_pixel_to_arm_coordinate(camera_depth_img, middle_pixel[0], middle_pixel[1], cam2arm)
+        #                     # marker_xyz_middle = convert_pixel_to_arm_coordinate(camera_depth_img, middle_pixel[0], middle_pixel[1], cam2arm, verbose=True)
+        #                     marker_xyz_middle = convert_pixel_to_arm_coordinate(camera_depth_img, middle_pixel[0], middle_pixel[1], cam2arm)
+
+        #                     # TODO optimise all 4 corners and then if that still doesn't work all 4x12 corners
+        #                     # TODO see how much aruco board error are
+        #                     # TODO is rounding bad since everyone talks about sub-pixel accuracy? how else would i index?
+
+        #                     # 4 corners
+        #                     top_left_pixel = (int(round(c[0, 0])), int(round(c[0, 1])))
+        #                     top_right_pixel = (int(round(c[1, 0])), int(round(c[1, 1])))
+        #                     bottom_right_pixel = (int(round(c[2, 0])), int(round(c[2, 1])))
+        #                     bottom_left_pixel = (int(round(c[3, 0])), int(round(c[3, 1])))
+
+        #                     marker_xyz_top_left = convert_pixel_to_arm_coordinate(camera_depth_img, top_left_pixel[0], top_left_pixel[1], cam2arm)
+        #                     marker_xyz_top_right = convert_pixel_to_arm_coordinate(camera_depth_img, top_right_pixel[0], top_right_pixel[1], cam2arm)
+        #                     marker_xyz_bottom_right = convert_pixel_to_arm_coordinate(camera_depth_img, bottom_right_pixel[0], bottom_right_pixel[1], cam2arm)
+        #                     marker_xyz_bottom_left = convert_pixel_to_arm_coordinate(camera_depth_img, bottom_left_pixel[0], bottom_left_pixel[1], cam2arm)
+
+        #                     # print('\nMiddle marker xyz before optimisation: {}'.format(marker_xyz_middle))
+        #                     # print('Top left marker xyz before optimisation: {}'.format(marker_xyz_top_left))
+        #                     # print('Top Right marker xyz before optimisation: {}'.format(marker_xyz_top_right))
+        #                     # print('Bottom Right marker xyz before optimisation: {}'.format(marker_xyz_bottom_right))
+        #                     # print('Bottom Left marker xyz before optimisation: {}'.format(marker_xyz_bottom_left))
+
+        #                     pixel_positions_to_optimise = [middle_pixel, top_left_pixel, top_right_pixel,
+        #                                                    bottom_right_pixel, bottom_left_pixel]
+
+        #                     joined_input_array = np.hstack((tvec, rvec))
+
+        #                     # global cam_coords  # so get_rigid_transform_error can access it
+        #                     cam_coords = []
+        #                     for pixel in pixel_positions_to_optimise:
+        #                         cam_coord_spec = get_camera_coordinate(camera_depth_img, pixel[0], pixel[1])
+        #                         try:
+        #                             cam_coords.append(cam_coord_spec.reshape(1, 4))
+        #                         except Exception as e:
+        #                             print(e)
+        #                             print('0 z-depth value at camera coordinate. continuing loop')
+        #                             continue  # TODO not a loop anymore. But returning will break everything
+        #                             # return
+        #                         # TODO AttributeError: 'NoneType' object has no attribute 'reshape'
+        #                         # TODO probably because there is no depth at that part of the image. But it wasn't a problem before?
+
+        #                     # TODO should see how much my rigid body transform error changes with the same cam2arm!!!!
+        #                     cam_coords = np.concatenate(cam_coords)
+
+        #                     rigid_body_error_local = get_rigid_transform_error(joined_input_array, cam_coords)
+        #                     print('Rigid body transform error: {}'.format(rigid_body_error))
+
+
+        # TODO i want to remove the below because I'm not using charuco but there's something about using last point and allowed difference and enforcing z
+        #             else:  # TODO fix all below so charuco works as well
+        #                 corner_3d_positions = []
+        #                 all_dist_2ds = []
+        #                 all_dist_3ds = []
+        #                 # print('Calculating error for each corner')
+        #                 if charuco_corners is not None:
+        #                     for cor in charuco_corners:
+        #                     # for cor in corners[0]:
+        #                         cv2.circle(color_img, tuple(cor[0]), 4, color=(0, 255, 0))
+
+        #                         corner_pixel = (int(round(cor[0, 0])), int(round(cor[0, 1])))
+        #                         corner_xyz_arm_coord = convert_pixel_to_arm_coordinate(camera_depth_img, corner_pixel[0],
+        #                                                                                corner_pixel[1], cam2arm)
+
+        #                         if corner_xyz_arm_coord is not None:
+        #                             # cv2.imshow("image", color_img)
+        #                             # cv2.waitKey(1)
+
+        #                             # TODO how to enforce z is 0? for everything...
+        #                             if len(corner_3d_positions) > 0:
+        #                                 allowable_y_difference = 0.0008
+        #                                 allowable_y_difference = 0.0012
+        #                                 # TODO TypeError: 'NoneType' object is not subscriptable happens if I cover board. Why?
+        #                                 if abs(corner_3d_positions[-1][1] - corner_xyz_arm_coord[1]) > (charuco_square_length - allowable_y_difference):
+        #                                     # print('Jumped row!!!')  # TODO not detecting all. Now it is since i changed to 0.0012?
+        #                                     jumped_row = True
+        #                                 else:
+        #                                     jumped_row = False
+
+        #                                 dist_3d_to_last_point = dist(corner_xyz_arm_coord, corner_3d_positions[-1])
+        #                                 dist_2d = dist(corner_xyz_arm_coord[:2], corner_3d_positions[-1][:2])
+        #                                 # print('Dist 3D {:.4f}. Dist 2D {:.4f}. Absolute error 3D: {:.4f}. Absolute error 2D: {:.4f}'.format(dist_3d_to_last_point, dist_2d, abs(dist_3d_to_last_point - distance_between_adjacent_corners), abs(dist_2d - distance_between_adjacent_corners)))
+        #                                 # TODO this happened once: TypeError: unsupported operand type(s) for -: 'NoneType' and 'float'
+        #                                 # if dist_2d < 0.05:  # to avoid adding cases when we swap row
+        #                                 if not jumped_row:  # to avoid adding cases when we swap row
+        #                                     all_dist_2ds.append(dist_2d)
+        #                                     all_dist_3ds.append(dist_3d_to_last_point)
+        #                                     if corner_3d_positions[-1][0] > corner_xyz_arm_coord[0]:
+        #                                         pass
+        #                                         # print('X to the right is smaller than the left!!!')  # TODO is it really that bad to happen 1-10% of the time?
+
+        #                             corner_3d_positions.append(corner_xyz_arm_coord)
+
+        #                     # print('Mean 3D absolute error: {}. Mean 2D absolute error: {}'.format(sum(all_dist_3ds) / len(all_dist_3ds),
+        #                     #                                         sum(all_dist_2ds) / len(all_dist_2ds)))
+
+        if tvec is None or rvec is None:
+            # print('tvec or vec is none')
+            found_correct_marker = False
+
+        if found_correct_marker:
+            # is this id1 or not. nope it isn't.
+            # tvec, rvec = all_tvec[0].squeeze(), all_rvec[0].squeeze()
+
+            # TODO typo below??? WILL IT BREAK THINGS and overwrite cam2arm or not?
+            # TODO the below repeats from basic_aruco_example.py
+            am2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
+            # cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
+
+            # -- Get the attitude in terms of euler 321 (Needs to be flipped first)
+            roll_marker, pitch_marker, yaw_marker = rotationMatrixToEulerAngles(opencv_aruco_image_text.R_flip * R_tc)
+            # -- Get the attitude of the camera respect to the frame
+            roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(opencv_aruco_image_text.R_flip * R_ct)  # todo no flip needed?
+
+            opencv_aruco_image_text.put_marker_text(camera_color_img, tvec, roll_marker, pitch_marker, yaw_marker)
+            opencv_aruco_image_text.put_camera_text(camera_color_img, pos_camera, roll_camera, pitch_camera, yaw_camera)
+            # opencv_aruco_image_text.put_avg_marker_text(camera_color_img, avg_6dof_pose)
+        
+            # return rigid_body_error_local, color_img, depth_img, pixel_positions_to_optimise, tvec, rvec, cam_coords
+            # TODO what to return? and to not make it ugly?
+            # return tvec, rvec
+    else:
+        tvec, rvec = None, None
 
     return color_img, depth_img, tvec, rvec
 
@@ -711,22 +654,13 @@ if __name__ == '__main__':
     # TODO most important: make it work from 70cm away. This is perfect. Do I need 2 extra markers?
     # TODO for this I might need to try different optimisers or parameters. Also need to understand PnP better
 
-    '''
-    cv.calibrateHandEye(R_gripper2base, t_gripper2base, R_target2cam, t_target2cam[, R_cam2gripper[, t_cam2gripper[, method]]]	) ->	R_cam2gripper, t_cam2gripper
-    '''
-
     # calibration and marker params
-    use_aruco = False  # use charuco
-    use_aruco = True
     optimise_origin = False
     # optimise_origin = True
     # estimate_pose = True
     estimate_pose = False
 
-    if use_aruco:
-        board, parameters, aruco_dict, marker_length = create_aruco_params()
-    else:
-        board, parameters, aruco_dict, marker_length = create_charuco_params()
+    board, parameters, aruco_dict, marker_length = create_aruco_params()
 
     mouseX, mouseY = 0, 0
     cv2.namedWindow('image')
@@ -769,7 +703,7 @@ if __name__ == '__main__':
             #     pixel_positions_to_optimise, \
             #     tvec, rvec, cam_coords = estimate_cam2arm_on_frame(camera_color_img, camera_depth_img, estimate_pose=estimate_pose)
 
-            color_img, depth_img, tvec, rvec = estimate_cam2arm_on_frame(camera_color_img, camera_depth_img, estimate_pose=estimate_pose, use_aruco=use_aruco)
+            color_img, depth_img, tvec, rvec = estimate_cam2arm_on_frame(camera_color_img, camera_depth_img, estimate_pose=estimate_pose)
 
             # TODO would optimising the transform with depth info solve most of my problems?
             # if pixel_positions_to_optimise:
@@ -1029,6 +963,7 @@ if __name__ == '__main__':
 
             if k == ord('l'):
                 # Use curr joint angles and show line mesh arm plotted over pointcloud arm
+
                 print('Getting joint angles')
                 r = requests.get('http://localhost:8080/get_xyz_joint')
                 robot_data = r.json()
@@ -1050,25 +985,28 @@ if __name__ == '__main__':
 
                 cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img,
                                         pinhole_camera_intrinsic, visualise=False)
-                # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, cam2arm, 0.0)  # TODO why was I doing this? mistake?
-                full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, 0.0)
+                if saved_cam2arm:
+                    # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, cam2arm, 0.0)  # TODO why was I doing this? mistake?
+                    full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, 0.0)
 
-                gripper_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-                                        size=25.0, origin=[0.0, 0.0, 0.0])
-                gripper_base_transform = get_gripper_base_transformation(joint_angles)
-                gripper_coordinate_frame.transform(gripper_base_transform)
+                    gripper_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+                                            size=25.0, origin=[0.0, 0.0, 0.0])
+                    gripper_base_transform = get_gripper_base_transformation(joint_angles)
+                    gripper_coordinate_frame.transform(gripper_base_transform)
 
-                # plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=[full_arm_pcd, coordinate_frame, coordinate_frame_shoulder_height])
-                plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=[full_arm_pcd, gripper_coordinate_frame, coordinate_frame, coordinate_frame_shoulder_height])
+                    # plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=[full_arm_pcd, coordinate_frame, coordinate_frame_shoulder_height])
+                    plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=[full_arm_pcd, gripper_coordinate_frame, coordinate_frame, coordinate_frame_shoulder_height])
 
-                # TODO look into open3D interactive mode and change sliders of joints here or for ik and see how wrist pitch changes
-                # TODO look into camera settings so I can look down top down, side-ways and straight down barrel on arm to see how wrong transforms are
-                # TODO optimise on white sphere and track it
-                # TODO is there a way I could visual servo measure angles?
-                # TODO I was using speed 5000 (what does this mean in joint and xyz space? same thing, how fast can I go?)
-                
-                # dist(np.array([148.166, -190.953, 440.97]), np.array([ 131.949075, -199.25261, 452.410165]))
-                # TODO if I'm specifying that the clicked point is the centre of the battery I could get an error metric from FK vs cam2arm click point
+                    # TODO look into open3D interactive mode and change sliders of joints here or for ik and see how wrist pitch changes
+                    # TODO look into camera settings so I can look down top down, side-ways and straight down barrel on arm to see how wrong transforms are
+                    # TODO optimise on white sphere and track it
+                    # TODO is there a way I could visual servo measure angles?
+                    # TODO I was using speed 5000 (what does this mean in joint and xyz space? same thing, how fast can I go?)
+                    
+                    # dist(np.array([148.166, -190.953, 440.97]), np.array([ 131.949075, -199.25261, 452.410165]))
+                    # TODO if I'm specifying that the clicked point is the centre of the battery I could get an error metric from FK vs cam2arm click point
+                else:
+                    print('No saved cam2arm!')
 
             if k == ord('h'):  # save hand-eye calibration needed transforms
                 # get and save calibration target transformation (target2cam)
