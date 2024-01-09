@@ -220,7 +220,6 @@ if __name__ == '__main__':
 
                     if id_1_tvec is not None and id_1_rvec is not None:
                         spacing = marker_length + marker_separation
-                        # the below is using first rvec/tvec and then stupidly going 4 left. I should instead use id 1 rvec/tvec
                         all_obj_points_found_from_id_1 = []
                         id_count = 1
                         for y_ in range(3):

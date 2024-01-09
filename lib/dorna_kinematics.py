@@ -197,6 +197,7 @@ if __name__ == '__main__':
     import pdb;pdb.set_trace()
 
     # joint_angles = i_k(full_toolhead_fk)
+    # 206 is not a joint angle, it's the shoulder height. TODO 
     joint_angles = i_k([483.07853333332895, 0.0, 206.01941089350998, -9.999999988651159e-06, 0.0])
     full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
 

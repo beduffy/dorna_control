@@ -213,6 +213,7 @@ def click_callback(event, x, y, flags, param):
                 camera_coord = get_camera_coordinate(camera_depth_img, mouseX, mouseY, verbose=True)
                 print('camera_coord using depth and intrinsics:', camera_coord)
                 print('saved tvec:', saved_tvec)  # TODO how different is saved_tvec to inverse saved
+                print('hand-eye click in arm coords: ', [x for x in curr_arm_xyz])
 
                 # print('Getting joint angles to compare hand-eye calibration click with FK')
                 r = requests.get('http://localhost:8080/get_xyz_joint')
@@ -225,7 +226,6 @@ def click_callback(event, x, y, flags, param):
                 dist_btwn_FK_and_cam2arm_transformed_click = dist(full_toolhead_fk[:3], curr_arm_xyz)
 
                 # TODO round all prints below, too hard to read
-                print('hand-eye click in arm coords: ', [x for x in curr_arm_xyz])
                 print('FK xyz: ', full_toolhead_fk[:3])
                 print('dist_btwn_FK_and_cam2arm_transformed_click: {}'.format(dist_btwn_FK_and_cam2arm_transformed_click))
                 
@@ -588,7 +588,7 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True):
 
             # TODO typo below??? WILL IT BREAK THINGS and overwrite cam2arm or not?
             # TODO the below repeats from basic_aruco_example.py
-            am2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
+            cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
             # cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
 
             # -- Get the attitude in terms of euler 321 (Needs to be flipped first)
@@ -626,6 +626,10 @@ if __name__ == '__main__':
     FK_shoulder_projected_to_image = None
     saved_rvec = None
     saved_tvec = None
+
+    # label_3D = o3d.visualization.gui.Label3D('hey', np.array([0, 0, 0]))
+    # o3d.visualization.draw_geometries([label_3D])
+    # https://stackoverflow.com/questions/71959737/display-text-on-point-cloud-vertex-in-pyrender-open3d
 
     depth_intrin, color_intrin, depth_scale, pipeline, align, spatial = setup_start_realsense()
 
@@ -847,56 +851,8 @@ if __name__ == '__main__':
                 # print('Saving best optimised aruco cam2arm with error {}\n{}'.format(
                 #             lowest_optimised_error, cam2arm))
                 if cam2arm is not None:
-                    # saved_cam2arm = cam2arm
-                    # saved_arm2cam = arm2cam
-
-                    ids_list = [l[0] for l in ids.tolist()]
-                    ids_list_with_index_key_tuple = [(idx, id_) for idx, id_ in enumerate(ids_list)]
-                    ids_list_sorted = sorted(ids_list_with_index_key_tuple, key=lambda x: x[1])
-                    image_points = []
-                    ids_list = [x[0] for x in ids.tolist()]
-                    for idx_of_marker, id_of_marker in ids_list_sorted:
-                        image_points.append(corners[idx_of_marker].squeeze())
-
-                    num_ids_to_draw = 12
-                    id_1_rvec, id_1_tvec = None, None
-                    for list_idx, corner_id in enumerate(ids_list[0:num_ids_to_draw]):
-                        if list_idx == 0:
-                            rvec_aruco, tvec_aruco = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
-                        if corner_id == 1:
-                            id_1_rvec, id_1_tvec = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
-
-                    tvec, rvec = id_1_tvec, id_1_rvec  # so I can build object points from the ground up... 
-
-                    if id_1_tvec is not None and id_1_rvec is not None:
-                        spacing = marker_length + marker_separation
-                        # the below is using first rvec/tvec and then stupidly going 4 left. I should instead use id 1 rvec/tvec
-                        all_obj_points_found_from_id_1 = []
-                        id_count = 1
-                        for y_ in range(3):
-                            for x_ in range(4):
-                                if id_count in ids_list:
-                                    top_left = np.array([-half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
-                                    top_right = np.array([half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
-                                    bottom_right = np.array([half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
-                                    bottom_left = np.array([-half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
-
-                                    corners_3d_points = np.array([top_left, top_right, bottom_right, bottom_left])
-                                    all_obj_points_found_from_id_1.append(corners_3d_points)
-                                    imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
-                                    for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
-                                        cv2.circle(camera_color_img, (int(x), int(y)), 4, colors[idx], -1)
-
-                                id_count += 1
-                    outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(all_obj_points_found_from_id_1), np.concatenate(image_points), camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_IPPE)
-
-                    # TODO better understand insides of that function and have good descriptions of cam2arm vs arm2cam.
-                    cam2arm_opt, arm2cam_opt, _, _, _ = create_homogenous_transformations(tvec_pnp_opt, rvec_pnp_opt)
-                    
-                    saved_cam2arm = cam2arm_opt
-                    saved_arm2cam = arm2cam_opt
-
-
+                    saved_cam2arm = cam2arm
+                    saved_arm2cam = arm2cam
                     saved_rvec = rvec
                     saved_tvec = tvec
                     print('Saving aruco cam2arm {}\n'.format(saved_cam2arm))
@@ -994,14 +950,69 @@ if __name__ == '__main__':
                 # Use curr joint angles and show line mesh arm plotted over pointcloud arm
 
                 print('Getting joint angles')
-                r = requests.get('http://localhost:8080/get_xyz_joint')
-                robot_data = r.json()
-                joint_angles = robot_data['robot_joint_angles']
+                # r = requests.get('http://localhost:8080/get_xyz_joint')
+                # robot_data = r.json()
+                # joint_angles = robot_data['robot_joint_angles']
+
+
+
+
+
+
+
+                joint_angles = [0, 0, 0, 0, 0]  # TODO do not forget
 
                 print('joint_angles: ', joint_angles)
 
                 full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
                 print('full_toolhead_fk: ', full_toolhead_fk)
+
+                ids_list = [l[0] for l in ids.tolist()]
+                ids_list_with_index_key_tuple = [(idx, id_) for idx, id_ in enumerate(ids_list)]
+                ids_list_sorted = sorted(ids_list_with_index_key_tuple, key=lambda x: x[1])
+                image_points = []
+                ids_list = [x[0] for x in ids.tolist()]
+                for idx_of_marker, id_of_marker in ids_list_sorted:
+                    image_points.append(corners[idx_of_marker].squeeze())
+
+                num_ids_to_draw = 12
+                id_1_rvec, id_1_tvec = None, None
+                for list_idx, corner_id in enumerate(ids_list[0:num_ids_to_draw]):
+                    if list_idx == 0:
+                        rvec_aruco, tvec_aruco = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
+                    if corner_id == 1:
+                        id_1_rvec, id_1_tvec = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
+
+                tvec, rvec = id_1_tvec, id_1_rvec  # so I can build object points from the ground up... 
+
+                # TODO how to use depth here?
+
+                if id_1_tvec is not None and id_1_rvec is not None:
+                    spacing = marker_length + marker_separation
+                    all_obj_points_found_from_id_1 = []
+                    id_count = 1
+                    for y_ in range(3):
+                        for x_ in range(4):
+                            if id_count in ids_list:
+                                top_left = np.array([-half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
+                                top_right = np.array([half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
+                                bottom_right = np.array([half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
+                                bottom_left = np.array([-half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
+
+                                corners_3d_points = np.array([top_left, top_right, bottom_right, bottom_left])
+                                all_obj_points_found_from_id_1.append(corners_3d_points)
+                                imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
+                                for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
+                                    cv2.circle(camera_color_img, (int(x), int(y)), 4, colors[idx], -1)
+
+                            id_count += 1
+                outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(all_obj_points_found_from_id_1), np.concatenate(image_points), camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_IPPE)
+
+                # TODO better understand insides of that function and have good descriptions of cam2arm vs arm2cam.
+                cam2arm_opt, arm2cam_opt, _, _, _ = create_homogenous_transformations(tvec_pnp_opt, rvec_pnp_opt)
+                
+                saved_cam2arm = cam2arm_opt
+                saved_arm2cam = arm2cam_opt
 
                 cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img,
                                         pinhole_camera_intrinsic, visualise=False)
@@ -1015,7 +1026,8 @@ if __name__ == '__main__':
 
                     mesh_box_arm_frame = o3d.geometry.TriangleMesh.create_box(width=100.0, height=100.0, depth=0.003)
                     # mesh_box_arm_frame.transform(saved_arm2cam)
-                    mesh_box_arm_frame.transform(saved_cam2arm)  # TODO which one? Below I use arm2cam because I'm in camframe, but now I want to visualise stuff in arm frame with scaling by 1000
+                    # mesh_box_arm_frame.transform(saved_cam2arm)  # TODO which one? Below I use arm2cam because I'm in camframe, but now I want to visualise stuff in arm frame with scaling by 1000
+                    # TODO ahhhhhh, we shouldn't transform it at all because we are already in the arm frame!!!!
 
                     # camera coordinate frame
                     aruco_coordinate_frame_cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
@@ -1028,12 +1040,10 @@ if __name__ == '__main__':
                     elements_only_in_cam_frame = [cam_pcd, aruco_coordinate_frame_cam_frame, origin_frame_cam_frame, mesh_box_cam]
                     o3d.visualization.draw_geometries(elements_only_in_cam_frame)
 
-                    # TODO why are we off in depth and coordinate frame is behind marker?
-                    # TODO all I want to get to is my old hand eye aruco on shoulder calibration and then using that to try pick up objects close enough again, but this time with solvePnP and 12 markers, it should obviously work better.
-                    # TODO why is meshbox_arm_frame wrong?
+                    # TODO the purpose of everything here. all I want to get to is my old hand eye aruco on shoulder calibration and then using that to try pick up objects close enough again, but this time with solvePnP and 12 markers, it should obviously work better.
+                    # TODO why are we off in depth and coordinate frame is behind marker? problem is resolved when we get closer. Could try bigger markers too
                     # TODO is it possible the scaling is messing things up? it didn't before though. 
-                    # TODO we seem to beginning arm from shoulder height, rather than ground height?
-                    # TODO both coordinate frames are in arm coordinates?
+                    # TODO we seem to beginning arm from shoulder height, rather than ground height? why?
                     extra_elements = [full_arm_pcd, mesh_box_arm_frame, gripper_coordinate_frame, 
                                       coordinate_frame_arm_frame, coordinate_frame_shoulder_height_arm_frame]
                     plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=extra_elements)
