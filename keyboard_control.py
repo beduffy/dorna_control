@@ -490,7 +490,7 @@ if __name__=="__main__":
 					print("Changed joint_change_amt to: {}".format(joint_change_amt))
 				elif key == ']':
 					mv_scale += 20
-					print("Decrease mv_scale: {}".format(mv_scale))
+					print("Increase mv_scale: {}".format(mv_scale))
 				elif key == '[':
 					mv_scale -= 20
 					if mv_scale < 0:

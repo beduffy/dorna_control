@@ -131,8 +131,8 @@ if __name__ == '__main__':
                 if board_rvec is not None and board_rvec.shape[0] == 3:
                     cam2arm_board, arm2cam_board, _, _, _ = create_homogenous_transformations(board_tvec, board_rvec)
 
-                    # TODO wow, from above it became VERY STABLE but just pointing slightly wrong. 
-                    cv2.drawFrameAxes(camera_color_img_debug, camera_matrix, dist_coeffs, board_rvec, board_tvec, marker_length * 2)
+                    # TODO wow, from above it became VERY STABLE but incredibly wrong just pointing slightly wrong. 
+                    # cv2.drawFrameAxes(camera_color_img_debug, camera_matrix, dist_coeffs, board_rvec, board_tvec, marker_length * 2)
 
                 if ids is not None:
                     ######## old mapping from IDs to image points
