@@ -31,7 +31,21 @@ from lib.open3d_plot_dorna import plot_open3d_Dorna
 from lib.aruco_image_text import OpenCvArucoImageText
 
 
-
+# TODO seems very different to depth.intrinsics. Use depth intrinsics.....
+# TODO .translate is easy for FK, what I've been doing, then the only other angles that matter is wrist pitch, wrist roll and base? pitch, roll and yaw I suppose
+# TODO so I need to find the 4x4 matrix which will make .transform of coordinate frame onto gripper. And it's gripper to base or base 2 gripper?
+# TODO once I have 4x4, I actually only need 3x1 or 3x3 rvec and 3x1 tvec
+# TODO tvec and rvec come straight from aruco
+# TODO why do we get cam2gripper and not cam2base though? But it's the gripper expressed in base coordinates soooooo base?
+# TODO When estimate_pose = False I could still visualise the marker finding but only optimise and save after key a is pressed
+# TODO FileNotFoundError: [Errno 2] No such file or directory: 'data/best_aruco_cam2arm.txt'
+# TODO how to ensure everything is run from root directory.... Absolute paths.
+# TODO how to ensure marker/found frame is flat? the world is flattened I mean. Wrong assumption because it isn;t?
+# TODO could find relative pose transformations between multiple markers and then use them to create absolute ground truth instead of using a ruler
+# TODO most important: make it work from 70cm away. This is perfect. Do I need 2 extra markers?
+# TODO for this I might need to try different optimisers or parameters. Also need to understand PnP better
+# TODO stop indenting so much, fix it with classes and stuff
+# TODO im not using depth for 3D or 2D points!!!!!!?
 
 
 def get_gripper_base_transformation(joint_angles):
@@ -74,10 +88,6 @@ def get_gripper_base_transformation(joint_angles):
     # cam2arm_local[2, 3] = pos_camera[2]
 
     return homo_array
-
-
-
-
 
 
 def get_rigid_transform_error(joined_input_array, cam_3d_coords):
@@ -268,8 +278,6 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True):
                                                                 parameters=parameters)
     frame_markers = aruco.drawDetectedMarkers(color_img, corners, ids)
     all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
-
-    # TODO im not using depth!!!!!! 
 
     if all_rvec is not None:
         # retval, board_rvec, board_tvec = cv2.aruco.estimatePoseBoard(corners, ids, board, camera_matrix, dist_coeffs, all_rvec, all_tvec)
@@ -631,23 +639,6 @@ if __name__ == '__main__':
         size=25.0, origin=[0.0, 0.0, 0.0])
     coordinate_frame_shoulder_height = o3d.geometry.TriangleMesh.create_coordinate_frame(
         size=25.0, origin=[0.0, 0.0, 206.01940000000002])
-    # gripper_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-    #     size=25.0, origin=[0.0, 0.0, 0.0])
-
-    # TODO seems very different to depth.intrinsics. Use depth intrinsics.....
-    # TODO .translate is easy for FK, what I've been doing, then the only other angles that matter is wrist pitch, wrist roll and base? pitch, roll and yaw I suppose
-    # TODO so I need to find the 4x4 matrix which will make .transform of coordinate frame onto gripper. And it's gripper to base or base 2 gripper?
-    # TODO once I have 4x4, I actually only need 3x1 or 3x3 rvec and 3x1 tvec
-    # TODO tvec and rvec come straight from aruco
-    # TODO why do we get cam2gripper and not cam2base though? But it's the gripper expressed in base coordinates soooooo base?
-    # TODO When estimate_pose = False I could still visualise the marker finding but only optimise and save after key a is pressed
-    # TODO FileNotFoundError: [Errno 2] No such file or directory: 'data/best_aruco_cam2arm.txt'
-    # TODO how to ensure everything is run from root directory.... Absolute paths.
-    # TODO how to ensure marker/found frame is flat? the world is flattened I mean. Wrong assumption because it isn;t?
-    # TODO could find relative pose transformations between multiple markers and then use them to create absolute ground truth instead of using a ruler
-    # TODO most important: make it work from 70cm away. This is perfect. Do I need 2 extra markers?
-    # TODO for this I might need to try different optimisers or parameters. Also need to understand PnP better
-    # TODO stop indenting so much, fix it with classes and stuff
 
     # calibration and marker params
     optimise_origin = False
@@ -719,13 +710,10 @@ if __name__ == '__main__':
             #     if hit_lowest_error:
             #         # TODO making the assumption that the lowest error above will get the lowest possible error here!!!
             #         # TODO why much better error when some markers are hidden? I'm closer? I don't think other markers help? prove it
-
             #         # TODO do many tests!!!
             #         # TODO since arm is in home position, we could plot in open3D right here!!!!!!!!
             #         # TODO show pointcloud view with open3d (blocking vs non-blocking) to test how good all the frames are!!!!!!!!!!!!!!!!!!!!!!!
             #         # TODO could do it on q key!! or every time here. Would help me visualise coordinate frame, pose and error
-
-
             #         # TODO COULD OPTIMISE ALL MARKER CORNERS for all markers ??!?!? but we don't know exactly where they are but we could find the plane and use vectors hmmmm
 
             #         tvec, rvec, optimised_error = optimise_transformation_to_origin(
@@ -838,8 +826,7 @@ if __name__ == '__main__':
                 cv2.line(color_img, FK_shoulder_projected_to_image, FK_elbow_projected_to_image, (0, 0, 0), thickness=3)
 
             images = np.hstack((color_img, depth_colormap))
-            # images = np.hstack((camera_color_img, depth_colormap))
-            # images = camera_color_img
+            # images = np.hstack((camera_color_img, depth_colormap))  # TODO to not have writing? Have better variable images
 
             cv2.imshow("image", images)
             k = cv2.waitKey(1)
@@ -1045,62 +1032,6 @@ if __name__ == '__main__':
                     fp = 'data/handeye/gripper2base_{}.txt'.format(num_saved_handeye_transforms)
                     print('Saving gripper2base at {} \n{}'.format(fp, gripper_base_transform))
                     np.savetxt(fp, gripper_base_transform, delimiter=' ')
-
-                    '''
-                    Possible things that are wrong:
-                    - base2gripper vs gripper2base
-                    - something wrong in get_gripper_base_transformation()? but gripper tip transform looks good... what if it looks good but rotation convention is wrong?
-                    - something wrong with aruco detection or transform? aruco range, maybe I should have board? So less noise? aruco rotation shouldn't matter
-                    - something wrong with hand-eye calculation? What if it expects lists or joined vectors or NxM array?
-                    - try different handeye methods, try more data (they say you need 3+)
-                    - normal typo bug somewhere? I've been triple checking
-                    - this is non-linear optimisation and no ability to give initial guess?
-                    - dorna negative joint angles, but gripper tip transform looks good...
-                    - intrinsics, but it should at least give reasonable results with bad intrinsics like we got before with aruco transforms?
-                    - arm in mm vs metres. Does distance affect rotation? No it does not. That is, wrist pitch, roll and base_yaw are the same if the arm's joints are a million metres long
-
-                    Unlikely/confirmed:
-                    - target2cam vs cam2target
-
-                    What I can do about it
-                    - since camera is static, visualise all marker poses!!!!!!!!!!!!!!!!!! better than what I did.
-                    - How to visualise and confirm all gripper poses? If everything is correct the marker poses could be ICP'd to the gripper poses but that's the whole point right?
-                    - Just try inverting gripper2base to see what happens
-                    - compare with id1 aruco strategy and see what part of translation and more specifically rotation is wrong!!!!
-                    - how to visualise and double check transformations better. I don't understand the opencv spatial algebra direction. 
-                    - visualise arm coordinate origin and camera coordinate zero? I already am doing arm
-                    - confirm target2cam and base2gripper separately
-                    - use rvec instead of rotation matrix?
-                    - read internet:
-                        - https://stackoverflow.com/questions/57008332/opencv-wrong-result-in-calibratehandeye-function
-                        - https://www.reddit.com/r/opencv/comments/n46qaf/question_hand_eye_calibration_bad_results/
-                        - https://code.ihub.org.cn/projects/729/repository/revisions/master/entry/modules/calib3d/test/test_calibration_hand_eye.cpp
-                        - original PR https://github.com/opencv/opencv/pull/13880 and matlab code copied http://lazax.com/www.cs.columbia.edu/~laza/html/Stewart/matlab/handEye.m
-                        - http://campar.in.tum.de/Chair/HandEyeCalibration
-                        - https://forum.opencv.org/t/hand-eye-calibration/1880
-                        - very good https://visp-doc.inria.fr/doxygen/visp-daily/tutorial-calibration-extrinsic.html TODO find  hand_eye_calibration_show_extrinsics.py
-                        - https://programming.vip/docs/5ee2e219e75f3.html
-                        - https://github.com/IFL-CAMP/easy_handeye/blob/master/docs/troubleshooting.md
-                        - https://forum.opencv.org/t/eye-to-hand-calibration/5690/2 this is good. Rotation matrices are dangerous but not ambiguous
-                        - totally different way: https://www.codetd.com/en/article/12950073
-                        - simulator thing https://pythonrepo.com/repo/caijunhao-calibration-python-computer-vision
-                        - https://blog.zivid.com/the-practical-guide-to-3d-hand-eye-calibration-with-zivid-one
-                    - other packages. read how other packages do it
-                        - try UR5 calibration thing (why does it need offset?)
-                        - Try handical
-                        - try easy handeye and just publish all frames (base_link doesn't move, ee_link can just be 6 or 7 vector transform from keyboard_control.py, /optical_base_frame will probably need realsense-ros, /optical_target will need aruco shit): https://github.com/IFL-CAMP/easy_handeye
-                        - https://github.com/crigroup/handeye/blob/master/src/handeye/calibrator.py
-                    '''
-
-                    # TODO might need base2gripper, inverse of above actually
-                    # TODO target2cam or cam2target. Ahh opencv param names according to eye-in-hand vs eye-to-hand might change
-                    # TODO arm2cam or cam2arm? should get to the bottom of this forever. camera coordinate in arm coordinates and the transform is the same?
-                    
-                    # TODO save pic or not? Save reprojection error or ambiguity or something?
-                    # TODO would be nice to plot all poses or coordinate frames or something
-                    # TODO how to avoid aruco error at range? Bigger? Board? Hold a checkerboard?
-                    # TODO run c key everytime here after 2? if it doesn't take too long, run it every time here?
-                    # TODO eventually put realsense in hand as well and do eye-in-hand. And multiple realsenses (maybe swap to handical or other? or do each one individually?)
 
                     num_saved_handeye_transforms += 1
                 else:

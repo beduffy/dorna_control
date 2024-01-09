@@ -13,6 +13,7 @@ import open3d as o3d
 
 from lib.vision import get_inverse_homogenous_transform
 
+
 def load_all_handeye_data():
     gripper_transform_files = sorted(glob('data/handeye/gripper2base*'))
     cam2target_files = sorted(glob('data/handeye/target2cam*'))
@@ -185,3 +186,61 @@ def calibrate_eye_hand(R_gripper2base, t_gripper2base, R_target2cam, t_target2ca
 
 if __name__ == '__main__':
     handeye_calibrate_opencv()
+
+
+
+'''
+Possible things that are wrong:
+- base2gripper vs gripper2base
+- something wrong in get_gripper_base_transformation()? but gripper tip transform looks good... what if it looks good but rotation convention is wrong?
+- something wrong with aruco detection or transform? aruco range, maybe I should have board? So less noise? aruco rotation shouldn't matter
+- something wrong with hand-eye calculation? What if it expects lists or joined vectors or NxM array?
+- try different handeye methods, try more data (they say you need 3+)
+- normal typo bug somewhere? I've been triple checking
+- this is non-linear optimisation and no ability to give initial guess?
+- dorna negative joint angles, but gripper tip transform looks good...
+- intrinsics, but it should at least give reasonable results with bad intrinsics like we got before with aruco transforms?
+- arm in mm vs metres. Does distance affect rotation? No it does not. That is, wrist pitch, roll and base_yaw are the same if the arm's joints are a million metres long
+
+Unlikely/confirmed:
+- target2cam vs cam2target
+
+What I can do about it
+- since camera is static, visualise all marker poses!!!!!!!!!!!!!!!!!! better than what I did.
+- How to visualise and confirm all gripper poses? If everything is correct the marker poses could be ICP'd to the gripper poses but that's the whole point right?
+- Just try inverting gripper2base to see what happens
+- compare with id1 aruco strategy and see what part of translation and more specifically rotation is wrong!!!!
+- how to visualise and double check transformations better. I don't understand the opencv spatial algebra direction. 
+- visualise arm coordinate origin and camera coordinate zero? I already am doing arm
+- confirm target2cam and base2gripper separately
+- use rvec instead of rotation matrix?
+- read internet:
+    - https://stackoverflow.com/questions/57008332/opencv-wrong-result-in-calibratehandeye-function
+    - https://www.reddit.com/r/opencv/comments/n46qaf/question_hand_eye_calibration_bad_results/
+    - https://code.ihub.org.cn/projects/729/repository/revisions/master/entry/modules/calib3d/test/test_calibration_hand_eye.cpp
+    - original PR https://github.com/opencv/opencv/pull/13880 and matlab code copied http://lazax.com/www.cs.columbia.edu/~laza/html/Stewart/matlab/handEye.m
+    - http://campar.in.tum.de/Chair/HandEyeCalibration
+    - https://forum.opencv.org/t/hand-eye-calibration/1880
+    - very good https://visp-doc.inria.fr/doxygen/visp-daily/tutorial-calibration-extrinsic.html TODO find  hand_eye_calibration_show_extrinsics.py
+    - https://programming.vip/docs/5ee2e219e75f3.html
+    - https://github.com/IFL-CAMP/easy_handeye/blob/master/docs/troubleshooting.md
+    - https://forum.opencv.org/t/eye-to-hand-calibration/5690/2 this is good. Rotation matrices are dangerous but not ambiguous
+    - totally different way: https://www.codetd.com/en/article/12950073
+    - simulator thing https://pythonrepo.com/repo/caijunhao-calibration-python-computer-vision
+    - https://blog.zivid.com/the-practical-guide-to-3d-hand-eye-calibration-with-zivid-one
+- other packages. read how other packages do it
+    - try UR5 calibration thing (why does it need offset?)
+    - Try handical
+    - try easy handeye and just publish all frames (base_link doesn't move, ee_link can just be 6 or 7 vector transform from keyboard_control.py, /optical_base_frame will probably need realsense-ros, /optical_target will need aruco shit): https://github.com/IFL-CAMP/easy_handeye
+    - https://github.com/crigroup/handeye/blob/master/src/handeye/calibrator.py
+'''
+
+# TODO might need base2gripper, inverse of above actually
+# TODO target2cam or cam2target. Ahh opencv param names according to eye-in-hand vs eye-to-hand might change
+# TODO arm2cam or cam2arm? should get to the bottom of this forever. camera coordinate in arm coordinates and the transform is the same?
+
+# TODO save pic or not? Save reprojection error or ambiguity or something?
+# TODO would be nice to plot all poses or coordinate frames or something
+# TODO how to avoid aruco error at range? Bigger? Board? Hold a checkerboard?
+# TODO run c key everytime here after 2? if it doesn't take too long, run it every time here?
+# TODO eventually put realsense in hand as well and do eye-in-hand. And multiple realsenses (maybe swap to handical or other? or do each one individually?)
