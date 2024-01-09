@@ -7,12 +7,7 @@ import math
 import traceback
 from glob import glob
 
-try:
-    import open3d as o3d
-    from skimage.measure import find_contours
-except Exception as e:
-    print(e)
-    print('Tried to import open3d or skimage but not installed')
+import open3d as o3d
 import requests
 import pyrealsense2 as rs
 from cv2 import aruco
@@ -32,7 +27,7 @@ from lib.realsense_helper import setup_start_realsense, realsense_get_frames, ru
 from lib.aruco_helper import create_aruco_params, aruco_detect_draw_get_transforms
 from lib.handeye_opencv_wrapper import handeye_calibrate_opencv, load_all_handeye_data, plot_all_handeye_data
 from lib.dorna_kinematics import i_k, f_k
-# from lib.open3d_plot_dorna import plot_open3d_Dorna  # TODO why broken?
+from lib.open3d_plot_dorna import plot_open3d_Dorna
 from lib.aruco_image_text import OpenCvArucoImageText
 
 
@@ -277,7 +272,6 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True):
     # TODO im not using depth!!!!!! 
 
     if all_rvec is not None:
-        print(ids)
         # retval, board_rvec, board_tvec = cv2.aruco.estimatePoseBoard(corners, ids, board, camera_matrix, dist_coeffs, all_rvec, all_tvec)
         # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, board_rvec, board_tvec, 0.05)  # last param is axis length
 
@@ -321,7 +315,7 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True):
             # x_offset_for_id_2 = 0.2
             # x_offset_for_id_4 = -0.2
 
-            # found with depth camera clicking
+            # found with depth camera clicking. # TODO are the below the very specific marker positions relative to arm?
             y_offset_for_id_1 = -0.175  # for big marker. # 0.0765 is dorna square width, so if I measure from edge of dorna instead (easier). 
             # 0.175 - (0.0765 / 2) = 0.175 - 0.03825  = 0.13675m
             extra_y_offset_for_id_2 = -0.166
@@ -653,6 +647,7 @@ if __name__ == '__main__':
     # TODO could find relative pose transformations between multiple markers and then use them to create absolute ground truth instead of using a ruler
     # TODO most important: make it work from 70cm away. This is perfect. Do I need 2 extra markers?
     # TODO for this I might need to try different optimisers or parameters. Also need to understand PnP better
+    # TODO stop indenting so much, fix it with classes and stuff
 
     # calibration and marker params
     optimise_origin = False
@@ -675,6 +670,7 @@ if __name__ == '__main__':
     marker_top_left_y_bigger_than_bottom_right = 0
 
     id_on_shoulder_motor = 1
+    id_on_shoulder_motor = 4  # actually 4 is on the gripper
 
     board_rvec = None
 
@@ -951,8 +947,7 @@ if __name__ == '__main__':
                         # TODO never understood how this relates, if origin looks good but cam2arm is bad?
                         # transforming rgbd pointcloud using bad cam2arm means what? . What is the thing changing again?
 
-                        # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, cam2arm, 0.0)
-                        full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, 0.0)
+                        full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm)
 
                         plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=[full_arm_pcd, coordinate_frame, coordinate_frame_shoulder_height])
 
@@ -985,9 +980,9 @@ if __name__ == '__main__':
 
                 cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img,
                                         pinhole_camera_intrinsic, visualise=False)
-                if saved_cam2arm:
-                    # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, cam2arm, 0.0)  # TODO why was I doing this? mistake?
-                    full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, 0.0)
+                if saved_cam2arm is not None:
+                    # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, cam2arm)  # TODO why was I doing this? mistake?
+                    full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm)
 
                     gripper_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
                                             size=25.0, origin=[0.0, 0.0, 0.0])
