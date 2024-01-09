@@ -248,6 +248,7 @@ def convert_cam_to_arm_coordinates_array(camera_coordinates, cam2arm, in_milimet
         (camera_coordinates.shape[0], 1), dtype=camera_coordinates.dtype)))
     # todo do I need top down dilation to make sure there are no gaps but could be risky too?
     # metre to milimetre conversion
+    # TODO below can be cleaner, do 1000 multiplication after
     if in_milimetres:
         obj_pcd_numpy = (1000.0 * np.dot(cam2arm, pcd_numpy_cam_coords.T)).T
     else:

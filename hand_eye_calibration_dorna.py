@@ -630,9 +630,9 @@ if __name__ == '__main__':
     depth_intrin, color_intrin, depth_scale, pipeline, align, spatial = setup_start_realsense()
 
     # TODO below is in arm coordinates right
-    coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+    coordinate_frame_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
         size=25.0, origin=[0.0, 0.0, 0.0])
-    coordinate_frame_shoulder_height = o3d.geometry.TriangleMesh.create_coordinate_frame(
+    coordinate_frame_shoulder_height_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
         size=25.0, origin=[0.0, 0.0, 206.01940000000002])
 
     # calibration and marker params
@@ -983,7 +983,7 @@ if __name__ == '__main__':
 
                         full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm)
 
-                        plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=[full_arm_pcd, coordinate_frame, coordinate_frame_shoulder_height])
+                        plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=[full_arm_pcd, coordinate_frame_arm_frame, coordinate_frame_shoulder_height_arm_frame])
 
                     else:
                         print('IK returned none')
@@ -1013,25 +1013,29 @@ if __name__ == '__main__':
                     gripper_base_transform = get_gripper_base_transformation(joint_angles)
                     gripper_coordinate_frame.transform(gripper_base_transform)
 
-                    # mesh_box = o3d.geometry.TriangleMesh.create_box(width=1.0, height=1.0, depth=0.003)
-                    mesh_box = o3d.geometry.TriangleMesh.create_box(width=100.0, height=100.0, depth=0.003)
-                    mesh_box.transform(saved_arm2cam)
-                    # mesh_box.transform(saved_cam2arm)
-                    # o3d.visualization.draw_geometries([mesh_box])
+                    mesh_box_arm_frame = o3d.geometry.TriangleMesh.create_box(width=100.0, height=100.0, depth=0.003)
+                    # mesh_box_arm_frame.transform(saved_arm2cam)
+                    mesh_box_arm_frame.transform(saved_cam2arm)  # TODO which one? Below I use arm2cam because I'm in camframe, but now I want to visualise stuff in arm frame with scaling by 1000
 
-                    aruco_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+                    # camera coordinate frame
+                    aruco_coordinate_frame_cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
                                         size=0.1, origin=[0.0, 0.0, 0.0])
-                    aruco_coordinate_frame.transform(saved_arm2cam)
-
-                    # TODO both coordinate frames are in arm coordinates?
-
+                    aruco_coordinate_frame_cam_frame.transform(saved_arm2cam)
+                    origin_frame_cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+                                            size=0.1, origin=[0.0, 0.0, 0.0])
                     mesh_box_cam = o3d.geometry.TriangleMesh.create_box(width=1.0, height=1.0, depth=0.003)
                     mesh_box_cam.transform(saved_arm2cam)
-                    extra_elements = [cam_pcd, aruco_coordinate_frame, mesh_box_cam]
-                    o3d.visualization.draw_geometries(extra_elements)
+                    elements_only_in_cam_frame = [cam_pcd, aruco_coordinate_frame_cam_frame, origin_frame_cam_frame, mesh_box_cam]
+                    o3d.visualization.draw_geometries(elements_only_in_cam_frame)
 
-                    extra_elements = [full_arm_pcd, mesh_box, gripper_coordinate_frame, coordinate_frame, coordinate_frame_shoulder_height]
-                    # extra_elements = [cam_pcd, mesh_box, gripper_coordinate_frame, aruco_coordinate_frame, coordinate_frame, coordinate_frame_shoulder_height]
+                    # TODO why are we off in depth and coordinate frame is behind marker?
+                    # TODO all I want to get to is my old hand eye aruco on shoulder calibration and then using that to try pick up objects close enough again, but this time with solvePnP and 12 markers, it should obviously work better.
+                    # TODO why is meshbox_arm_frame wrong?
+                    # TODO is it possible the scaling is messing things up? it didn't before though. 
+                    # TODO we seem to beginning arm from shoulder height, rather than ground height?
+                    # TODO both coordinate frames are in arm coordinates?
+                    extra_elements = [full_arm_pcd, mesh_box_arm_frame, gripper_coordinate_frame, 
+                                      coordinate_frame_arm_frame, coordinate_frame_shoulder_height_arm_frame]
                     plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=extra_elements)
 
                     # TODO look into open3D interactive mode and change sliders of joints here or for ik and see how wrist pitch changes

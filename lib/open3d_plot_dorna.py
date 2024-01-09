@@ -105,9 +105,9 @@ def plot_open3d_Dorna(joint_and_link_positions, extra_geometry_elements=None):
         mesh_sphere = create_sphere_at_pos(np.array(p), color=[0.1, 0.1, 0.7], radius=4.5)
         all_spheres.append(mesh_sphere)
 
-    # coordinate_frame_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame()
-    # coordinate_frame_mesh.scale(100, center=(0, 0, 0))  # TODO which frame is this?!?! ahh it was the big one
-    list_of_geometry_elements = [line_set, *line_mesh1_geoms] + all_spheres# + [coordinate_frame_mesh]
+    coordinate_frame_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame()
+    coordinate_frame_mesh.scale(100, center=(0, 0, 0))  # TODO which frame is this?!?! ahh it was the big one
+    list_of_geometry_elements = [line_set, *line_mesh1_geoms] + all_spheres + [coordinate_frame_mesh]
     if extra_geometry_elements:
         list_of_geometry_elements.extend(extra_geometry_elements)
     o3d.visualization.draw_geometries(list_of_geometry_elements)  # TODO eventually nonblocking version
