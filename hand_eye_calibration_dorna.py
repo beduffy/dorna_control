@@ -633,11 +633,13 @@ if __name__ == '__main__':
 
     depth_intrin, color_intrin, depth_scale, pipeline, align, spatial = setup_start_realsense()
 
+    shoulder_height = 206.01940000000002
+
     # TODO below is in arm coordinates right
     coordinate_frame_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
         size=25.0, origin=[0.0, 0.0, 0.0])
     coordinate_frame_shoulder_height_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-        size=25.0, origin=[0.0, 0.0, 206.01940000000002])
+        size=25.0, origin=[0.0, 0.0, shoulder_height])
 
     # calibration and marker params
     optimise_origin = False
@@ -839,6 +841,7 @@ if __name__ == '__main__':
                 pipeline.stop()
                 break
 
+
             if k == ord('a'):
                 # activate estimate_pose and optimisation pipeline
                 estimate_pose = not estimate_pose
@@ -847,12 +850,13 @@ if __name__ == '__main__':
                 lowest_optimised_error = 1000000
                 print('estimate_pose set to: {}'.format(estimate_pose))
 
+
             if k == ord('s'):
                 # print('Saving best optimised aruco cam2arm with error {}\n{}'.format(
                 #             lowest_optimised_error, cam2arm))
                 if cam2arm is not None:
                     saved_cam2arm = cam2arm
-                    saved_arm2cam = arm2cam
+                    saved_arm2cam = arm2cam  # TODO arm2cam does not exist?
                     saved_rvec = rvec
                     saved_tvec = tvec
                     print('Saving aruco cam2arm {}\n'.format(saved_cam2arm))
@@ -860,6 +864,7 @@ if __name__ == '__main__':
                     np.savetxt('data/latest_aruco_cam2arm.txt', cam2arm, delimiter=' ')
 
                     # TODO maybe for clicking i should only used saved cam2arm rather than it changing...
+
 
             if k == ord('p'):
                 if curr_arm_xyz is not None:
@@ -910,7 +915,9 @@ if __name__ == '__main__':
                 else:
                     print('curr_arm_xyz is None')
 
+
             if k == ord('i'):
+                # TODO comment here on what this key does
                 if curr_arm_xyz is not None:
                     x, y, z = curr_arm_xyz
                     # z = 200  # pre pick
@@ -946,8 +953,9 @@ if __name__ == '__main__':
                 else:
                     print('curr_arm_xyz is None')
 
+
             if k == ord('l'):
-                # Use curr joint angles and show line mesh arm plotted over pointcloud arm
+                # Use curr joint angles and show line mesh arm plotted over pointcloud arm after all transformations (some calculated here)
 
                 print('Getting joint angles')
                 # r = requests.get('http://localhost:8080/get_xyz_joint')
@@ -994,16 +1002,21 @@ if __name__ == '__main__':
                     for y_ in range(3):
                         for x_ in range(4):
                             if id_count in ids_list:
-                                top_left = np.array([-half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
-                                top_right = np.array([half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
-                                bottom_right = np.array([half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
-                                bottom_left = np.array([-half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
+                                # top_left = np.array([-half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
+                                # top_right = np.array([half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
+                                # bottom_right = np.array([half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
+                                # bottom_left = np.array([-half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
+                                # below seems about right but then ruins the projections and I could just do a 2nd transformation to ground plane instead?
+                                top_left = np.array([-half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, shoulder_height / 1000.0])
+                                top_right = np.array([half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, shoulder_height / 1000.0])
+                                bottom_right = np.array([half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, shoulder_height / 1000.0])
+                                bottom_left = np.array([-half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, shoulder_height / 1000.0])
 
                                 corners_3d_points = np.array([top_left, top_right, bottom_right, bottom_left])
                                 all_obj_points_found_from_id_1.append(corners_3d_points)
                                 imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
-                                for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
-                                    cv2.circle(camera_color_img, (int(x), int(y)), 4, colors[idx], -1)
+                                # for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
+                                #     cv2.circle(camera_color_img, (int(x), int(y)), 4, colors[idx], -1)
 
                             id_count += 1
                 outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(all_obj_points_found_from_id_1), np.concatenate(image_points), camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_IPPE)
@@ -1025,9 +1038,8 @@ if __name__ == '__main__':
                     gripper_coordinate_frame.transform(gripper_base_transform)
 
                     mesh_box_arm_frame = o3d.geometry.TriangleMesh.create_box(width=100.0, height=100.0, depth=0.003)
-                    # mesh_box_arm_frame.transform(saved_arm2cam)
-                    # mesh_box_arm_frame.transform(saved_cam2arm)  # TODO which one? Below I use arm2cam because I'm in camframe, but now I want to visualise stuff in arm frame with scaling by 1000
-                    # TODO ahhhhhh, we shouldn't transform it at all because we are already in the arm frame!!!!
+                    mesh_box_arm_frame_shoulder_height_higher = o3d.geometry.TriangleMesh.create_box(width=100.0, height=100.0, depth=0.003)
+                    mesh_box_arm_frame_shoulder_height_higher.translate(np.array([0, 0, shoulder_height]))
 
                     # camera coordinate frame
                     aruco_coordinate_frame_cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
@@ -1044,7 +1056,8 @@ if __name__ == '__main__':
                     # TODO why are we off in depth and coordinate frame is behind marker? problem is resolved when we get closer. Could try bigger markers too
                     # TODO is it possible the scaling is messing things up? it didn't before though. 
                     # TODO we seem to beginning arm from shoulder height, rather than ground height? why?
-                    extra_elements = [full_arm_pcd, mesh_box_arm_frame, gripper_coordinate_frame, 
+                    # extra_elements = [full_arm_pcd, mesh_box_arm_frame, gripper_coordinate_frame, 
+                    extra_elements = [full_arm_pcd, mesh_box_arm_frame, mesh_box_arm_frame_shoulder_height_higher, gripper_coordinate_frame, 
                                       coordinate_frame_arm_frame, coordinate_frame_shoulder_height_arm_frame]
                     plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=extra_elements)
 
@@ -1058,6 +1071,7 @@ if __name__ == '__main__':
                     # TODO if I'm specifying that the clicked point is the centre of the battery I could get an error metric from FK vs cam2arm click point
                 else:
                     print('No saved cam2arm!')
+
 
             if k == ord('h'):  # save hand-eye calibration needed transforms
                 # get and save calibration target transformation (target2cam)
@@ -1106,12 +1120,13 @@ if __name__ == '__main__':
                 else:
                     print('No tvec or rvec!')
 
+
             if k == ord('c'):  # perform hand-eye calibration using saved transforms
                 handeye_data_dict = load_all_handeye_data()
                 # plot_all_handeye_data(handeye_data_dict)
                 handeye_calibrate_opencv(handeye_data_dict)
 
-                # # TODO why load from file again, why not just return from function?
+                # TODO why load from file again, why not just return from function?
                 cam2arm = np.loadtxt('data/handeye/latest_cv2_cam2arm.txt', delimiter=' ')
                 saved_cam2arm = cam2arm
 
