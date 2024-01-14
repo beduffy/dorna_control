@@ -390,24 +390,24 @@ if __name__=="__main__":
 					# user_input_list = [float(x) for x in user_input.split(' ')]  # TODO spaces as well?
 					joint_angles = [float(x) for x in user_input.split(', ')]
 					go_to_joint_angles(joint_angles)
-				elif key == '7':
-					command = generate_command(pick_up_object_right_in_front_pose, movement=0, coord_sys='xyz')
-					print(command)
-					if robot._device["state"] == 0:
-						robot.play(command)
+				# elif key == '7':
+				# 	command = generate_command(pick_up_object_right_in_front_pose, movement=0, coord_sys='xyz')
+				# 	print(command)
+				# 	if robot._device["state"] == 0:
+				# 		robot.play(command)
 
-						print('Robot moved to pick_up_object_right_in_front_pose')
-					else:
-						print('Robot busy, did not go to pick_up_object_right_in_front_pose')
-				elif key == '8':
-					command = generate_command(drop_into_bin_pose, movement=0, coord_sys='xyz')
-					print(command)
-					if robot._device["state"] == 0:
-						robot.play(command)
+				# 		print('Robot moved to pick_up_object_right_in_front_pose')
+				# 	else:
+				# 		print('Robot busy, did not go to pick_up_object_right_in_front_pose')
+				# elif key == '8':
+				# 	command = generate_command(drop_into_bin_pose, movement=0, coord_sys='xyz')
+				# 	print(command)
+				# 	if robot._device["state"] == 0:
+				# 		robot.play(command)
 
-						print('Robot moved to drop_into_bin_pose')
-					else:
-						print('Robot busy, did not go to drop_into_bin_pose')
+				# 		print('Robot moved to drop_into_bin_pose')
+				# 	else:
+				# 		print('Robot busy, did not go to drop_into_bin_pose')
 				elif key == '1':
 					dxyz = [-joint_change_amt, 0, 0, 0, 0]
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
@@ -461,13 +461,13 @@ if __name__=="__main__":
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
 					if robot._device["state"] == 0:
 						robot.play(command)
-						print('Rolling -{}'.format(joint_change_amt))
+						print('Wrist Roll -{}'.format(joint_change_amt))
 				elif key == '/':
 					dxyz = [0, 0, 0, 0, joint_change_amt]
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
 					if robot._device["state"] == 0:
 						robot.play(command)
-						print('Rolling +{}'.format(joint_change_amt))
+						print('Wrist Roll +{}'.format(joint_change_amt))
 				elif key == 't':
 					robot.terminate()
 					print("Robot terminated")
