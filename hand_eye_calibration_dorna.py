@@ -48,6 +48,14 @@ from lib.aruco_image_text import OpenCvArucoImageText
 # TODO im not using depth for 3D or 2D points!!!!!!?
 
 
+def get_joint_angles_from_dorna_flask():
+    r = requests.get('http://localhost:8080/get_xyz_joint')
+    robot_data = r.json()
+    joint_angles = robot_data['robot_joint_angles']
+
+    return joint_angles
+
+
 def get_gripper_base_transformation(joint_angles):
     full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
 
@@ -215,11 +223,7 @@ def click_callback(event, x, y, flags, param):
                 print('saved tvec:', saved_tvec)  # TODO how different is saved_tvec to inverse saved
                 print('hand-eye click in arm coords: ', [x for x in curr_arm_xyz])
 
-                # print('Getting joint angles to compare hand-eye calibration click with FK')
-                r = requests.get('http://localhost:8080/get_xyz_joint')
-                robot_data = r.json()
-                joint_angles = robot_data['robot_joint_angles']
-                # print('current joint_angles: ', joint_angles)
+                joint_angles = get_joint_angles_from_dorna_flask()
 
                 # TODO remove prints for f_k or have param
                 full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
@@ -302,7 +306,8 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True):
             rvec, tvec = all_rvec[shoulder_motor_marker_id, 0, :], all_tvec[shoulder_motor_marker_id, 0, :]  # get first marker
             found_correct_marker = True
         else:
-            print('Did not find shoulder marker')
+            # print('Did not find shoulder marker')
+            pass
         # if found_correct_marker and rvec is not None and len(corners) == 4:  # TODO do not forget
         # if found_correct_marker and rvec is not None and len(corners) == 2:  # TODO do not forget
         if found_correct_marker and rvec is not None and len(corners) == 1:  # TODO do not forget
@@ -651,6 +656,7 @@ if __name__ == '__main__':
     half_marker_len = marker_length / 2
     colors = ((255, 255, 255), (255, 0, 0), (0, 0, 0), (0, 0, 255))
     marker_separation = 0.006
+    marker_separation = 0.0065
     ids, corners, all_rvec, all_tvec = None, None, None, None  # TODO global remove
 
     mouseX, mouseY = 0, 0
@@ -957,19 +963,8 @@ if __name__ == '__main__':
             if k == ord('l'):
                 # Use curr joint angles and show line mesh arm plotted over pointcloud arm after all transformations (some calculated here)
 
-                print('Getting joint angles')
-                # r = requests.get('http://localhost:8080/get_xyz_joint')
-                # robot_data = r.json()
-                # joint_angles = robot_data['robot_joint_angles']
-
-
-
-
-
-
-
-                joint_angles = [0, 0, 0, 0, 0]  # TODO do not forget
-
+                # joint_angles = get_joint_angles_from_dorna_flask()
+                joint_angles = [0, 0, 0, 0, 0]  # for when dorna is off # TODO do not forget
                 print('joint_angles: ', joint_angles)
 
                 full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
@@ -1052,21 +1047,20 @@ if __name__ == '__main__':
                     elements_only_in_cam_frame = [cam_pcd, aruco_coordinate_frame_cam_frame, origin_frame_cam_frame, mesh_box_cam]
                     o3d.visualization.draw_geometries(elements_only_in_cam_frame)
 
-                    # TODO the purpose of everything here. all I want to get to is my old hand eye aruco on shoulder calibration and then using that to try pick up objects close enough again, but this time with solvePnP and 12 markers, it should obviously work better.
-                    # TODO why are we off in depth and coordinate frame is behind marker? problem is resolved when we get closer. Could try bigger markers too
-                    # TODO is it possible the scaling is messing things up? it didn't before though. 
-                    # TODO we seem to beginning arm from shoulder height, rather than ground height? why?
                     # extra_elements = [full_arm_pcd, mesh_box_arm_frame, gripper_coordinate_frame, 
                     extra_elements = [full_arm_pcd, mesh_box_arm_frame, mesh_box_arm_frame_shoulder_height_higher, gripper_coordinate_frame, 
                                       coordinate_frame_arm_frame, coordinate_frame_shoulder_height_arm_frame]
                     plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=extra_elements)
 
+                    # TODO the purpose of everything here. all I want to get to is my old hand eye aruco on shoulder calibration and then using that to try pick up objects close enough again, but this time with solvePnP and 12 markers, it should obviously work better.
+                    # TODO why are we off in depth and coordinate frame is behind marker? problem is resolved when we get closer. Could try bigger markers too
+                    # TODO is it possible the scaling is messing things up? it didn't before though. 
+                    # TODO we seem to beginning arm from shoulder height, rather than ground height? why?
                     # TODO look into open3D interactive mode and change sliders of joints here or for ik and see how wrist pitch changes
                     # TODO look into camera settings so I can look down top down, side-ways and straight down barrel on arm to see how wrong transforms are
                     # TODO optimise on white sphere and track it
                     # TODO is there a way I could visual servo measure angles?
                     # TODO I was using speed 5000 (what does this mean in joint and xyz space? same thing, how fast can I go?)
-                    
                     # dist(np.array([148.166, -190.953, 440.97]), np.array([ 131.949075, -199.25261, 452.410165]))
                     # TODO if I'm specifying that the clicked point is the centre of the battery I could get an error metric from FK vs cam2arm click point
                 else:
@@ -1074,13 +1068,15 @@ if __name__ == '__main__':
 
 
             if k == ord('h'):  # save hand-eye calibration needed transforms
-                # get and save calibration target transformation (target2cam)
+                # get and save calibration target transformation (target2cam) and gripper2base
                 aruco_id_on_gripper = 4
                 bgr_color_data = cv2.cvtColor(camera_color_img, cv2.COLOR_RGB2BGR)
                 gray_data = cv2.cvtColor(bgr_color_data, cv2.COLOR_RGB2GRAY)
                 corners, ids, rejectedImgPoints = aruco.detectMarkers(gray_data, aruco_dict, parameters=parameters)
                 # frame_markers = aruco.drawDetectedMarkers(color_img, corners, ids)
                 all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
+
+                # TODO should I do open3D here too just to make sure the transform is good?
                 found_correct_marker = False
                 if aruco_id_on_gripper in ids:
                     gripper_aruco_index = [l[0] for l in ids.tolist()].index(aruco_id_on_gripper) 
@@ -1103,10 +1099,7 @@ if __name__ == '__main__':
                     np.savetxt(fp, target2cam, delimiter=' ')
 
                     # get and save gripper transformation (gripper2base)
-                    print('Getting joint angles')
-                    # r = requests.get('http://localhost:8080/get_xyz_joint')
-                    # robot_data = r.json()
-                    # joint_angles = robot_data['robot_joint_angles']
+                    joint_angles = get_joint_angles_from_dorna_flask()
 
                     # # the below is just for testing without running arm
                     # joint_angles = [0, 0, 0, 0, 0]
@@ -1130,6 +1123,7 @@ if __name__ == '__main__':
                 cam2arm = np.loadtxt('data/handeye/latest_cv2_cam2arm.txt', delimiter=' ')
                 saved_cam2arm = cam2arm
 
+                # TODO save image as well in folder
                 # TODO what the hell am I doing, of course saved cam2arm is fucked up. The only way to is to use cam_pcd 
                 cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img, pinhole_camera_intrinsic, visualise=False)
                 # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, in_milimetres=False)
