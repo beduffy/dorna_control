@@ -47,4 +47,31 @@ saved_cam2arm = cam2arm
 # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, in_milimetres=False)
 
 # plot_all_handeye_data(handeye_data_dict, cam_pcd=full_arm_pcd)
-plot_all_handeye_data(handeye_data_dict, cam_pcd=cam_pcd)
+# plot_all_handeye_data(handeye_data_dict, cam_pcd=cam_pcd)
+plot_all_handeye_data(handeye_data_dict)
+
+size = 0.1
+origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.0, 0.0, 0.0])
+
+transformed_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size * 2.5, origin=[0.0, 0.0, 0.0])
+transformed_frame.transform(saved_cam2arm)
+
+all_target2cam_rotation_mats = handeye_data_dict['all_target2cam_rotation_mats']
+all_target2cam_tvecs = handeye_data_dict['all_target2cam_tvecs']
+
+geometry_to_plot = []
+for idx, cam2target_tvec in enumerate(all_target2cam_tvecs):
+    coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+                                    size=0.1, origin=[cam2target_tvec[0], cam2target_tvec[1], cam2target_tvec[2]])
+    coordinate_frame.rotate(all_target2cam_rotation_mats[idx])
+
+    sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.01)
+    # TODO WHY is the sphere always a bit higher than the origin of the coordinate frame?
+    sphere.translate([cam2target_tvec[0], cam2target_tvec[1], cam2target_tvec[2]])
+    geometry_to_plot.append(sphere)
+    geometry_to_plot.append(coordinate_frame)
+
+# TODO rename transformed frame and understand which frame is which frame
+list_of_geometry_elements = [origin_frame, transformed_frame] + geometry_to_plot
+# list_of_geometry_elements = [origin_frame_transformed_from_camera_frame, camera_coordinate_frame] + arm_position_coord_frames
+o3d.visualization.draw_geometries(list_of_geometry_elements)

@@ -1,10 +1,4 @@
 from __future__ import print_function
-import os
-import sys
-import argparse
-import time
-import math
-import traceback
 from glob import glob
 
 import numpy as np
@@ -15,6 +9,7 @@ from lib.vision import get_inverse_homogenous_transform
 
 
 def load_all_handeye_data():
+    # Open data/handeye folder and then load into dict
     gripper_transform_files = sorted(glob('data/handeye/gripper2base*'))
     cam2target_files = sorted(glob('data/handeye/target2cam*'))
 
@@ -25,7 +20,7 @@ def load_all_handeye_data():
         print('Loaded {} transform'.format(fp))
         gripper2base_rot = gripper_transform[:3, :3]
         all_gripper_rotation_mats.append(gripper2base_rot)
-        # all_gripper_tvecs.append(gripper_transform[:3, 3] * 1000.0)
+        # all_gripper_tvecs.append(gripper_transform[:3, 3] * 1000.0)  # TODO remove if it makes no sense
         all_gripper_tvecs.append(gripper_transform[:3, 3] / 1000.0)
     R_gripper2base = np.array(all_gripper_rotation_mats)
     t_gripper2base = np.array(all_gripper_tvecs)
@@ -76,8 +71,7 @@ def plot_all_handeye_data(handeye_data_dict, cam_pcd=None):
     geometry_to_plot.append(origin_frame)
     for idx, base2gripper_tvec in enumerate(all_gripper_tvecs):
         coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-                                        # size=0.1, origin=[cam2target_tvec[0], cam2target_tvec[1], cam2target_tvec[2]])
-                                        size=0.1, origin=[base2gripper_tvec[0], base2gripper_tvec[1], base2gripper_tvec[2]])
+                                        size=0.1, origin=[base2gripper_tvec[0], base2gripper_tvec[1], base2gripper_tvec[2]])  # TODO shouldn't be doing this, should be using from transform probably?
         coordinate_frame.rotate(all_gripper_rotation_mats[idx])
 
         # sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.01)
@@ -85,6 +79,7 @@ def plot_all_handeye_data(handeye_data_dict, cam_pcd=None):
         # geometry_to_plot.append(sphere)
         geometry_to_plot.append(coordinate_frame)
 
+    print('Visualising origin and gripper frames in arm frame')
     o3d.visualization.draw_geometries(geometry_to_plot)
 
     # TODO do the below for gripper poses as well, they should perfectly align rotation-wise to aruco poses
@@ -96,12 +91,11 @@ def plot_all_handeye_data(handeye_data_dict, cam_pcd=None):
     geometry_to_plot.append(origin_frame)
     for idx, cam2target_tvec in enumerate(all_target2cam_tvecs):
         coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-                                        # size=0.1, origin=[cam2target_tvec[0], cam2target_tvec[1], cam2target_tvec[2]])
                                         size=0.1, origin=[cam2target_tvec[0], cam2target_tvec[1], cam2target_tvec[2]])
         coordinate_frame.rotate(all_target2cam_rotation_mats[idx])
 
         sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.01)
-        # todo WHY is the sphere always a bit higher than the origin of the coordinate frame?
+        # TODO WHY is the sphere always a bit higher than the origin of the coordinate frame?
         sphere.translate([cam2target_tvec[0], cam2target_tvec[1], cam2target_tvec[2]])
         geometry_to_plot.append(sphere)
         geometry_to_plot.append(coordinate_frame)
@@ -109,6 +103,7 @@ def plot_all_handeye_data(handeye_data_dict, cam_pcd=None):
 
     if cam_pcd is not None:
         geometry_to_plot.append(cam_pcd)
+    print('Visualising camera origin and aruco frames in arm frame')
     o3d.visualization.draw_geometries(geometry_to_plot)
 
 
