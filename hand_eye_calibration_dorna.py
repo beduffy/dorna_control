@@ -1032,6 +1032,8 @@ if __name__ == '__main__':
 
                 marker_to_arm_transformation = np.identity(4)
                 measured_y_distance_to_dorna_from_marker = -0.3  # with 12 big markers on plank the the left of dorna, rather than on shoulder stepper
+                measured_y_distance_to_dorna_from_marker = -0.33
+                # TODO why am i off by 2 or more cm? something slightly wrong with calculation here
                 marker_to_arm_transformation[1, 3] = measured_y_distance_to_dorna_from_marker * 1000.0  # TODO in m or milimetre?
                 arm2cam_opt = np.dot(arm2cam_opt, marker_to_arm_transformation)  # TODO rename all vars
                 
@@ -1039,6 +1041,8 @@ if __name__ == '__main__':
                 xyz_positions_of_all_joints = transform_dict_of_xyz(xyz_positions_of_all_joints, marker_to_arm_transformation)
 
                 saved_cam2arm = cam2arm_opt
+                cam2arm_opt_milimetres = np.copy(cam2arm_opt)
+                cam2arm_opt_milimetres[:3, 3] *= 1000.0
                 saved_arm2cam = arm2cam_opt
 
                 cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img,
@@ -1047,7 +1051,7 @@ if __name__ == '__main__':
                     full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm)
 
                     # visualise camera coordinate frame
-                    # TODO broken due to arm2cam milimetres something... fix
+                    # TODO broken due to arm2cam milimetres something... fix. cam2arm_opt_milimetres should do it?
                     # aruco_coordinate_frame_cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0.0, 0.0, 0.0])
                     # aruco_coordinate_frame_cam_frame.transform(saved_arm2cam)
                     # origin_frame_cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0.0, 0.0, 0.0])
@@ -1057,10 +1061,13 @@ if __name__ == '__main__':
                     # o3d.visualization.draw_geometries(elements_only_in_cam_frame)
 
                     # visualise arm coordinate frame
+                    cam_frame_in_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+                        size=25.0, origin=[0.0, 0.0, 0.0])
                     coordinate_frame_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
                         size=25.0, origin=[0.0, 0.0, 0.0])
                     coordinate_frame_shoulder_height_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
                         size=25.0, origin=[0.0, 0.0, shoulder_height])
+                    cam_frame_in_arm_frame.transform(cam2arm_opt_milimetres)
                     coordinate_frame_arm_frame.transform(marker_to_arm_transformation)
                     coordinate_frame_shoulder_height_arm_frame.transform(marker_to_arm_transformation)
 
@@ -1076,9 +1083,11 @@ if __name__ == '__main__':
                     
                     # extra_elements = [full_arm_pcd, mesh_box_arm_frame, gripper_coordinate_frame, 
                     extra_elements = [full_arm_pcd, mesh_box_arm_frame, mesh_box_arm_frame_shoulder_height_higher, gripper_coordinate_frame, 
-                                      coordinate_frame_arm_frame, coordinate_frame_shoulder_height_arm_frame]
+                                      coordinate_frame_arm_frame, coordinate_frame_shoulder_height_arm_frame, cam_frame_in_arm_frame]
                     plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=extra_elements)
 
+                    # TODO do proper handeye but put full big markers on gripper with cardboard. 
+                    # TODO get click working now with big markers. 
                     # TODO should I transform all xyz_positions_of_all_joints
                     # TODO could I keep everything in metres until I send the final control command of dorna?
                     # TODO if I create a generic transformation from marker to dorna arm origin, then I can compose transformations to pick up objects?
