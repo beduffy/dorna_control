@@ -55,6 +55,23 @@ def get_joint_angles_from_dorna_flask():
 
     return joint_angles
 
+def transform_dict_of_xyz(xyz_dict, transform):
+
+    # transforming below dict of lists with transform
+    # xyz_positions_of_all_joints = {'shoulder': [shoulder_x, shoulder_y, shoulder_z], 
+    #                                    'elbow': [elbow_x, elbow_y, elbow_z], 
+    #                                    'wrist': [wrist_x, wrist_y, wrist_z], 
+    #                                    'toolhead': xyz_toolhead_pos}
+
+    new_dict = {}
+
+    for key in xyz_dict.keys():
+        arr = np.ones(4)  # just to make last element a 1
+        arr[:3] = xyz_dict[key]
+        transformed_arr = np.dot(transform, arr)
+        new_dict[key] = [transformed_arr[0], transformed_arr[1], transformed_arr[2]]
+
+    return new_dict
 
 def get_gripper_base_transformation(joint_angles):
     full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
@@ -640,12 +657,6 @@ if __name__ == '__main__':
 
     shoulder_height = 206.01940000000002
 
-    # TODO below is in arm coordinates right
-    coordinate_frame_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-        size=25.0, origin=[0.0, 0.0, 0.0])
-    coordinate_frame_shoulder_height_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-        size=25.0, origin=[0.0, 0.0, shoulder_height])
-
     # calibration and marker params
     optimise_origin = False
     # optimise_origin = True
@@ -963,8 +974,8 @@ if __name__ == '__main__':
             if k == ord('l'):
                 # Use curr joint angles and show line mesh arm plotted over pointcloud arm after all transformations (some calculated here)
 
-                # joint_angles = get_joint_angles_from_dorna_flask()
-                joint_angles = [0, 0, 0, 0, 0]  # for when dorna is off # TODO do not forget
+                joint_angles = get_joint_angles_from_dorna_flask()
+                # joint_angles = [0, 0, 0, 0, 0]  # for when dorna is off # TODO do not forget
                 print('joint_angles: ', joint_angles)
 
                 full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
@@ -997,15 +1008,15 @@ if __name__ == '__main__':
                     for y_ in range(3):
                         for x_ in range(4):
                             if id_count in ids_list:
-                                # top_left = np.array([-half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
-                                # top_right = np.array([half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
-                                # bottom_right = np.array([half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
-                                # bottom_left = np.array([-half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
+                                top_left = np.array([-half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
+                                top_right = np.array([half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
+                                bottom_right = np.array([half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
+                                bottom_left = np.array([-half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
                                 # below seems about right but then ruins the projections and I could just do a 2nd transformation to ground plane instead?
-                                top_left = np.array([-half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, shoulder_height / 1000.0])
-                                top_right = np.array([half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, shoulder_height / 1000.0])
-                                bottom_right = np.array([half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, shoulder_height / 1000.0])
-                                bottom_left = np.array([-half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, shoulder_height / 1000.0])
+                                # top_left = np.array([-half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, shoulder_height / 1000.0])
+                                # top_right = np.array([half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, shoulder_height / 1000.0])
+                                # bottom_right = np.array([half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, shoulder_height / 1000.0])
+                                # bottom_left = np.array([-half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, shoulder_height / 1000.0])
 
                                 corners_3d_points = np.array([top_left, top_right, bottom_right, bottom_left])
                                 all_obj_points_found_from_id_1.append(corners_3d_points)
@@ -1018,7 +1029,15 @@ if __name__ == '__main__':
 
                 # TODO better understand insides of that function and have good descriptions of cam2arm vs arm2cam.
                 cam2arm_opt, arm2cam_opt, _, _, _ = create_homogenous_transformations(tvec_pnp_opt, rvec_pnp_opt)
+
+                marker_to_arm_transformation = np.identity(4)
+                measured_y_distance_to_dorna_from_marker = -0.3  # with 12 big markers on plank the the left of dorna, rather than on shoulder stepper
+                marker_to_arm_transformation[1, 3] = measured_y_distance_to_dorna_from_marker * 1000.0  # TODO in m or milimetre?
+                arm2cam_opt = np.dot(arm2cam_opt, marker_to_arm_transformation)  # TODO rename all vars
                 
+
+                xyz_positions_of_all_joints = transform_dict_of_xyz(xyz_positions_of_all_joints, marker_to_arm_transformation)
+
                 saved_cam2arm = cam2arm_opt
                 saved_arm2cam = arm2cam_opt
 
@@ -1027,31 +1046,42 @@ if __name__ == '__main__':
                 if saved_cam2arm is not None:
                     full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm)
 
-                    gripper_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-                                            size=25.0, origin=[0.0, 0.0, 0.0])
+                    # visualise camera coordinate frame
+                    # TODO broken due to arm2cam milimetres something... fix
+                    # aruco_coordinate_frame_cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0.0, 0.0, 0.0])
+                    # aruco_coordinate_frame_cam_frame.transform(saved_arm2cam)
+                    # origin_frame_cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0.0, 0.0, 0.0])
+                    # mesh_box_cam = o3d.geometry.TriangleMesh.create_box(width=1.0, height=1.0, depth=0.003)
+                    # mesh_box_cam.transform(saved_arm2cam)
+                    # elements_only_in_cam_frame = [cam_pcd, aruco_coordinate_frame_cam_frame, origin_frame_cam_frame, mesh_box_cam]
+                    # o3d.visualization.draw_geometries(elements_only_in_cam_frame)
+
+                    # visualise arm coordinate frame
+                    coordinate_frame_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+                        size=25.0, origin=[0.0, 0.0, 0.0])
+                    coordinate_frame_shoulder_height_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+                        size=25.0, origin=[0.0, 0.0, shoulder_height])
+                    coordinate_frame_arm_frame.transform(marker_to_arm_transformation)
+                    coordinate_frame_shoulder_height_arm_frame.transform(marker_to_arm_transformation)
+
+                    gripper_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=25.0, origin=[0.0, 0.0, 0.0])
                     gripper_base_transform = get_gripper_base_transformation(joint_angles)
                     gripper_coordinate_frame.transform(gripper_base_transform)
 
                     mesh_box_arm_frame = o3d.geometry.TriangleMesh.create_box(width=100.0, height=100.0, depth=0.003)
+                    mesh_box_arm_frame.transform(marker_to_arm_transformation)
                     mesh_box_arm_frame_shoulder_height_higher = o3d.geometry.TriangleMesh.create_box(width=100.0, height=100.0, depth=0.003)
+                    mesh_box_arm_frame_shoulder_height_higher.transform(marker_to_arm_transformation)
                     mesh_box_arm_frame_shoulder_height_higher.translate(np.array([0, 0, shoulder_height]))
-
-                    # camera coordinate frame
-                    aruco_coordinate_frame_cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-                                        size=0.1, origin=[0.0, 0.0, 0.0])
-                    aruco_coordinate_frame_cam_frame.transform(saved_arm2cam)
-                    origin_frame_cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-                                            size=0.1, origin=[0.0, 0.0, 0.0])
-                    mesh_box_cam = o3d.geometry.TriangleMesh.create_box(width=1.0, height=1.0, depth=0.003)
-                    mesh_box_cam.transform(saved_arm2cam)
-                    elements_only_in_cam_frame = [cam_pcd, aruco_coordinate_frame_cam_frame, origin_frame_cam_frame, mesh_box_cam]
-                    o3d.visualization.draw_geometries(elements_only_in_cam_frame)
-
+                    
                     # extra_elements = [full_arm_pcd, mesh_box_arm_frame, gripper_coordinate_frame, 
                     extra_elements = [full_arm_pcd, mesh_box_arm_frame, mesh_box_arm_frame_shoulder_height_higher, gripper_coordinate_frame, 
                                       coordinate_frame_arm_frame, coordinate_frame_shoulder_height_arm_frame]
                     plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=extra_elements)
 
+                    # TODO should I transform all xyz_positions_of_all_joints
+                    # TODO could I keep everything in metres until I send the final control command of dorna?
+                    # TODO if I create a generic transformation from marker to dorna arm origin, then I can compose transformations to pick up objects?
                     # TODO the purpose of everything here. all I want to get to is my old hand eye aruco on shoulder calibration and then using that to try pick up objects close enough again, but this time with solvePnP and 12 markers, it should obviously work better.
                     # TODO why are we off in depth and coordinate frame is behind marker? problem is resolved when we get closer. Could try bigger markers too
                     # TODO is it possible the scaling is messing things up? it didn't before though. 
@@ -1115,6 +1145,7 @@ if __name__ == '__main__':
 
 
             if k == ord('c'):  # perform hand-eye calibration using saved transforms
+                # TODO all of the below can probably go to handeye wrapper?
                 handeye_data_dict = load_all_handeye_data()
                 # plot_all_handeye_data(handeye_data_dict)
                 handeye_calibrate_opencv(handeye_data_dict)
