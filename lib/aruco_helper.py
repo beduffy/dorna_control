@@ -6,10 +6,11 @@ import matplotlib as mpl
 
 def create_aruco_params():
     marker_length = 0.0275
-    # marker_length = 0.0935  # big marker
+    marker_length = 0.058  # bigger new January 2023 marker
 
     # marker_separation = 0.06  # TODO OMFG it is supposed to be 6 milimetres not 6 cm
     marker_separation = 0.006
+    marker_separation = 0.0065  # bigger marker
     aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
     parameters = aruco.DetectorParameters_create()
     parameters.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
