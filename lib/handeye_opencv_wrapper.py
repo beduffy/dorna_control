@@ -10,6 +10,7 @@ from lib.vision import get_inverse_homogenous_transform
 
 def load_all_handeye_data():
     # Open data/handeye folder and then load into dict
+    # TODO could load different folders and save them by date or whatever and change "handeye" to default?
     gripper_transform_files = sorted(glob('data/handeye/gripper2base*'))
     cam2target_files = sorted(glob('data/handeye/target2cam*'))
 

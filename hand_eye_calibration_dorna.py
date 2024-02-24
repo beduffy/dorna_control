@@ -46,6 +46,11 @@ from lib.aruco_image_text import OpenCvArucoImageText
 # TODO for this I might need to try different optimisers or parameters. Also need to understand PnP better
 # TODO stop indenting so much, fix it with classes and stuff
 # TODO im not using depth for 3D or 2D points!!!!!!?
+# TODO how to minimise eyeball error? glue and pencil?
+# TODO why do some angles not work well? 
+# TODO https://github.com/opencv/opencv_contrib/blob/master/modules/aruco/src/aruco.cpp
+# TODO could use cube!!!
+# TODO read this: https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
 
 
 def get_joint_angles_from_dorna_flask():
@@ -54,6 +59,7 @@ def get_joint_angles_from_dorna_flask():
     joint_angles = robot_data['robot_joint_angles']
 
     return joint_angles
+
 
 def transform_dict_of_xyz(xyz_dict, transform):
     # transforming below dict of lists with transform
@@ -65,12 +71,13 @@ def transform_dict_of_xyz(xyz_dict, transform):
     new_dict = {}
 
     for key in xyz_dict.keys():
-        arr = np.ones(4)  # just to make last element a 1
+        arr = np.ones(4)  # just to make the last element a 1
         arr[:3] = xyz_dict[key]
         transformed_arr = np.dot(transform, arr)
         new_dict[key] = [transformed_arr[0], transformed_arr[1], transformed_arr[2]]
 
     return new_dict
+
 
 def get_gripper_base_transformation(joint_angles):
     full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
@@ -169,7 +176,6 @@ def optimise_transformation_to_origin(cam_3d_coords, init_tvec, init_rvec):  # T
     # TODO fix params and globals and make cleaner
     # TODO add more "world points". With 3 markers we would have 3x5=15 points and should help optimisation find correct transform from a distance
     # TODO instead of rvec axis-angle optimise quaternions or dual quaternions or something continuous
-
     # TODO remove most of below
     # the output of np.dot(cam2arm_opt, cam_coord) should be 0, 0, 0
     # cam2arm_opt is made from init_tvec and init_rvec which are optimised
@@ -332,91 +338,7 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True):
         else:
             print('Did not find shoulder marker')
             # pass
-
-
-        # TODO what the hell happens below?
-        # # if found_correct_marker and rvec is not None and len(corners) == 4:  # TODO do not forget
-        # # if found_correct_marker and rvec is not None and len(corners) == 2:  # TODO do not forget
-        # if found_correct_marker and rvec is not None and len(corners) == 1:  # TODO do not forget
-        #     # with some slightly off x-axis origin
-        #     # y_offset_for_id_1 = -0.13
-        #     # y_offset_for_id_3 = 0.127
-        #     # extra_y_offset_for_id_2 = -0.167
-        #     # extra_y_offset_for_id_4 = 0.173
-        #     # x_offset_for_id_2 = 0.2
-        #     # x_offset_for_id_4 = -0.2
-
-        #     # found with depth camera clicking. # TODO are the below the very specific marker positions relative to arm?
-        #     # y_offset_for_id_1 = -0.175  # for big marker. # 0.0765 is dorna square width, so if I measure from edge of dorna instead (easier). 
-        #     y_offset_for_id_1 = 0
-            
-        #     # project center into image with cyan? TODO what are we projecting, name it better
-        #     imagePoints, jacobian = cv2.projectPoints(np.array([0.0, y_offset_for_id_1, 0.0]), rvec, tvec, camera_matrix, dist_coeffs)
-        #     x, y = imagePoints.squeeze().tolist()
-        #     cv2.circle(color_img, (int(x), int(y)), 5, (255, 255, 0), -1)
-            
-        #     half_marker_len = marker_length / 2
-        #     top_left_first = np.array([-half_marker_len, half_marker_len + y_offset_for_id_1, 0.])
-        #     top_right_first = np.array([half_marker_len, half_marker_len + y_offset_for_id_1, 0.])
-        #     bottom_right_first = np.array([half_marker_len, -half_marker_len + y_offset_for_id_1, 0.])
-        #     bottom_left_first = np.array([-half_marker_len, -half_marker_len + y_offset_for_id_1, 0.])
-
-        #     # TODO make sure order is correct if top left is always first and x is forward?!?!?!
-        #     corners_3d_points = np.array([top_left_first, top_right_first, bottom_right_first, bottom_left_first])
-        #     imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
-        #     for x, y in imagePointsCorners.squeeze().tolist():
-        #         cv2.circle(color_img, (int(x), int(y)), 5, (255, 255, 255), -1)
-            
-        #     ids_list = [l[0] for l in ids.tolist()]
-
-        #     if len(ids_list) > 1:
-        #         corners_reordered = []
-        #         # for corner_id in [x[0] for x in ids.tolist()]:
-        #         for corner_id in [1, 2, 3, 4]:
-        #         # for corner_id in [x[0] - 1 for x in ids.tolist()]:
-        #             corner_index = ids_list.index(corner_id) 
-        #             # corners_reordered.append(corners[corner_id])
-        #             corners_reordered.append(corners[corner_index])
-        #             # rvec_aruco, tvec_aruco = all_rvec[corner_index, 0, :], all_tvec[corner_index, 0, :]
-        #             # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
-        #     else:
-        #         corners_reordered = corners
-        #         # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec, tvec, marker_length)
-
-        #     # TODO should not be running solvePnP with only 1 point... Commenting 
-        #     # outval, rvec_arm, tvec_arm = cv2.solvePnP(corners_3d_points, corners[shoulder_motor_marker_id], camera_matrix, dist_coeffs, rvec, tvec, useExtrinsicGuess=True)
-        #     # rvec = rvec_arm.squeeze()
-        #     # tvec = tvec_arm.squeeze()
-
-        #     # TODO how to minimise eyeball error? glue and pencil?
-        #     # TODO why do some angles not work well? 
-
-        #     # draw circle over arm origin in camera image
-        #     imagePoints, jacobian = cv2.projectPoints(np.array([0.0, 0.0, 0.0]), rvec, tvec, camera_matrix, dist_coeffs)
-        #     x, y = imagePoints.squeeze().tolist()
-        #     cv2.circle(color_img, (int(x), int(y)), 5, (0, 0, 255), -1)
-
-        #     # TODO would it ever be nice to always have it projected or only on click?
-        #     # imagePointsFK, jacobian = cv2.projectPoints(, rvec, tvec, camera_matrix, dist_coeffs)
-        #     # x_FK_pix, y_FK_pix = imagePointsFK.squeeze().tolist()
-        #     # FK_gripper_tip_projected_to_image = (int(round(x_FK_pix)), int(round(y_FK_pix)))
-        # else:
-        #     # print('Not doing solvePnP')
-        #     tvec, rvec = None, None
         
-        # TODO https://github.com/opencv/opencv_contrib/blob/master/modules/aruco/src/aruco.cpp
-        # TODO could use cube!!!
-        # TODO read this: https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
-        """ 
-        As mentioned earlier, an approximate estimate of the pose ( \mathbf{R} and \mathbf{t} ) can be found using the DLT solution. 
-        A naive way to improve the DLT solution would be to randomly change the pose ( \mathbf{R} and \mathbf{t} ) slightly and 
-        check if the reprojection error decreases. 
-        If it does, we can accept the new estimate of the pose. 
-        We can keep perturbing \mathbf{R} and \mathbf{t} again and again to find better estimates. 
-        While this procedure will work, it will be very slow. 
-        Turns out there are principled ways to iteratively change the values of \mathbf{R} and \mathbf{t} so that the reprojection error decreases. 
-        One such method is called Levenberg-Marquardt optimization. Check out more details on Wikipedia.
-        """
 
         # if estimate_pose:  # further refine pose of specific marker by
         #     # TODO does the above get better with more markers or not?!?!?!?! it doesn't because it's individual markers
@@ -558,7 +480,6 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True):
             found_correct_marker = False
 
         if found_correct_marker:  # TODO jan 2023 does this make any sense anymore if im using 12 markers?
-            # is this id1 or not. nope it isn't.
             # tvec, rvec = all_tvec[0].squeeze(), all_rvec[0].squeeze()
 
             # TODO typo below??? WILL IT BREAK THINGS and overwrite cam2arm or not?
@@ -986,7 +907,6 @@ if __name__ == '__main__':
                 marker_to_arm_transformation[1, 3] = measured_y_distance_to_dorna_from_marker * 1000.0  # TODO in m or milimetre?
                 arm2cam_opt = np.dot(arm2cam_opt, marker_to_arm_transformation)  # TODO rename all vars
                 
-
                 xyz_positions_of_all_joints = transform_dict_of_xyz(xyz_positions_of_all_joints, marker_to_arm_transformation)
 
                 saved_cam2arm = cam2arm_opt
