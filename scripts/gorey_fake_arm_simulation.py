@@ -179,7 +179,7 @@ for transformation in all_transformations_to_gripper:
     # array([-0.3,  0.3,  0.4,  1. ])  # correct! for first frame. Yes! 
     # the above takes a point in target frame (origin 0, 0, 0) to camera frame by going back -0.3, right 0.3 and up in z 0.4
 
-    # all_transformation_target2cam.append(inverse_transformation_from_camera_to_coord_frame)  # this was wrong, my understanding of cam2target was wrong. 
+    # all_transformation_target2cam.append(inverse_transformation_from_camera_to_coord_frame)  # TODO this was wrong, my understanding of cam2target was wrong. 
     
     
     

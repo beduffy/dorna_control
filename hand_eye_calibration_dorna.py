@@ -52,6 +52,28 @@ from lib.aruco_image_text import OpenCvArucoImageText
 # TODO could use cube!!!
 # TODO read this: https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
 
+# TODO Feb 24th 2024 update:
+'''
+What do I want?
+To pick up any object to a high accuracy, even if I'm clicking to choose the object. 
+
+Where are we?:
+Big board of markers with solvePnP worked but still there is eyeball error of placement of board and 
+how far it is from dorna center AND eyeball error of dorna arm's wrist rotation (and other joints). 
+BUT I did get close to picking up batteries with WORSE before so it 
+could be a nice quick win to pick something up again. Just feels a bit hacky since my aruco is loosely placed. 
+AND then optimise the last few milimetres with some optimisation code?
+
+Alternatively, I've successfully understood a bit more spatial algebra and made my fake gorey arm simulation 
+(with perfect transforms) work. All I have to do to make it work in the real world is debug correctly and have 
+clean code so I understand every input to everywhere. E.g. maybe use cardboard of 12 big aruco markers on gripper, 
+save these transforms WITH also the RGBD images, save everything to specific folder which can be retested 
+without an arm and then visualise outputted cam2arm within rgbd pointcloud. I need to save SolvePnP's transform on click 
+rather than only one marker. In my gorey fake arm simulation, I had the order wrong in cam2target, didn't need inverse. 
+
+Ok going for this 2nd option right now at least. 
+'''
+
 
 def get_joint_angles_from_dorna_flask():
     r = requests.get('http://localhost:8080/get_xyz_joint')
