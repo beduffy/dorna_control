@@ -1019,9 +1019,14 @@ if __name__ == '__main__':
 
                 # assert(isRotationMatrix(R_tc))
                 # assert(isRotationMatrix(R_ct))
+
+                # TODO better variable to avoid format repetition
+                full_handeye_folder_path = 'data/{}'.format(handeye_data_folder_name)
+                if not os.path.exists(full_handeye_folder_path):
+                     os.makedirs(full_handeye_folder_path)
                 
                 target2cam = arm2cam_opt  # TODO debatable and make sure!
-                fp = 'data/{}/target2cam_{}.txt'.format(handeye_data_folder_name, num_saved_handeye_transforms)
+                fp = '{}/target2cam_{}.txt'.format(full_handeye_folder_path, num_saved_handeye_transforms)
                 print('Saving target2cam at {} \n{}'.format(fp, target2cam))
                 np.savetxt(fp, target2cam, delimiter=' ')
 
@@ -1031,9 +1036,17 @@ if __name__ == '__main__':
                 joint_angles = [0, 0, 0, 0, 0]
                 gripper_base_transform = get_gripper_base_transformation(joint_angles)
                 # TODO try get inverse (actual gripper2base) just to really confirm shit
-                fp = 'data/{}/gripper2base_{}.txt'.format(handeye_data_folder_name, num_saved_handeye_transforms)
+                fp = '{}/gripper2base_{}.txt'.format(full_handeye_folder_path, num_saved_handeye_transforms)
                 print('Saving gripper2base at {} \n{}'.format(fp, gripper_base_transform))
                 np.savetxt(fp, gripper_base_transform, delimiter=' ')
+
+                # save images so we can analyse and understand transforms better later
+                # TODO stop using camera_color_img for aruco text!!!!!
+
+                fp = '{}/color_img_{}.png'.format(full_handeye_folder_path, num_saved_handeye_transforms)
+                cv2.imwrite(fp, camera_color_img)
+                fp = '{}/depth_img_{}.png'.format(full_handeye_folder_path, num_saved_handeye_transforms)
+                cv2.imwrite(fp, camera_depth_img)
 
                 num_saved_handeye_transforms += 1
                 # else:
@@ -1042,7 +1055,7 @@ if __name__ == '__main__':
 
             if k == ord('c'):  # perform hand-eye calibration using saved transforms
                 # TODO all of the below can probably go to handeye wrapper?
-                handeye_data_dict = load_all_handeye_data()
+                handeye_data_dict = load_all_handeye_data(folder_name=handeye_data_folder_name)
                 # plot_all_handeye_data(handeye_data_dict)
                 handeye_calibrate_opencv(handeye_data_dict, handeye_data_folder_name)
 
@@ -1050,10 +1063,12 @@ if __name__ == '__main__':
                 cam2arm = np.loadtxt('data/{}/latest_cv2_cam2arm.txt'.format(handeye_data_folder_name), delimiter=' ')
                 saved_cam2arm = cam2arm
 
-                # TODO save image as well in folder
+
+                
                 # TODO what the hell am I doing, of course saved cam2arm is fucked up. The only way to is to use cam_pcd 
                 cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img, pinhole_camera_intrinsic, visualise=False)
                 # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, in_milimetres=False)
+
 
                 # plot_all_handeye_data(handeye_data_dict, cam_pcd=full_arm_pcd)
                 plot_all_handeye_data(handeye_data_dict, cam_pcd=cam_pcd)
