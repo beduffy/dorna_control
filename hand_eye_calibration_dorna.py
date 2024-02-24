@@ -68,7 +68,7 @@ Option B: Alternatively, I've successfully understood a bit more spatial algebra
 (with perfect transforms) work. All I have to do to make it work in the real world is debug correctly and have 
 clean code so I understand every input to everywhere. E.g. maybe use cardboard of 12 big aruco markers on gripper, 
 save these transforms WITH also the RGBD images, save everything to specific folder which can be retested 
-without an arm and then visualise outputted cam2arm within rgbd pointcloud. I need to save SolvePnP's transform on click 
+without an arm and then visualise outputted cam2arm within rgbd pointcloud. I need to save SolvePnP's transform on key press 
 rather than only one marker. In my gorey fake arm simulation, I had the order wrong in cam2target, didn't need inverse. 
 
 Ok going for this option B right now at least. 
@@ -822,7 +822,16 @@ if __name__ == '__main__':
 
             if k == ord('l'):
                 # TODO verify what l does and write here
-                # Use curr joint angles and show line mesh arm plotted over pointcloud arm after all transformations (some calculated here)
+                # TODO this is wrong description: Use curr joint angles and show line mesh arm plotted over pointcloud arm after all transformations (some calculated here)
+
+                # What I want 'l' to do: 
+                # actually don't know...
+
+                # What 'l' changed to in January 2024:
+                # Running solvePnP on obj+img points, visualising most accurate transforms, 
+                # AND OVERWRITING saved_cam2arm for then running with 'i' key AND later 'p' key if it worked...
+
+                # what if 'l' is option A and 'h' is option B?
 
                 # joint_angles = get_joint_angles_from_dorna_flask()
                 joint_angles = [0, 0, 0, 0, 0]  # for when dorna is off # TODO do not forget
@@ -900,7 +909,7 @@ if __name__ == '__main__':
                 saved_cam2arm = cam2arm_opt
                 cam2arm_opt_milimetres = np.copy(cam2arm_opt)
                 cam2arm_opt_milimetres[:3, 3] *= 1000.0
-                saved_arm2cam = arm2cam_opt
+                saved_arm2cam = arm2cam_opt  # TODO wtf, double overwrite. Is this more correct? below im using milimetres.
 
                 cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img,
                                         pinhole_camera_intrinsic, visualise=False)
@@ -965,6 +974,13 @@ if __name__ == '__main__':
 
             if k == ord('h'):  # save hand-eye calibration needed transforms
                 # get and save calibration target transformation (target2cam) and gripper2base
+
+                # What I want 'h' to do:
+                # Calculate, visualise and save cam2target and gripper2base to new folder (e.g. handeye_24_02_2024_HH_MM_SS). 
+                # But the new idea will be to use SolvePnP with 12 markers. 
+                # AND Also save the RGBD images so I can visualise each transform individually but also in one pointcloud assuming camera does not move.
+                # later make it easy to test, visualise on any folder. In my gorey fake arm simulation, I had the order wrong in cam2target, didn't need inverse. 
+
                 aruco_id_on_gripper = 4
                 bgr_color_data = cv2.cvtColor(camera_color_img, cv2.COLOR_RGB2BGR)
                 gray_data = cv2.cvtColor(bgr_color_data, cv2.COLOR_RGB2GRAY)
