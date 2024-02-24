@@ -58,20 +58,20 @@ What do I want?
 To pick up any object to a high accuracy, even if I'm clicking to choose the object. 
 
 Where are we?:
-Big board of markers with solvePnP worked but still there is eyeball error of placement of board and 
+Option A: Big board of markers with solvePnP worked but still there is eyeball error of placement of board and 
 how far it is from dorna center AND eyeball error of dorna arm's wrist rotation (and other joints). 
 BUT I did get close to picking up batteries with WORSE before so it 
 could be a nice quick win to pick something up again. Just feels a bit hacky since my aruco is loosely placed. 
 AND then optimise the last few milimetres with some optimisation code?
 
-Alternatively, I've successfully understood a bit more spatial algebra and made my fake gorey arm simulation 
+Option B: Alternatively, I've successfully understood a bit more spatial algebra and made my fake gorey arm simulation 
 (with perfect transforms) work. All I have to do to make it work in the real world is debug correctly and have 
 clean code so I understand every input to everywhere. E.g. maybe use cardboard of 12 big aruco markers on gripper, 
 save these transforms WITH also the RGBD images, save everything to specific folder which can be retested 
 without an arm and then visualise outputted cam2arm within rgbd pointcloud. I need to save SolvePnP's transform on click 
 rather than only one marker. In my gorey fake arm simulation, I had the order wrong in cam2target, didn't need inverse. 
 
-Ok going for this 2nd option right now at least. 
+Ok going for this option B right now at least. 
 '''
 
 
@@ -341,13 +341,12 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True):
         ids_list = [l[0] for l in ids.tolist()]
 
         if len(ids_list) >= 1:
-            corners_reordered = []
+            # TODO am i using the below?
             for corner_id in [1, 2, 3, 4]:
                 # TODO what am I doing below?
                 # for corner_id in [4]:  # TODO make it not crash if other aruco etc!!!
                 if corner_id in ids_list:
                     corner_index = ids_list.index(corner_id) 
-                    corners_reordered.append(corners[corner_index])
                     # rvec_aruco, tvec_aruco = all_rvec[corner_index, 0, :], all_tvec[corner_index, 0, :]
                     # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
 
@@ -358,7 +357,8 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True):
             rvec, tvec = all_rvec[shoulder_motor_marker_id, 0, :], all_tvec[shoulder_motor_marker_id, 0, :]  # get first marker
             found_correct_marker = True
         else:
-            print('Did not find shoulder marker')
+            print('Did not find shoulder marker, {}'.format(ids_list))
+            tvec, rvec = None, None
             # pass
         
 
@@ -369,11 +369,6 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True):
         #     # TODO use initial guess as last all_rvec? This might help it be less jumpy?
 
         #     if ids is not None: # and (id_on_shoulder_motor in ids):
-        #         # retval, rvec, tvec = cv2.aruco.estimatePoseBoard
-        #         # -- ret = [rvec, tvec, ?]
-        #         # -- array of rotation and position of each marker in camera frame
-        #         # -- rvec = [[rvec_1], [rvec_2], ...]    attitude of the marker respect to camera frame
-        #         # -- tvec = [[tvec_1], [tvec_2], ...]    position of the marker in camera frame
 
     #             if id_on_shoulder_motor in ids:
     #                 shoulder_motor_marker_id = [l[0] for l in ids.tolist()].index(id_on_shoulder_motor)
@@ -497,9 +492,10 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True):
         #                     # print('Mean 3D absolute error: {}. Mean 2D absolute error: {}'.format(sum(all_dist_3ds) / len(all_dist_3ds),
         #                     #                                         sum(all_dist_2ds) / len(all_dist_2ds)))
 
-        if tvec is None or rvec is None:
-            # print('tvec or vec is none')
-            found_correct_marker = False
+        # TODO used to have this but now it crashes when we find one aruco but it's not the correct ID
+        # if tvec is None or rvec is None:
+        #     # print('tvec or vec is none')
+        #     found_correct_marker = False
 
         if found_correct_marker:  # TODO jan 2023 does this make any sense anymore if im using 12 markers?
             # tvec, rvec = all_tvec[0].squeeze(), all_rvec[0].squeeze()
@@ -572,10 +568,6 @@ if __name__ == '__main__':
     check_corner_frame_count = 0
     frame_count = 1
     num_saved_handeye_transforms = 0
-    marker_top_left_x_bigger_than_top_right = 0
-    marker_top_left_x_bigger_than_bottom_right = 0
-    marker_top_left_y_bigger_than_bottom_left = 0
-    marker_top_left_y_bigger_than_bottom_right = 0
 
     id_on_shoulder_motor = 1
 
@@ -682,44 +674,8 @@ if __name__ == '__main__':
             #
             # # TODO marker z's seem a bit wrong? Maybe it's the depth scale by 1-10cm off
             # # will only work if we are facing it directly? Or not, because the transformation should be correct
-            # # assert marker_xyz_top_left[0] < marker_xyz_top_right[0] and \
-            # #        marker_xyz_top_left[0]cv2. < marker_xyz_bottom_right[0] and \
-            # #        marker_xyz_top_left[1] > marker_xyz_bottom_left[1] and \
-            # #        marker_xyz_top_left[1] > marker_xyz_bottom_right[1]
-            #
-            # # TODO not doing the below anymore but would be good to check?
-            # if marker_xyz_top_left is not None and marker_xyz_top_right is not None and marker_xyz_bottom_right is not None \
-            #         and marker_xyz_bottom_left is not None and not (
-            #         marker_xyz_top_left[0] < marker_xyz_top_right[0] and
-            #         marker_xyz_top_left[0] < marker_xyz_bottom_right[0] and
-            #         marker_xyz_top_left[1] > marker_xyz_bottom_left[1] and
-            #         marker_xyz_top_left[1] > marker_xyz_bottom_right[1]):
-            #
-            #     if not marker_xyz_top_left[0] < marker_xyz_top_right[0]:
-            #         marker_top_left_x_bigger_than_top_right += 1
-            #     if not marker_xyz_top_left[0] < marker_xyz_bottom_right[0]:
-            #         marker_top_left_x_bigger_than_bottom_right += 1
-            #     if not marker_xyz_top_left[1] > marker_xyz_bottom_left[1]:
-            #         marker_top_left_y_bigger_than_bottom_left += 1
-            #     if not marker_xyz_top_left[1] > marker_xyz_bottom_right[1]:
-            #         marker_top_left_y_bigger_than_bottom_right += 1
-            #
-            #     # print('Marker xyz position wrong')
-            #     # print('marker_top_left_x_bigger_than_top_right:', marker_top_left_x_bigger_than_top_right)
-            #     # print('marker_top_left_x_bigger_than_bottom_right:', marker_top_left_x_bigger_than_bottom_right)
-            #     # print('marker_top_left_y_bigger_than_bottom_left:', marker_top_left_y_bigger_than_bottom_left)
-            #     # print('marker_top_left_y_bigger_than_bottom_right:', marker_top_left_y_bigger_than_bottom_right)
-            #     # print('frame_count: {}'.format(frame_count))
-            #     # TODO one time they all followed each other exactly 3 numbers were the same out of 4. the 4th was 0
-            #     # TODO what to do about z flip????? Does it affect x and y? Probably not or....
             #
             # # TODO could create my own drawAxis to test the depth and once that works everything will work right?
-            #
-            # cv2.circle(color_img, top_left_pixel, 4, color=(255, 0, 0))
-            # cv2.circle(color_img, top_right_pixel, 4, color=(0, 255, 0))
-            # cv2.circle(color_img, bottom_right_pixel, 4, color=(0, 0, 255))
-            # cv2.circle(color_img, bottom_left_pixel, 4, color=(0, 0, 0))
-            #
 
             if click_pix_coord is not None:
                 cv2.circle(color_img, click_pix_coord, 5, (0, 0, 255), -1)
@@ -760,6 +716,7 @@ if __name__ == '__main__':
 
 
             if k == ord('s'):
+                # Saves current cam2arm, arm2cam, rvec, tvec from chosen marker ID # TODO but that doesn't make too much sense
                 # print('Saving best optimised aruco cam2arm with error {}\n{}'.format(
                 #             lowest_optimised_error, cam2arm))
                 if cam2arm is not None:
@@ -775,7 +732,7 @@ if __name__ == '__main__':
 
 
             if k == ord('p'):
-                # pick up xyz
+                # Go to saved xyz position from click, but first pre-grasp pose right above.
                 if curr_arm_xyz is not None:
                     x, y, z = curr_arm_xyz
                     # if z < 10:
@@ -826,7 +783,7 @@ if __name__ == '__main__':
 
 
             if k == ord('i'):
-                # TODO comment here on what this key does. Maybe it visualises current arm position, but that's what l does? nah it visualises what dorna would do before we do it!!!! run it!!!
+                # Visualise how dorna stick/line mesh arm in pointcloud would look like picking up chosen click position
                 if curr_arm_xyz is not None:
                     x, y, z = curr_arm_xyz
                     # z = 200  # pre pick
@@ -864,6 +821,7 @@ if __name__ == '__main__':
 
 
             if k == ord('l'):
+                # TODO verify what l does and write here
                 # Use curr joint angles and show line mesh arm plotted over pointcloud arm after all transformations (some calculated here)
 
                 # joint_angles = get_joint_angles_from_dorna_flask()
@@ -873,6 +831,8 @@ if __name__ == '__main__':
                 full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
                 print('full_toolhead_fk: ', full_toolhead_fk)
 
+                # TODO first what am i doing below? first idea and then functions
+                # Calculate image points of 12 aruco markers
                 ids_list = [l[0] for l in ids.tolist()]
                 ids_list_with_index_key_tuple = [(idx, id_) for idx, id_ in enumerate(ids_list)]
                 ids_list_sorted = sorted(ids_list_with_index_key_tuple, key=lambda x: x[1])
@@ -890,9 +850,9 @@ if __name__ == '__main__':
                         id_1_rvec, id_1_tvec = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
 
                 tvec, rvec = id_1_tvec, id_1_rvec  # so I can build object points from the ground up... 
-
                 # TODO how to use depth here?
 
+                # Calculate object points of all 12 markers and project back to image
                 if id_1_tvec is not None and id_1_rvec is not None:
                     spacing = marker_length + marker_separation
                     all_obj_points_found_from_id_1 = []
@@ -917,11 +877,15 @@ if __name__ == '__main__':
                                 #     cv2.circle(camera_color_img, (int(x), int(y)), 4, colors[idx], -1)
 
                             id_count += 1
-                outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(all_obj_points_found_from_id_1), np.concatenate(image_points), camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_IPPE)
 
+                # after finding all object and image points, run PnP to get best homogenous transform
+                outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(all_obj_points_found_from_id_1), np.concatenate(image_points), camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_IPPE)
                 # TODO better understand insides of that function and have good descriptions of cam2arm vs arm2cam.
                 cam2arm_opt, arm2cam_opt, _, _, _ = create_homogenous_transformations(tvec_pnp_opt, rvec_pnp_opt)
 
+                # TODO I might want to switch between option A and B. 
+                # Because I had original 12 markers to the left of the shoulder (option A mentioned above) 
+                # I wanted to further compose a transform, from marker to center of dorna. 
                 marker_to_arm_transformation = np.identity(4)
                 measured_y_distance_to_dorna_from_marker = -0.3  # with 12 big markers on plank the the left of dorna, rather than on shoulder stepper
                 measured_y_distance_to_dorna_from_marker = -0.33
@@ -929,6 +893,8 @@ if __name__ == '__main__':
                 marker_to_arm_transformation[1, 3] = measured_y_distance_to_dorna_from_marker * 1000.0  # TODO in m or milimetre?
                 arm2cam_opt = np.dot(arm2cam_opt, marker_to_arm_transformation)  # TODO rename all vars
                 
+
+                # TODO what does the below do? 
                 xyz_positions_of_all_joints = transform_dict_of_xyz(xyz_positions_of_all_joints, marker_to_arm_transformation)
 
                 saved_cam2arm = cam2arm_opt
@@ -1017,9 +983,7 @@ if __name__ == '__main__':
                     tvec, rvec = None, None
 
                 if found_correct_marker and tvec is not None and rvec is not None:
-                    # usual order: cam2arm, arm2cam
                     cam2target, target2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
-                    # target2cam, cam2target, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
 
                     assert(isRotationMatrix(R_tc))
                     assert(isRotationMatrix(R_ct))
