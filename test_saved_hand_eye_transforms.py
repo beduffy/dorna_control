@@ -32,6 +32,9 @@ from lib.aruco_image_text import OpenCvArucoImageText
 
 
 folder_name = 'handeye_jan_10th'
+# folder_name = '24_02_2024_14_13_53'
+folder_name = '24_02_2024_14_19_13'
+# folder_name = '24_02_2024_14_35_34'
 
 handeye_data_dict = load_all_handeye_data(folder_name)
 print('handeye dict:\n', handeye_data_dict)
@@ -42,14 +45,25 @@ handeye_calibrate_opencv(handeye_data_dict, folder_name)
 cam2arm = np.loadtxt('data/{}/latest_cv2_cam2arm.txt'.format(folder_name), delimiter=' ')
 saved_cam2arm = cam2arm
 
-# TODO what the hell am I doing, of course saved cam2arm is fucked up. The only way to is to use cam_pcd
-# TODO should save camera image
-# cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img, pinhole_camera_intrinsic, visualise=False)
-# full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, in_milimetres=False)
+if handeye_data_dict['color_images']:
+    camera_color_img = handeye_data_dict['color_images'][0]
+    camera_depth_img = handeye_data_dict['depth_images'][0]
+
+cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img, pinhole_camera_intrinsic, visualise=False)
+full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, in_milimetres=False)
+
+# TODO cam_pcd points are all between these min and max. Because cv2.imwrite for depth is wrong?
+'''
+np.asarray(cam_pcd.points).min()
+(Pdb) -6.535066973443431e-06
+np.asarray(cam_pcd.points).max()
+(Pdb) 1.1764705959649291e-05
+'''
+# ahh img = cv2.imread(fp, cv2.IMREAD_UNCHANGED) solved it 
 
 # plot_all_handeye_data(handeye_data_dict, cam_pcd=full_arm_pcd)
-# plot_all_handeye_data(handeye_data_dict, cam_pcd=cam_pcd)
-plot_all_handeye_data(handeye_data_dict)
+plot_all_handeye_data(handeye_data_dict, cam_pcd=cam_pcd)
+# plot_all_handeye_data(handeye_data_dict)
 
 size = 0.1
 origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.0, 0.0, 0.0])
@@ -72,6 +86,7 @@ for idx, cam2target_tvec in enumerate(all_target2cam_tvecs):
     geometry_to_plot.append(sphere)
     geometry_to_plot.append(coordinate_frame)
 
+print('Visualising origin, transformed frame and spheres and coordinate frames')  # TODO what are we doing here?
 # TODO rename transformed frame and understand which frame is which frame
 list_of_geometry_elements = [origin_frame, transformed_frame] + geometry_to_plot
 # list_of_geometry_elements = [origin_frame_transformed_from_camera_frame, camera_coordinate_frame] + arm_position_coord_frames

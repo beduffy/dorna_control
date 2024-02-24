@@ -43,6 +43,19 @@ def load_all_handeye_data(folder_name):
     R_target2cam = np.array(all_target2cam_rotation_mats)
     t_target2cam = np.array(all_target2cam_tvecs)
 
+    # if images exist, load
+    color_images = []
+    color_img_files = sorted(glob('data/{}/color_img*.png'.format(folder_name)))
+    for fp in color_img_files:
+        img = cv2.imread(fp)
+        color_images.append(img)
+
+    depth_images = []
+    depth_img_files = sorted(glob('data/{}/depth_img*.png'.format(folder_name)))
+    for fp in depth_img_files:
+        img = cv2.imread(fp, cv2.IMREAD_UNCHANGED)
+        depth_images.append(img)
+
     handeye_data_dict = {
         'all_gripper_rotation_mats': all_gripper_rotation_mats,
         'all_gripper_tvecs': all_gripper_tvecs,
@@ -52,6 +65,8 @@ def load_all_handeye_data(folder_name):
         'all_target2cam_tvecs': all_target2cam_tvecs,
         'R_target2cam': R_target2cam,
         't_target2cam': t_target2cam,
+        'color_images': color_images,
+        'depth_images': depth_images,
     }
     return handeye_data_dict
 
@@ -65,6 +80,8 @@ def plot_all_handeye_data(handeye_data_dict, cam_pcd=None):
     all_target2cam_tvecs = handeye_data_dict['all_target2cam_tvecs']
     R_target2cam = handeye_data_dict['R_target2cam']
     t_target2cam = handeye_data_dict['t_target2cam']
+
+    # TODO clean entire function, comments etc, hard to think about
 
     geometry_to_plot = []
     origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
@@ -85,12 +102,13 @@ def plot_all_handeye_data(handeye_data_dict, cam_pcd=None):
 
     # TODO do the below for gripper poses as well, they should perfectly align rotation-wise to aruco poses
     geometry_to_plot = []
-    origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-                                        size=0.2, origin=[0.0, 0.0, 0.0])
+    origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2, origin=[0.0, 0.0, 0.0])
+
     # TODO ideally I'd visualise a frustum. matplotlib?
     # TODO draw mini plane of all arucos rather than coordinate frames. https://github.com/isl-org/Open3D/issues/3618
     geometry_to_plot.append(origin_frame)
     for idx, cam2target_tvec in enumerate(all_target2cam_tvecs):
+        # TODO should be transforming and not rotating + translating
         coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
                                         size=0.1, origin=[cam2target_tvec[0], cam2target_tvec[1], cam2target_tvec[2]])
         coordinate_frame.rotate(all_target2cam_rotation_mats[idx])
@@ -104,7 +122,7 @@ def plot_all_handeye_data(handeye_data_dict, cam_pcd=None):
 
     if cam_pcd is not None:
         geometry_to_plot.append(cam_pcd)
-    print('Visualising camera origin and aruco frames in arm frame')
+    print('Visualising camera origin and aruco frames in arm frame, something something...?')
     o3d.visualization.draw_geometries(geometry_to_plot)
 
 
