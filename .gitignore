@@ -1,5 +1,5 @@
 .vscode/*
 *.pyc
-data/handeye/*
+data/handeye*/*
 data/markers.pdf
 data/charuco_board.pdf
