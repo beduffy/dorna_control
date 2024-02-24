@@ -6,6 +6,7 @@ import time
 import math
 import traceback
 from glob import glob
+from datetime import datetime
 
 import open3d as o3d
 import requests
@@ -580,6 +581,9 @@ if __name__ == '__main__':
     np.set_printoptions(precision=6, suppress=True)
     opencv_aruco_image_text = OpenCvArucoImageText()
 
+    handeye_data_folder_name = datetime.now().strftime('%d_%m_%Y_%H_%M_%S')
+    print('handeye_data_folder_name for all saved transforms: ', handeye_data_folder_name)
+
     prev_arm_xyz = np.array([0., 0., 0.])
     cam2arm = np.identity(4)
     saved_cam2arm = None
@@ -987,58 +991,63 @@ if __name__ == '__main__':
                 # But the new idea will be to use SolvePnP with 12 markers. 
                 # AND Also save the RGBD images so I can visualise each transform individually but also in one pointcloud assuming camera does not move.
                 # later make it easy to test, visualise on any folder. In my gorey fake arm simulation, I had the order wrong in cam2target, didn't need inverse. 
-
-                aruco_id_on_gripper = 4
-                bgr_color_data = cv2.cvtColor(camera_color_img, cv2.COLOR_RGB2BGR)
-                gray_data = cv2.cvtColor(bgr_color_data, cv2.COLOR_RGB2GRAY)
-                corners, ids, rejectedImgPoints = aruco.detectMarkers(gray_data, aruco_dict, parameters=parameters)
-                # frame_markers = aruco.drawDetectedMarkers(color_img, corners, ids)
-                all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
-
+                
                 # TODO should I do open3D here too just to make sure the transform is good?
-                found_correct_marker = False
-                if aruco_id_on_gripper in ids:
-                    gripper_aruco_index = [l[0] for l in ids.tolist()].index(aruco_id_on_gripper) 
-                    rvec, tvec = all_rvec[gripper_aruco_index, 0, :], all_tvec[gripper_aruco_index, 0, :]
-                    # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec, tvec, marker_length)
-                    found_correct_marker = True
-                else:
-                    tvec, rvec = None, None
 
-                if found_correct_marker and tvec is not None and rvec is not None:
-                    cam2target, target2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
+                # TODO do I Want to keep the code to make it work on 1 marker?
+                # TODO how will i rotate the gripper with large 12 cardboard markers on the gripper? Only add after homing?, first see if it is a problem
+                # TODO only if we see markers or 12 markers?
+                # if tvec is not None and rvec is not None:
+                cam2arm_opt, arm2cam_opt = calculate_pnp_12_markers(ids, all_rvec, all_tvec)
 
-                    assert(isRotationMatrix(R_tc))
-                    assert(isRotationMatrix(R_ct))
+                # aruco_id_on_gripper = 4
+                # bgr_color_data = cv2.cvtColor(camera_color_img, cv2.COLOR_RGB2BGR)
+                # gray_data = cv2.cvtColor(bgr_color_data, cv2.COLOR_RGB2GRAY)
+                # corners, ids, rejectedImgPoints = aruco.detectMarkers(gray_data, aruco_dict, parameters=parameters)
+                # # frame_markers = aruco.drawDetectedMarkers(color_img, corners, ids)
+                # all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
+                # found_correct_marker = False
+                # if aruco_id_on_gripper in ids:
+                #     gripper_aruco_index = [l[0] for l in ids.tolist()].index(aruco_id_on_gripper) 
+                #     rvec, tvec = all_rvec[gripper_aruco_index, 0, :], all_tvec[gripper_aruco_index, 0, :]
+                #     # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec, tvec, marker_length)
+                #     found_correct_marker = True
+                # else:
+                #     tvec, rvec = None, None
 
-                    fp = 'data/handeye/target2cam_{}.txt'.format(num_saved_handeye_transforms)
-                    print('Saving target2cam at {} \n{}'.format(fp, target2cam))
-                    np.savetxt(fp, target2cam, delimiter=' ')
+                # cam2target, target2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
 
-                    # get and save gripper transformation (gripper2base)
-                    joint_angles = get_joint_angles_from_dorna_flask()
+                # assert(isRotationMatrix(R_tc))
+                # assert(isRotationMatrix(R_ct))
+                
+                target2cam = arm2cam_opt  # TODO debatable and make sure!
+                fp = 'data/{}/target2cam_{}.txt'.format(handeye_data_folder_name, num_saved_handeye_transforms)
+                print('Saving target2cam at {} \n{}'.format(fp, target2cam))
+                np.savetxt(fp, target2cam, delimiter=' ')
 
-                    # # the below is just for testing without running arm
-                    # joint_angles = [0, 0, 0, 0, 0]
-                    gripper_base_transform = get_gripper_base_transformation(joint_angles)
-                    # TODO try get inverse (actual gripper2base) just to really confirm shit
-                    fp = 'data/handeye/gripper2base_{}.txt'.format(num_saved_handeye_transforms)
-                    print('Saving gripper2base at {} \n{}'.format(fp, gripper_base_transform))
-                    np.savetxt(fp, gripper_base_transform, delimiter=' ')
+                # get and save gripper transformation (gripper2base)
+                # joint_angles = get_joint_angles_from_dorna_flask()  # TODO do not forget
+                # # the below is just for testing without running arm
+                joint_angles = [0, 0, 0, 0, 0]
+                gripper_base_transform = get_gripper_base_transformation(joint_angles)
+                # TODO try get inverse (actual gripper2base) just to really confirm shit
+                fp = 'data/{}/gripper2base_{}.txt'.format(handeye_data_folder_name, num_saved_handeye_transforms)
+                print('Saving gripper2base at {} \n{}'.format(fp, gripper_base_transform))
+                np.savetxt(fp, gripper_base_transform, delimiter=' ')
 
-                    num_saved_handeye_transforms += 1
-                else:
-                    print('No tvec or rvec!')
+                num_saved_handeye_transforms += 1
+                # else:
+                #     print('No tvec or rvec!')
 
 
             if k == ord('c'):  # perform hand-eye calibration using saved transforms
                 # TODO all of the below can probably go to handeye wrapper?
                 handeye_data_dict = load_all_handeye_data()
                 # plot_all_handeye_data(handeye_data_dict)
-                handeye_calibrate_opencv(handeye_data_dict)
+                handeye_calibrate_opencv(handeye_data_dict, handeye_data_folder_name)
 
                 # TODO why load from file again, why not just return from function?
-                cam2arm = np.loadtxt('data/handeye/latest_cv2_cam2arm.txt', delimiter=' ')
+                cam2arm = np.loadtxt('data/{}/latest_cv2_cam2arm.txt'.format(handeye_data_folder_name), delimiter=' ')
                 saved_cam2arm = cam2arm
 
                 # TODO save image as well in folder
