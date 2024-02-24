@@ -74,6 +74,59 @@ rather than only one marker. In my gorey fake arm simulation, I had the order wr
 Ok going for this option B right now at least. 
 '''
 
+def calculate_pnp_12_markers(ids, all_rvec, all_tvec):
+    ids_list = [l[0] for l in ids.tolist()]
+    ids_list_with_index_key_tuple = [(idx, id_) for idx, id_ in enumerate(ids_list)]
+    ids_list_sorted = sorted(ids_list_with_index_key_tuple, key=lambda x: x[1])
+    image_points = []
+    ids_list = [x[0] for x in ids.tolist()]
+    for idx_of_marker, id_of_marker in ids_list_sorted:
+        image_points.append(corners[idx_of_marker].squeeze())
+
+    num_ids_to_draw = 12
+    id_1_rvec, id_1_tvec = None, None
+    for list_idx, corner_id in enumerate(ids_list[0:num_ids_to_draw]):
+        if list_idx == 0:
+            rvec_aruco, tvec_aruco = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
+        if corner_id == 1:
+            id_1_rvec, id_1_tvec = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
+
+    tvec, rvec = id_1_tvec, id_1_rvec  # so I can build object points from the ground up... 
+    # TODO how to use depth here?
+
+    # Calculate object points of all 12 markers and project back to image
+    if id_1_tvec is not None and id_1_rvec is not None:
+        spacing = marker_length + marker_separation
+        all_obj_points_found_from_id_1 = []
+        id_count = 1
+        for y_ in range(3):
+            for x_ in range(4):
+                if id_count in ids_list:
+                    top_left = np.array([-half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
+                    top_right = np.array([half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
+                    bottom_right = np.array([half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
+                    bottom_left = np.array([-half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
+                    # below seems about right but then ruins the projections and I could just do a 2nd transformation to ground plane instead?
+                    # top_left = np.array([-half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, shoulder_height / 1000.0])
+                    # top_right = np.array([half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, shoulder_height / 1000.0])
+                    # bottom_right = np.array([half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, shoulder_height / 1000.0])
+                    # bottom_left = np.array([-half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, shoulder_height / 1000.0])
+
+                    corners_3d_points = np.array([top_left, top_right, bottom_right, bottom_left])
+                    all_obj_points_found_from_id_1.append(corners_3d_points)
+                    imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
+                    # for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
+                    #     cv2.circle(camera_color_img, (int(x), int(y)), 4, colors[idx], -1)
+
+                id_count += 1
+
+    # after finding all object and image points, run PnP to get best homogenous transform
+    outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(all_obj_points_found_from_id_1), np.concatenate(image_points), camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_IPPE)
+    # TODO better understand insides of that function and have good descriptions of cam2arm vs arm2cam.
+    cam2arm_opt, arm2cam_opt, _, _, _ = create_homogenous_transformations(tvec_pnp_opt, rvec_pnp_opt)
+
+    return cam2arm_opt, arm2cam_opt
+
 
 def get_joint_angles_from_dorna_flask():
     r = requests.get('http://localhost:8080/get_xyz_joint')
@@ -842,55 +895,9 @@ if __name__ == '__main__':
 
                 # TODO first what am i doing below? first idea and then functions
                 # Calculate image points of 12 aruco markers
-                ids_list = [l[0] for l in ids.tolist()]
-                ids_list_with_index_key_tuple = [(idx, id_) for idx, id_ in enumerate(ids_list)]
-                ids_list_sorted = sorted(ids_list_with_index_key_tuple, key=lambda x: x[1])
-                image_points = []
-                ids_list = [x[0] for x in ids.tolist()]
-                for idx_of_marker, id_of_marker in ids_list_sorted:
-                    image_points.append(corners[idx_of_marker].squeeze())
+                
+                cam2arm_opt, arm2cam_opt = calculate_pnp_12_markers(ids, all_rvec, all_tvec)
 
-                num_ids_to_draw = 12
-                id_1_rvec, id_1_tvec = None, None
-                for list_idx, corner_id in enumerate(ids_list[0:num_ids_to_draw]):
-                    if list_idx == 0:
-                        rvec_aruco, tvec_aruco = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
-                    if corner_id == 1:
-                        id_1_rvec, id_1_tvec = all_rvec[list_idx, 0, :], all_tvec[list_idx, 0, :]
-
-                tvec, rvec = id_1_tvec, id_1_rvec  # so I can build object points from the ground up... 
-                # TODO how to use depth here?
-
-                # Calculate object points of all 12 markers and project back to image
-                if id_1_tvec is not None and id_1_rvec is not None:
-                    spacing = marker_length + marker_separation
-                    all_obj_points_found_from_id_1 = []
-                    id_count = 1
-                    for y_ in range(3):
-                        for x_ in range(4):
-                            if id_count in ids_list:
-                                top_left = np.array([-half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
-                                top_right = np.array([half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, 0.])
-                                bottom_right = np.array([half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
-                                bottom_left = np.array([-half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, 0.])
-                                # below seems about right but then ruins the projections and I could just do a 2nd transformation to ground plane instead?
-                                # top_left = np.array([-half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, shoulder_height / 1000.0])
-                                # top_right = np.array([half_marker_len + x_ * spacing, half_marker_len - y_ * spacing, shoulder_height / 1000.0])
-                                # bottom_right = np.array([half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, shoulder_height / 1000.0])
-                                # bottom_left = np.array([-half_marker_len + x_ * spacing, -half_marker_len - y_ * spacing, shoulder_height / 1000.0])
-
-                                corners_3d_points = np.array([top_left, top_right, bottom_right, bottom_left])
-                                all_obj_points_found_from_id_1.append(corners_3d_points)
-                                imagePointsCorners, jacobian = cv2.projectPoints(corners_3d_points, rvec, tvec, camera_matrix, dist_coeffs)
-                                # for idx, (x, y) in enumerate(imagePointsCorners.squeeze().tolist()):
-                                #     cv2.circle(camera_color_img, (int(x), int(y)), 4, colors[idx], -1)
-
-                            id_count += 1
-
-                # after finding all object and image points, run PnP to get best homogenous transform
-                outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(all_obj_points_found_from_id_1), np.concatenate(image_points), camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_IPPE)
-                # TODO better understand insides of that function and have good descriptions of cam2arm vs arm2cam.
-                cam2arm_opt, arm2cam_opt, _, _, _ = create_homogenous_transformations(tvec_pnp_opt, rvec_pnp_opt)
 
                 # TODO I might want to switch between option A and B. 
                 # Because I had original 12 markers to the left of the shoulder (option A mentioned above) 
