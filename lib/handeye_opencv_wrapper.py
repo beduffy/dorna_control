@@ -8,11 +8,11 @@ import open3d as o3d
 from lib.vision import get_inverse_homogenous_transform
 
 
-def load_all_handeye_data():
+def load_all_handeye_data(folder_name):
     # Open data/handeye folder and then load into dict
     # TODO could load different folders and save them by date or whatever and change "handeye" to default?
-    gripper_transform_files = sorted(glob('data/handeye/gripper2base*'))
-    cam2target_files = sorted(glob('data/handeye/target2cam*'))
+    gripper_transform_files = sorted(glob('data/{}/gripper2base*'.format(folder_name)))
+    cam2target_files = sorted(glob('data/{}/target2cam*'.format(folder_name)))
 
     all_gripper_rotation_mats = []
     all_gripper_tvecs = []
@@ -108,7 +108,7 @@ def plot_all_handeye_data(handeye_data_dict, cam_pcd=None):
     o3d.visualization.draw_geometries(geometry_to_plot)
 
 
-def handeye_calibrate_opencv(handeye_data_dict):
+def handeye_calibrate_opencv(handeye_data_dict, folder_name):
     # all_gripper_rotation_mats = handeye_data_dict['all_gripper_rotation_mats']
     # all_gripper_tvecs = handeye_data_dict['all_gripper_tvecs']
     R_gripper2base = handeye_data_dict['R_gripper2base']
@@ -137,7 +137,7 @@ def handeye_calibrate_opencv(handeye_data_dict):
     cam2arm[:3, :3] = R_cam2gripper
     cam2arm[:3, 3] = t_cam2gripper.squeeze()
     print('Saving handeye (cv2) cam2arm \n{}'.format(cam2arm))
-    np.savetxt('data/handeye/latest_cv2_cam2arm.txt', cam2arm, delimiter=' ')
+    np.savetxt('data/{}/latest_cv2_cam2arm.txt'.format(folder_name), cam2arm, delimiter=' ')
 
     # pos_camera = np.dot(-R_cam2gripper, np.matrix(t_cam2gripper).T)
     # TODO why does pos_camera seem to have the better position and similarity to my old cam2arms?
@@ -151,7 +151,7 @@ def handeye_calibrate_opencv(handeye_data_dict):
     # print('cam2arm inverse:\n{}'.format(cam2arm_local))
     print('handeye (cv2) cam2arm inverse \n{}'.format(cam2arm_local))
     # print('Saving handeye (cv2) cam2arm inverse \n{}'.format(cam2arm_local))
-    # np.savetxt('data/handeye/latest_cv2_cam2arm.txt', cam2arm_local, delimiter=' ')
+    # np.savetxt('data/{}/latest_cv2_cam2arm.txt'.format(folder_name), cam2arm_local, delimiter=' ')
 
 
 # Eduardo's code from here: https://forum.opencv.org/t/eye-to-hand-calibration/5690/10

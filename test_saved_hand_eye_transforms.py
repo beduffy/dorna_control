@@ -31,14 +31,15 @@ from lib.open3d_plot_dorna import plot_open3d_Dorna
 from lib.aruco_image_text import OpenCvArucoImageText
 
 
+folder_name = 'handeye_jan_10th'
 
-
-handeye_data_dict = load_all_handeye_data()
+handeye_data_dict = load_all_handeye_data(folder_name)
+print('handeye dict:\n', handeye_data_dict)
 # plot_all_handeye_data(handeye_data_dict)
-handeye_calibrate_opencv(handeye_data_dict)
+handeye_calibrate_opencv(handeye_data_dict, folder_name)
 
 # TODO why load from file again, why not just return from function?
-cam2arm = np.loadtxt('data/handeye/latest_cv2_cam2arm.txt', delimiter=' ')
+cam2arm = np.loadtxt('data/{}/latest_cv2_cam2arm.txt'.format(folder_name), delimiter=' ')
 saved_cam2arm = cam2arm
 
 # TODO what the hell am I doing, of course saved cam2arm is fucked up. The only way to is to use cam_pcd
