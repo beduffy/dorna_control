@@ -564,8 +564,8 @@ def estimate_cam2arm_on_frame(color_img, depth_img, estimate_pose=True):
             # -- Get the attitude of the camera respect to the frame
             roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(opencv_aruco_image_text.R_flip * R_ct)  # todo no flip needed?
 
-            opencv_aruco_image_text.put_marker_text(camera_color_img, tvec, roll_marker, pitch_marker, yaw_marker)
-            opencv_aruco_image_text.put_camera_text(camera_color_img, pos_camera, roll_camera, pitch_camera, yaw_camera)
+            opencv_aruco_image_text.put_marker_text(camera_color_img_debug, tvec, roll_marker, pitch_marker, yaw_marker)
+            opencv_aruco_image_text.put_camera_text(camera_color_img_debug, pos_camera, roll_camera, pitch_camera, yaw_camera)
             # opencv_aruco_image_text.put_avg_marker_text(camera_color_img, avg_6dof_pose)
         
             # return rigid_body_error_local, color_img, depth_img, pixel_positions_to_optimise, tvec, rvec, cam_coords
@@ -649,6 +649,7 @@ if __name__ == '__main__':
             depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(camera_depth_img, alpha=0.03),
                                                cv2.COLORMAP_JET)  # TODO why does it look so bad, add more contrast?
 
+            camera_color_img_debug = camera_color_img.copy()
             color_img, depth_img, tvec, rvec = estimate_cam2arm_on_frame(camera_color_img, camera_depth_img, estimate_pose=estimate_pose)
 
             # TODO would optimising the transform with depth info solve most of my problems?
@@ -749,7 +750,7 @@ if __name__ == '__main__':
                 cv2.line(color_img, FK_shoulder_projected_to_image, FK_elbow_projected_to_image, (0, 0, 0), thickness=3)
 
             # images = np.hstack((color_img, depth_colormap))
-            images = np.hstack((camera_color_img, depth_colormap))  # TODO to not have writing? Have better variable images
+            images = np.hstack((camera_color_img_debug, depth_colormap))  # TODO to not have writing? Have better variable images
 
             cv2.imshow("image", images)
             k = cv2.waitKey(1)
@@ -763,13 +764,13 @@ if __name__ == '__main__':
                 break
 
 
-            if k == ord('a'):
-                # activate estimate_pose and optimisation pipeline
-                estimate_pose = not estimate_pose
-                # reset all errors since I probably want to move the camera again
-                lowest_error = 1000000
-                lowest_optimised_error = 1000000
-                print('estimate_pose set to: {}'.format(estimate_pose))
+            # if k == ord('a'):
+            #     # activate estimate_pose and optimisation pipeline
+            #     estimate_pose = not estimate_pose
+            #     # reset all errors since I probably want to move the camera again
+            #     lowest_error = 1000000
+            #     lowest_optimised_error = 1000000
+            #     print('estimate_pose set to: {}'.format(estimate_pose))
 
 
             if k == ord('s'):
@@ -844,7 +845,6 @@ if __name__ == '__main__':
                 if curr_arm_xyz is not None:
                     x, y, z = curr_arm_xyz
                     # z = 200  # pre pick
-                    # z = 20
                     wrist_pitch = 0.0  # TODO this affects everything, understand how
                     wrist_pitch = -42.0  # TODO this affects everything
                     # TODO how to dynamically change wrist pitch for different things and choose one out of many? 
@@ -992,7 +992,7 @@ if __name__ == '__main__':
                 # AND Also save the RGBD images so I can visualise each transform individually but also in one pointcloud assuming camera does not move.
                 # later make it easy to test, visualise on any folder. In my gorey fake arm simulation, I had the order wrong in cam2target, didn't need inverse. 
                 
-                # TODO should I do open3D here too just to make sure the transform is good?
+                # TODO should I do open3D here too just to make sure the transform is good? Meh, I can analyse later in my test script. Remove this TODO
 
                 # TODO do I Want to keep the code to make it work on 1 marker?
                 # TODO how will i rotate the gripper with large 12 cardboard markers on the gripper? Only add after homing?, first see if it is a problem
@@ -1042,7 +1042,6 @@ if __name__ == '__main__':
 
                 # save images so we can analyse and understand transforms better later
                 # TODO stop using camera_color_img for aruco text!!!!!
-
                 fp = '{}/color_img_{}.png'.format(full_handeye_folder_path, num_saved_handeye_transforms)
                 cv2.imwrite(fp, camera_color_img)
                 fp = '{}/depth_img_{}.png'.format(full_handeye_folder_path, num_saved_handeye_transforms)
@@ -1062,8 +1061,6 @@ if __name__ == '__main__':
                 # TODO why load from file again, why not just return from function?
                 cam2arm = np.loadtxt('data/{}/latest_cv2_cam2arm.txt'.format(handeye_data_folder_name), delimiter=' ')
                 saved_cam2arm = cam2arm
-
-
                 
                 # TODO what the hell am I doing, of course saved cam2arm is fucked up. The only way to is to use cam_pcd 
                 cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img, pinhole_camera_intrinsic, visualise=False)
@@ -1080,9 +1077,6 @@ if __name__ == '__main__':
             print('Error in main loop')
             print(e)
             print(traceback.format_exc())
-            # print('sys exc info')  # TODO duplicating the above?
-            # print(sys.exc_info()[2])
 
-            # Stop streaming
             pipeline.stop()
             cv2.destroyAllWindows()
