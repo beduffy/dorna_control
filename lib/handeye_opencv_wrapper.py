@@ -16,15 +16,34 @@ def load_all_handeye_data(folder_name):
 
     all_gripper_rotation_mats = []
     all_gripper_tvecs = []
+    all_gripper_rotation_mats_inverse = []
+    all_gripper_tvecs_inverse = []
     for fp in gripper_transform_files:
         gripper_transform = np.loadtxt(fp, delimiter=' ')
         print('Loaded {} transform'.format(fp))
         gripper2base_rot = gripper_transform[:3, :3]
         all_gripper_rotation_mats.append(gripper2base_rot)
+
+        gripper2_base_tvec = gripper_transform[:3, 3] / 1000.0
         # all_gripper_tvecs.append(gripper_transform[:3, 3] * 1000.0)  # TODO remove if it makes no sense
-        all_gripper_tvecs.append(gripper_transform[:3, 3] / 1000.0)
+        all_gripper_tvecs.append(gripper2_base_tvec)  # TODO milimetres or not!!!!! everything should be in metres... since that is what the camera is in 1000 milimetres / 1000 is 1m
+
+        full_homo_gripper2base = np.identity(4)
+        full_homo_gripper2base[:3, :3] = gripper2base_rot
+        full_homo_gripper2base[0, 3] = gripper2_base_tvec[0]
+        full_homo_gripper2base[1, 3] = gripper2_base_tvec[1]
+        full_homo_gripper2base[2, 3] = gripper2_base_tvec[2]
+
+        full_homo_base2gripper  = get_inverse_homogenous_transform(full_homo_gripper2base)
+        R_base2gripper_individual = full_homo_base2gripper[:3, :3]
+        t_base2gripper_individual = full_homo_base2gripper[:3, 3]
+        all_gripper_rotation_mats_inverse.append(R_base2gripper_individual)
+        all_gripper_tvecs_inverse.append(t_base2gripper_individual)
+
     R_gripper2base = np.array(all_gripper_rotation_mats)
     t_gripper2base = np.array(all_gripper_tvecs)
+    R_base2gripper = np.array(all_gripper_rotation_mats_inverse)
+    t_base2gripper = np.array(all_gripper_tvecs_inverse)
 
     all_target2cam_rotation_mats = []
     all_target2cam_tvecs = []
@@ -61,6 +80,8 @@ def load_all_handeye_data(folder_name):
         'all_gripper_tvecs': all_gripper_tvecs,
         'R_gripper2base': R_gripper2base,
         't_gripper2base': t_gripper2base,
+        'R_base2gripper': R_base2gripper,
+        't_base2gripper': t_base2gripper,
         'all_target2cam_rotation_mats': all_target2cam_rotation_mats,
         'all_target2cam_tvecs': all_target2cam_tvecs,
         'R_target2cam': R_target2cam,
@@ -122,54 +143,70 @@ def plot_all_handeye_data(handeye_data_dict, cam_pcd=None):
 
     if cam_pcd is not None:
         geometry_to_plot.append(cam_pcd)
-    print('Visualising camera origin and aruco frames in arm frame, something something...?')
+    print('Visualising camera origin and aruco frames in arm frame ?, with pointcloud something something...?')
     o3d.visualization.draw_geometries(geometry_to_plot)
 
 
 def handeye_calibrate_opencv(handeye_data_dict, folder_name):
     # all_gripper_rotation_mats = handeye_data_dict['all_gripper_rotation_mats']
     # all_gripper_tvecs = handeye_data_dict['all_gripper_tvecs']
-    R_gripper2base = handeye_data_dict['R_gripper2base']
-    t_gripper2base = handeye_data_dict['t_gripper2base']
+    # R_gripper2base = handeye_data_dict['R_gripper2base']
+    # t_gripper2base = handeye_data_dict['t_gripper2base']
+    R_base2gripper = handeye_data_dict['R_base2gripper']
+    t_base2gripper = handeye_data_dict['t_base2gripper']
     # all_target2cam_rotation_mats = handeye_data_dict['all_target2cam_rotation_mats']
     # all_target2cam_tvecs = handeye_data_dict['all_target2cam_tvecs']
     R_target2cam = handeye_data_dict['R_target2cam']
     t_target2cam = handeye_data_dict['t_target2cam']
 
-    method = cv2.CALIB_HAND_EYE_DANIILIDIS
+    method = cv2.CALIB_HAND_EYE_TSAI  # default
+    # method = cv2.CALIB_HAND_EYE_DANIILIDIS  # tried both, they both work
     # TODO try others
     # method = 
     # eye-in-hand (according to default opencv2 params and weak documentation. "inputting the suitable transformations to the function" for eye-to-hand)
     # first formula has b_T_c for X so that's what comes out of function. It expects b_T_g and c_T_t so gripper2base and target2cam
     # R_cam2gripper, t_cam2gripper = cv2.calibrateHandEye(R_gripper2base, t_gripper2base, R_target2cam, t_target2cam, method=method)
-    R_cam2gripper, t_cam2gripper = cv2.calibrateHandEye(R_gripper2base=R_gripper2base, 
-                                                        t_gripper2base=t_gripper2base, 
-                                                        R_target2cam=R_target2cam, 
-                                                        t_target2cam=t_target2cam, method=method)
+    # R_cam2gripper, t_cam2gripper = cv2.calibrateHandEye(R_gripper2base=R_gripper2base, 
+    #                                                     t_gripper2base=t_gripper2base, 
+    #                                                     R_target2cam=R_target2cam, 
+    #                                                     t_target2cam=t_target2cam, method=method)
     # eye-to-hand
     # second formula has b_T_c for X so camera2base actually is what comes out of function. It expects g_T_b (base2gripper) and c_T_t (target2cam)
     # R_camera2base, t_camera2base = cv2.calibrateHandEye(R_base2gripper, t_base2gripper, R_target2cam, t_target2cam)
     # TODO could rename nothing and just change inputs to be right, of course I could. 
 
-    cam2arm = np.identity(4)
-    cam2arm[:3, :3] = R_cam2gripper
-    cam2arm[:3, 3] = t_cam2gripper.squeeze()
-    print('Saving handeye (cv2) cam2arm \n{}'.format(cam2arm))
-    np.savetxt('data/{}/latest_cv2_cam2arm.txt'.format(folder_name), cam2arm, delimiter=' ')
+    # output should be  ->	R_cam2gripper, t_cam2gripper  for eye in hand
+    # but for eye to hand: R_cam2base_est, t_cam2base_est from unit tests in opencv
 
-    # pos_camera = np.dot(-R_cam2gripper, np.matrix(t_cam2gripper).T)
-    # TODO why does pos_camera seem to have the better position and similarity to my old cam2arms?
-    pos_camera = np.dot(-R_cam2gripper, np.matrix(t_cam2gripper))
-    cam2arm_local = np.identity(4)
-    cam2arm_local[:3, :3] = R_cam2gripper.T
-    # cam2arm_local[:3, :3] = R_cam2gripper
-    cam2arm_local[0, 3] = pos_camera[0]
-    cam2arm_local[1, 3] = pos_camera[1]
-    cam2arm_local[2, 3] = pos_camera[2]
-    # print('cam2arm inverse:\n{}'.format(cam2arm_local))
-    print('handeye (cv2) cam2arm inverse \n{}'.format(cam2arm_local))
-    # print('Saving handeye (cv2) cam2arm inverse \n{}'.format(cam2arm_local))
-    # np.savetxt('data/{}/latest_cv2_cam2arm.txt'.format(folder_name), cam2arm_local, delimiter=' ')
+    # R_base2gripper, t_base2gripper = R_gripper2base, t_gripper2base  # TODO nope! 
+
+    R_cam2base_est, t_cam2base_est = cv2.calibrateHandEye(R_base2gripper, t_base2gripper,
+                                                          R_target2cam, t_target2cam, method=method)
+    print('\nR and T for eye-to-hand. cam2base transform:')
+    full_homo_RT = np.identity(4)
+    full_homo_RT[:3, :3] = R_cam2base_est
+    full_homo_RT[:3, 3] = t_cam2base_est.T
+    print(full_homo_RT)
+
+    # cam2arm = np.identity(4)
+    # cam2arm[:3, :3] = R_cam2gripper
+    # cam2arm[:3, 3] = t_cam2gripper.squeeze()
+    print('Saving handeye (cv2) cam2arm \n{}'.format(full_homo_RT))
+    np.savetxt('data/{}/latest_cv2_cam2arm.txt'.format(folder_name), full_homo_RT, delimiter=' ')
+
+    # # pos_camera = np.dot(-R_cam2gripper, np.matrix(t_cam2gripper).T)
+    # # TODO why does pos_camera seem to have the better position and similarity to my old cam2arms?
+    # pos_camera = np.dot(-R_cam2gripper, np.matrix(t_cam2gripper))
+    # cam2arm_local = np.identity(4)
+    # cam2arm_local[:3, :3] = R_cam2gripper.T
+    # # cam2arm_local[:3, :3] = R_cam2gripper
+    # cam2arm_local[0, 3] = pos_camera[0]
+    # cam2arm_local[1, 3] = pos_camera[1]
+    # cam2arm_local[2, 3] = pos_camera[2]
+    # # print('cam2arm inverse:\n{}'.format(cam2arm_local))
+    # print('handeye (cv2) cam2arm inverse \n{}'.format(cam2arm_local))
+    # # print('Saving handeye (cv2) cam2arm inverse \n{}'.format(cam2arm_local))
+    # # np.savetxt('data/{}/latest_cv2_cam2arm.txt'.format(folder_name), cam2arm_local, delimiter=' ')
 
 
 # Eduardo's code from here: https://forum.opencv.org/t/eye-to-hand-calibration/5690/10
