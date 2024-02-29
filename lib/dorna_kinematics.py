@@ -1,8 +1,10 @@
 import math
 
+
+# TODO should remove bottom main stuff to avoid needing to import cv2 for running control
 import cv2
 import numpy as np
-import pyrealsense2 as rs
+import pyrealsense2 as rs  # TODO fix
 try:
     import open3d as o3d
 except Exception as e:

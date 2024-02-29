@@ -8,6 +8,8 @@ import traceback
 from glob import glob
 from datetime import datetime
 
+# this SO solved my scipy problem
+# https://askubuntu.com/questions/1393285/how-to-install-glibcxx-3-4-29-on-ubuntu-20-04
 import open3d as o3d
 import requests
 import pyrealsense2 as rs
@@ -778,7 +780,7 @@ if __name__ == '__main__':
                 # print('Saving best optimised aruco cam2arm with error {}\n{}'.format(
                 #             lowest_optimised_error, cam2arm))
                 if cam2arm is not None:
-                    saved_cam2arm = cam2arm
+                    saved_cam2arm = cam2arm 
                     saved_arm2cam = arm2cam  # TODO arm2cam does not exist?
                     saved_rvec = rvec
                     saved_tvec = tvec
@@ -1031,9 +1033,9 @@ if __name__ == '__main__':
                 np.savetxt(fp, target2cam, delimiter=' ')
 
                 # get and save gripper transformation (gripper2base)
-                # joint_angles = get_joint_angles_from_dorna_flask()  # TODO do not forget
+                joint_angles = get_joint_angles_from_dorna_flask()  # TODO do not forget
                 # # the below is just for testing without running arm
-                joint_angles = [0, 0, 0, 0, 0]
+                # joint_angles = [0, 0, 0, 0, 0]
                 gripper_base_transform = get_gripper_base_transformation(joint_angles)
                 # TODO try get inverse (actual gripper2base) just to really confirm shit
                 fp = '{}/gripper2base_{}.txt'.format(full_handeye_folder_path, num_saved_handeye_transforms)
