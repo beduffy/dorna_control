@@ -164,6 +164,7 @@ def generate_command(move_cmd, movement=1, coord_sys='xyz'):
 	return cmd
 
 def activate_gripper(gripper_state):
+	print('gripper_state: ', gripper_state)
 	if gripper_state == 0:
 		robot.servo(40)
 	elif gripper_state == 1:
@@ -174,6 +175,8 @@ def activate_gripper(gripper_state):
 		robot.servo(400)
 	elif gripper_state == 3:
 		robot.servo(675)
+	elif gripper_state == 4:
+		robot.servo(800)
 
 if __name__=="__main__":	
 	gripper_state = 0
@@ -182,7 +185,6 @@ if __name__=="__main__":
 	# TODO slow grip function
 
 	# Dorna arm initialisation
-	# robot = Dorna("myconfig.json")
 	robot = Dorna("myconfig.yaml")
 	# robot = Dorna()
 	robot.set_unit({"length": "mm"})
@@ -279,7 +281,7 @@ if __name__=="__main__":
 					print("Robot at 0")
 				elif key == 'g':
 					gripper_state += 1
-					if gripper_state == 4:
+					if gripper_state == 5:
 						gripper_state = 0
 					activate_gripper(gripper_state)
 				elif key == 'v':
@@ -408,6 +410,12 @@ if __name__=="__main__":
 				# 		print('Robot moved to drop_into_bin_pose')
 				# 	else:
 				# 		print('Robot busy, did not go to drop_into_bin_pose')
+				
+
+				############################
+				######## joint control below, mostly
+				############################
+				
 				elif key == '1':
 					dxyz = [-joint_change_amt, 0, 0, 0, 0]
 					command = generate_command(dxyz, movement=1, coord_sys='joint')
@@ -468,6 +476,9 @@ if __name__=="__main__":
 					if robot._device["state"] == 0:
 						robot.play(command)
 						print('Wrist Roll +{}'.format(joint_change_amt))
+
+
+				
 				elif key == 't':
 					robot.terminate()
 					print("Robot terminated")
