@@ -31,6 +31,9 @@ from lib.open3d_plot_dorna import plot_open3d_Dorna
 from lib.aruco_image_text import OpenCvArucoImageText
 
 
+np.set_printoptions(suppress=True)
+
+
 # TODO make entire file cleaner
 # TODO could visualise color (+ maybe depth) images
 
@@ -61,6 +64,13 @@ plot_all_handeye_data(handeye_data_dict, cam_pcd=cam_pcd)
 
 
 
+
+
+
+
+
+# TODO below im still plotting camera and cam2target aruco. But I want to transform from cam origin to 
+
 size = 0.1
 origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.0, 0.0, 0.0])
 
@@ -78,6 +88,7 @@ for idx, cam2target_tvec in enumerate(all_target2cam_tvecs):
 
     sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.01)
     # TODO WHY is the sphere always a bit higher than the origin of the coordinate frame?
+    # TODO try homo transformation
     sphere.translate([cam2target_tvec[0], cam2target_tvec[1], cam2target_tvec[2]])
     geometry_to_plot.append(sphere)
     geometry_to_plot.append(coordinate_frame)
