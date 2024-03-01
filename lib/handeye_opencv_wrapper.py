@@ -34,7 +34,7 @@ def load_all_handeye_data(folder_name):
         full_homo_gripper2base[1, 3] = gripper2_base_tvec[1]
         full_homo_gripper2base[2, 3] = gripper2_base_tvec[2]
 
-        full_homo_base2gripper  = get_inverse_homogenous_transform(full_homo_gripper2base)
+        full_homo_base2gripper = get_inverse_homogenous_transform(full_homo_gripper2base)
         R_base2gripper_individual = full_homo_base2gripper[:3, :3]
         t_base2gripper_individual = full_homo_base2gripper[:3, 3]
         all_gripper_rotation_mats_inverse.append(R_base2gripper_individual)
@@ -47,6 +47,8 @@ def load_all_handeye_data(folder_name):
 
     all_target2cam_rotation_mats = []
     all_target2cam_tvecs = []
+    all_cam2target_rotation_mats = []
+    all_cam2target_tvecs = []
     for fp in cam2target_files:
         cam2target_transform = np.loadtxt(fp, delimiter=' ')
 
@@ -58,9 +60,23 @@ def load_all_handeye_data(folder_name):
         cam2target_rot = cam2target_transform[:3, :3]
         all_target2cam_rotation_mats.append(cam2target_rot)
         all_target2cam_tvecs.append(cam2target_transform[:3, 3])
-        # all_target2cam_tvecs.append(cam2target_transform[:3, 3] / 1000.0)  # TODO or multiply gripper coord by 1000?
+
+        full_homo_target2cam = np.identity(4)
+        full_homo_target2cam[:3, :3] = cam2target_rot
+        full_homo_target2cam[0, 3] = cam2target_transform[:3, 3][0]
+        full_homo_target2cam[1, 3] = cam2target_transform[:3, 3][1]
+        full_homo_target2cam[2, 3] = cam2target_transform[:3, 3][2]
+
+        full_homo_cam2target = get_inverse_homogenous_transform(full_homo_target2cam)
+        R_cam2target_individual = full_homo_cam2target[:3, :3]
+        t_cam2target_individual = full_homo_cam2target[:3, 3]
+        all_cam2target_rotation_mats.append(R_cam2target_individual)
+        all_cam2target_tvecs.append(t_cam2target_individual)
+
     R_target2cam = np.array(all_target2cam_rotation_mats)
     t_target2cam = np.array(all_target2cam_tvecs)
+    R_cam2target = np.array(all_cam2target_rotation_mats)
+    t_cam2target = np.array(all_cam2target_tvecs)
 
     # if images exist, load
     color_images = []
@@ -86,6 +102,8 @@ def load_all_handeye_data(folder_name):
         'all_target2cam_tvecs': all_target2cam_tvecs,
         'R_target2cam': R_target2cam,
         't_target2cam': t_target2cam,
+        'R_cam2target': R_cam2target,
+        't_cam2target': t_cam2target,
         'color_images': color_images,
         'depth_images': depth_images,
     }
@@ -104,30 +122,31 @@ def plot_all_handeye_data(handeye_data_dict, cam_pcd=None):
 
     # TODO clean entire function, comments etc, hard to think about
 
-    geometry_to_plot = []
-    origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+    # 
+    # TODO try gripper2base?
+    # TODO homo transformation
+    origin_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
                                         size=0.2, origin=[0.0, 0.0, 0.0])
-    geometry_to_plot.append(origin_frame)
+
+    geometry_to_plot = []
+    geometry_to_plot.append(origin_arm_frame)
     for idx, base2gripper_tvec in enumerate(all_gripper_tvecs):
         coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
                                         size=0.1, origin=[base2gripper_tvec[0], base2gripper_tvec[1], base2gripper_tvec[2]])  # TODO shouldn't be doing this, should be using from transform probably?
         coordinate_frame.rotate(all_gripper_rotation_mats[idx])
 
-        # sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.01)
-        # sphere.translate([cam2target_tvec[0], cam2target_tvec[1], cam2target_tvec[2]])
-        # geometry_to_plot.append(sphere)
         geometry_to_plot.append(coordinate_frame)
 
     print('Visualising origin and gripper frames in arm frame')
     o3d.visualization.draw_geometries(geometry_to_plot)
 
     # TODO do the below for gripper poses as well, they should perfectly align rotation-wise to aruco poses
-    geometry_to_plot = []
-    origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2, origin=[0.0, 0.0, 0.0])
-
     # TODO ideally I'd visualise a frustum. matplotlib?
     # TODO draw mini plane of all arucos rather than coordinate frames. https://github.com/isl-org/Open3D/issues/3618
-    geometry_to_plot.append(origin_frame)
+    geometry_to_plot = []
+    origin_cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2, origin=[0.0, 0.0, 0.0])
+    geometry_to_plot.append(origin_cam_frame)
+
     for idx, cam2target_tvec in enumerate(all_target2cam_tvecs):
         # TODO should be transforming and not rotating + translating
         coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
@@ -143,21 +162,23 @@ def plot_all_handeye_data(handeye_data_dict, cam_pcd=None):
 
     if cam_pcd is not None:
         geometry_to_plot.append(cam_pcd)
-    print('Visualising camera origin and aruco frames in arm frame ?, with pointcloud something something...?')
+    print('Visualising camera origin and aruco frames in camera frame')
     o3d.visualization.draw_geometries(geometry_to_plot)
 
 
 def handeye_calibrate_opencv(handeye_data_dict, folder_name):
     # all_gripper_rotation_mats = handeye_data_dict['all_gripper_rotation_mats']
     # all_gripper_tvecs = handeye_data_dict['all_gripper_tvecs']
-    # R_gripper2base = handeye_data_dict['R_gripper2base']
-    # t_gripper2base = handeye_data_dict['t_gripper2base']
+    R_gripper2base = handeye_data_dict['R_gripper2base']
+    t_gripper2base = handeye_data_dict['t_gripper2base']
     R_base2gripper = handeye_data_dict['R_base2gripper']
     t_base2gripper = handeye_data_dict['t_base2gripper']
     # all_target2cam_rotation_mats = handeye_data_dict['all_target2cam_rotation_mats']
     # all_target2cam_tvecs = handeye_data_dict['all_target2cam_tvecs']
     R_target2cam = handeye_data_dict['R_target2cam']
     t_target2cam = handeye_data_dict['t_target2cam']
+    R_cam2target = handeye_data_dict['R_cam2target']
+    t_cam2target = handeye_data_dict['t_cam2target']
 
     method = cv2.CALIB_HAND_EYE_TSAI  # default
     # method = cv2.CALIB_HAND_EYE_DANIILIDIS  # tried both, they both work
@@ -180,8 +201,14 @@ def handeye_calibrate_opencv(handeye_data_dict, folder_name):
 
     # R_base2gripper, t_base2gripper = R_gripper2base, t_gripper2base  # TODO nope! 
 
+    # R_cam2base_est, t_cam2base_est = cv2.calibrateHandEye(R_base2gripper, t_base2gripper,
+    #                                                       R_target2cam, t_target2cam, method=method)
+    
     R_cam2base_est, t_cam2base_est = cv2.calibrateHandEye(R_base2gripper, t_base2gripper,
-                                                          R_target2cam, t_target2cam, method=method)
+                                                          R_cam2target, t_cam2target, method=method)
+    
+    # R_cam2base_est, t_cam2base_est = R_cam2gripper, t_cam2gripper
+    
     print('\nR and T for eye-to-hand. cam2base transform:')
     full_homo_RT = np.identity(4)
     full_homo_RT[:3, :3] = R_cam2base_est
