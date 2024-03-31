@@ -41,7 +41,8 @@ np.set_printoptions(suppress=True)
 # folder_name = '24_02_2024_14_13_53'
 # folder_name = '24_02_2024_14_19_13'
 # folder_name = '24_02_2024_14_35_34'
-folder_name = '29_02_2024_16_30_07'  # finally moved real dorna 4 times only base angle with 12 aruco on cardboard
+# folder_name = '29_02_2024_16_30_07'  # finally moved real dorna 4 times only base angle with 12 aruco on cardboard
+folder_name = '31_03_2024_17_34_45'  # 24 transforms, stronger flatter mini pupper cardboard, more ducttape
 # overall goal is that I really I just want cam2arm to be similar in position to one aruco to camera?
 
 
@@ -69,6 +70,7 @@ plot_all_handeye_data(handeye_data_dict, cam_pcd=cam_pcd)
 
 '''
 Below I am visualising origin (in camera coordinates) and the arm frame.
+And pointcloud from camera transformed to arm frame... but that does not make sense?
 
 '''
 
@@ -96,7 +98,7 @@ transformed_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=frame
 transformed_frame.transform(saved_cam2arm)
 transformed_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_size, resolution=20)
 transformed_sphere.paint_uniform_color([0, 1, 0])  # Green
-transformed_sphere.transform(saved_cam2arm)
+transformed_sphere.transform(saved_cam2arm)  # TODO what am i doing here. I assume transforming origin in camera frame, brings us to arm frame so this coordinate frame should be in base of arm
 
 geometry_to_plot = []
 for idx, homo_transform in enumerate(all_target2cam_transforms):
@@ -118,6 +120,7 @@ for idx, homo_transform in enumerate(all_target2cam_transforms):
 print('Visualising origin, transformed frame and spheres and coordinate frames')  # TODO what are we doing here?
 # TODO rename transformed frame and understand which frame is which frame
 # list_of_geometry_elements = [origin_frame, transformed_frame, origin_sphere, transformed_sphere] + geometry_to_plot
-list_of_geometry_elements = [full_arm_pcd, origin_frame, transformed_frame, origin_sphere, transformed_sphere] + geometry_to_plot
+# list_of_geometry_elements = [full_arm_pcd, origin_frame, transformed_frame, origin_sphere, transformed_sphere] + geometry_to_plot
+list_of_geometry_elements = [cam_pcd, origin_frame, transformed_frame, origin_sphere, transformed_sphere] + geometry_to_plot
 # list_of_geometry_elements = [origin_frame_transformed_from_camera_frame, camera_coordinate_frame] + arm_position_coord_frames
 o3d.visualization.draw_geometries(list_of_geometry_elements)
