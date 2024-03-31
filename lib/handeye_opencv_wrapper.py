@@ -214,11 +214,11 @@ def handeye_calibrate_opencv(handeye_data_dict, folder_name):
 
     # R_base2gripper, t_base2gripper = R_gripper2base, t_gripper2base  # TODO nope! 
 
-    # R_cam2base_est, t_cam2base_est = cv2.calibrateHandEye(R_base2gripper, t_base2gripper,
-    #                                                       R_target2cam, t_target2cam, method=method)
-    
     R_cam2base_est, t_cam2base_est = cv2.calibrateHandEye(R_base2gripper, t_base2gripper,
-                                                          R_cam2target, t_cam2target, method=method)
+                                                          R_target2cam, t_target2cam, method=method)
+    
+    # R_cam2base_est, t_cam2base_est = cv2.calibrateHandEye(R_base2gripper, t_base2gripper,
+    #                                                       R_cam2target, t_cam2target, method=method)
     
     # R_cam2base_est, t_cam2base_est = R_cam2gripper, t_cam2gripper
     

@@ -67,9 +67,11 @@ plot_all_handeye_data(handeye_data_dict, cam_pcd=cam_pcd)
 
 
 
+'''
+Below I am visualising origin (in camera coordinates) and the arm frame.
 
+'''
 
-# TODO below im still plotting camera and cam2target aruco. But I want to transform from cam origin to 
 all_target2cam_rotation_mats = handeye_data_dict['all_target2cam_rotation_mats']
 all_target2cam_tvecs = handeye_data_dict['all_target2cam_tvecs']
 
@@ -115,6 +117,7 @@ for idx, homo_transform in enumerate(all_target2cam_transforms):
 
 print('Visualising origin, transformed frame and spheres and coordinate frames')  # TODO what are we doing here?
 # TODO rename transformed frame and understand which frame is which frame
-list_of_geometry_elements = [origin_frame, transformed_frame, origin_sphere, transformed_sphere] + geometry_to_plot
+# list_of_geometry_elements = [origin_frame, transformed_frame, origin_sphere, transformed_sphere] + geometry_to_plot
+list_of_geometry_elements = [full_arm_pcd, origin_frame, transformed_frame, origin_sphere, transformed_sphere] + geometry_to_plot
 # list_of_geometry_elements = [origin_frame_transformed_from_camera_frame, camera_coordinate_frame] + arm_position_coord_frames
 o3d.visualization.draw_geometries(list_of_geometry_elements)
