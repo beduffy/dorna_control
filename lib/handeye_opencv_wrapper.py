@@ -120,20 +120,31 @@ def plot_all_handeye_data(handeye_data_dict, cam_pcd=None):
     R_target2cam = handeye_data_dict['R_target2cam']
     t_target2cam = handeye_data_dict['t_target2cam']
 
-    # TODO clean entire function, comments etc, hard to think about
+    all_gripper2base_transforms = []
+    for R, t in zip(all_gripper_rotation_mats, all_gripper_tvecs):
+        T = np.eye(4)
+        T[:3, :3] = R
+        T[:3, 3] = t
+        all_gripper2base_transforms.append(T)
 
-    # 
-    # TODO try gripper2base?
-    # TODO homo transformation
-    origin_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-                                        size=0.2, origin=[0.0, 0.0, 0.0])
+    all_target2cam_transforms = []
+    for R, t in zip(all_target2cam_rotation_mats, all_target2cam_tvecs):
+        T = np.eye(4)
+        T[:3, :3] = R
+        T[:3, 3] = t
+        all_target2cam_transforms.append(T)
+
+    # TODO clean entire function, comments etc, hard to think about
+    origin_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2, origin=[0.0, 0.0, 0.0])
 
     geometry_to_plot = []
     geometry_to_plot.append(origin_arm_frame)
-    for idx, base2gripper_tvec in enumerate(all_gripper_tvecs):
+    for idx, homo_transform in enumerate(all_gripper2base_transforms):
         coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-                                        size=0.1, origin=[base2gripper_tvec[0], base2gripper_tvec[1], base2gripper_tvec[2]])  # TODO shouldn't be doing this, should be using from transform probably?
-        coordinate_frame.rotate(all_gripper_rotation_mats[idx])
+                                        # size=0.1, origin=[base2gripper_tvec[0], base2gripper_tvec[1], base2gripper_tvec[2]])  # TODO shouldn't be doing this, should be using from transform probably?
+                                        size=0.1, origin=[0.0, 0.0, 0.0])  # TODO shouldn't be doing this, should be using from transform probably?
+        # coordinate_frame.rotate(all_gripper_rotation_mats[idx])
+        coordinate_frame.transform(homo_transform)
 
         geometry_to_plot.append(coordinate_frame)
 
@@ -147,15 +158,17 @@ def plot_all_handeye_data(handeye_data_dict, cam_pcd=None):
     origin_cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2, origin=[0.0, 0.0, 0.0])
     geometry_to_plot.append(origin_cam_frame)
 
-    for idx, cam2target_tvec in enumerate(all_target2cam_tvecs):
-        # TODO should be transforming and not rotating + translating
+    for idx, homo_transform in enumerate(all_target2cam_transforms):
         coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-                                        size=0.1, origin=[cam2target_tvec[0], cam2target_tvec[1], cam2target_tvec[2]])
-        coordinate_frame.rotate(all_target2cam_rotation_mats[idx])
+                                        # size=0.1, origin=[cam2target_tvec[0], cam2target_tvec[1], cam2target_tvec[2]])
+                                        size=0.1, origin=[0.0, 0.0, 0.0])
+        # coordinate_frame.rotate(all_target2cam_rotation_mats[idx])
+        coordinate_frame.transform(homo_transform)
 
         sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.01)
         # TODO WHY is the sphere always a bit higher than the origin of the coordinate frame?
-        sphere.translate([cam2target_tvec[0], cam2target_tvec[1], cam2target_tvec[2]])
+        # sphere.translate([cam2target_tvec[0], cam2target_tvec[1], cam2target_tvec[2]])
+        sphere.transform(homo_transform)
         geometry_to_plot.append(sphere)
         geometry_to_plot.append(coordinate_frame)
         # TODO need better way to visualise? images? pointclouds? Origin should be different or bigger and point x outward?
