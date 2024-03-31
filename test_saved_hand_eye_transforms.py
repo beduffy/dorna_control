@@ -52,6 +52,7 @@ handeye_calibrate_opencv(handeye_data_dict, folder_name)
 # TODO why load from file again, why not just return from function?
 cam2arm = np.loadtxt('data/{}/latest_cv2_cam2arm.txt'.format(folder_name), delimiter=' ')
 saved_cam2arm = cam2arm
+handeye_data_dict['saved_cam2arm'] = saved_cam2arm
 
 # use color and depth images to create point clouds
 if handeye_data_dict['color_images']:
@@ -84,6 +85,17 @@ for R, t in zip(all_target2cam_rotation_mats, all_target2cam_tvecs):
     T[:3, 3] = t
     all_target2cam_transforms.append(T)
 
+all_gripper_rotation_mats = handeye_data_dict['all_gripper_rotation_mats']
+all_gripper_tvecs = handeye_data_dict['all_gripper_tvecs']
+
+all_gripper2base_transforms = []
+for R, t in zip(all_gripper_rotation_mats, all_gripper_tvecs):
+    T = np.eye(4)
+    # TODO validate that this code works
+    T[:3, :3] = R
+    T[:3, 3] = t
+    all_gripper2base_transforms.append(T)
+
 
 frame_size = 0.1
 sphere_size = 0.01
@@ -101,6 +113,28 @@ transformed_sphere.paint_uniform_color([0, 1, 0])  # Green
 transformed_sphere.transform(saved_cam2arm)  # TODO what am i doing here. I assume transforming origin in camera frame, brings us to arm frame so this coordinate frame should be in base of arm
 
 geometry_to_plot = []
+# given transformed frame, now i can also plot all gripper transformations after saved_cam2_arm to see where that frame is
+for idx, homo_transform in enumerate(all_gripper2base_transforms):
+    # Create coordinate frame for each gripper transform
+    gripper_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+                                    size=frame_size, origin=[0.0, 0.0, 0.0])
+    # combined_transform = np.dot(saved_cam2arm, homo_transform)
+    combined_transform = homo_transform @ saved_cam2arm
+    gripper_coordinate_frame.transform(combined_transform)
+    # gripper_coordinate_frame.transform(saved_cam2arm)
+    # gripper_coordinate_frame.transform(homo_transform)
+
+    # Create a sphere for each gripper transform
+    gripper_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_size)
+    gripper_sphere.paint_uniform_color([0, 0, 1])  # Blue for distinction
+    gripper_sphere.transform(saved_cam2arm)
+    gripper_sphere.transform(homo_transform)
+
+    # Add the created geometries to the list for plotting
+    geometry_to_plot.append(gripper_sphere)
+    geometry_to_plot.append(gripper_coordinate_frame)
+
+
 for idx, homo_transform in enumerate(all_target2cam_transforms):
     coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
                                     size=frame_size, origin=[0.0, 0.0, 0.0])

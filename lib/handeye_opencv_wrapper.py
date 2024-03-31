@@ -10,7 +10,6 @@ from lib.vision import get_inverse_homogenous_transform
 
 def load_all_handeye_data(folder_name):
     # Open data/handeye folder and then load into dict
-    # TODO could load different folders and save them by date or whatever and change "handeye" to default?
     gripper_transform_files = sorted(glob('data/{}/gripper2base*'.format(folder_name)))
     cam2target_files = sorted(glob('data/{}/target2cam*'.format(folder_name)))
 
@@ -115,10 +114,13 @@ def plot_all_handeye_data(handeye_data_dict, cam_pcd=None):
     all_gripper_tvecs = handeye_data_dict['all_gripper_tvecs']
     R_gripper2base = handeye_data_dict['R_gripper2base']
     t_gripper2base = handeye_data_dict['t_gripper2base']
+    R_base2gripper = handeye_data_dict['R_base2gripper']
+    t_base2gripper = handeye_data_dict['t_base2gripper']
     all_target2cam_rotation_mats = handeye_data_dict['all_target2cam_rotation_mats']
     all_target2cam_tvecs = handeye_data_dict['all_target2cam_tvecs']
     R_target2cam = handeye_data_dict['R_target2cam']
     t_target2cam = handeye_data_dict['t_target2cam']
+    saved_cam2arm = handeye_data_dict['saved_cam2arm']
 
     all_gripper2base_transforms = []
     for R, t in zip(all_gripper_rotation_mats, all_gripper_tvecs):
@@ -126,6 +128,13 @@ def plot_all_handeye_data(handeye_data_dict, cam_pcd=None):
         T[:3, :3] = R
         T[:3, 3] = t
         all_gripper2base_transforms.append(T)
+
+    all_base2gripper_transforms = []
+    for R, t in zip(handeye_data_dict['R_base2gripper'], handeye_data_dict['t_base2gripper']):
+        T = np.eye(4)
+        T[:3, :3] = R
+        T[:3, 3] = t
+        all_base2gripper_transforms.append(T)
 
     all_target2cam_transforms = []
     for R, t in zip(all_target2cam_rotation_mats, all_target2cam_tvecs):
@@ -136,16 +145,27 @@ def plot_all_handeye_data(handeye_data_dict, cam_pcd=None):
 
     # TODO clean entire function, comments etc, hard to think about
     origin_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2, origin=[0.0, 0.0, 0.0])
+    origin_arm_frame.transform(saved_cam2arm)
 
+    sphere_size = 0.01
     geometry_to_plot = []
     geometry_to_plot.append(origin_arm_frame)
     for idx, homo_transform in enumerate(all_gripper2base_transforms):
+    # for idx, homo_transform in enumerate(all_base2gripper_transforms):  # TODO why does this look so weird. I don't fully understand enough here
         coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-                                        # size=0.1, origin=[base2gripper_tvec[0], base2gripper_tvec[1], base2gripper_tvec[2]])  # TODO shouldn't be doing this, should be using from transform probably?
                                         size=0.1, origin=[0.0, 0.0, 0.0])  # TODO shouldn't be doing this, should be using from transform probably?
-        # coordinate_frame.rotate(all_gripper_rotation_mats[idx])
-        coordinate_frame.transform(homo_transform)
+        # coordinate_frame.transform(homo_transform)
+        combined_transform = homo_transform @ saved_cam2arm  # TODO why doesn't this work?
+        # combined_transform = saved_cam2arm @ homo_transform 
+        coordinate_frame.transform(combined_transform)
+        # print(idx, homo_transform)
 
+        gripper_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_size)
+        gripper_sphere.paint_uniform_color([0, 0, 1])
+        # gripper_sphere.transform(homo_transform)
+        gripper_sphere.transform(combined_transform)
+
+        geometry_to_plot.append(gripper_sphere)
         geometry_to_plot.append(coordinate_frame)
 
     print('Visualising origin and gripper frames in arm frame')
