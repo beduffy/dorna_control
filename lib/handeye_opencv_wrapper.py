@@ -193,8 +193,8 @@ def handeye_calibrate_opencv(handeye_data_dict, folder_name):
     R_cam2target = handeye_data_dict['R_cam2target']
     t_cam2target = handeye_data_dict['t_cam2target']
 
-    method = cv2.CALIB_HAND_EYE_TSAI  # default
-    # method = cv2.CALIB_HAND_EYE_DANIILIDIS  # tried both, they both work
+    # method = cv2.CALIB_HAND_EYE_TSAI  # default
+    method = cv2.CALIB_HAND_EYE_DANIILIDIS  # tried both, they both work
     # TODO try others
     # method = 
     # eye-in-hand (according to default opencv2 params and weak documentation. "inputting the suitable transformations to the function" for eye-to-hand)
