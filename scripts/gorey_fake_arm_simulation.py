@@ -33,13 +33,14 @@ np.set_printoptions(suppress = True)
 # https://forum.opencv.org/t/eye-to-hand-calibration/5690/2
 # TODO be very careful going from euler to rotation matrix! even numerical problems. 
 # TODO nice functions in there TODO USE?
-# TODO more functions in there1
+
 def matrix_from_rtvec(rvec, tvec):
     (R, jac) = cv2.Rodrigues(rvec) # ignore the jacobian
     M = np.eye(4)
     M[0:3, 0:3] = R
     M[0:3, 3] = tvec.squeeze() # 1-D vector, row vector, column vector, whatever
     return M
+
 
 def rtvec_from_matrix(M):
     (rvec, jac) = cv2.Rodrigues(M[0:3, 0:3]) # ignore the jacobian
@@ -48,72 +49,171 @@ def rtvec_from_matrix(M):
     return (rvec, tvec)
 
 
+def get_gripper_translation_and_rotations(num_poses=10):
+    # 3 points works for when no rotation in camera, but fails when there is
+    # gripper_euler_angles = [
+    #     [0.1, 0, 0],
+    #     [0.2, 0, 0],
+    #     [0.3, 0, 0],
+    # ]
+    # # if I only changed rolls then we get nice expected effects
+    # gripper_translations = [
+    #     [0.3, 0.0, 0.0],
+    #     [0.4, 0.0, 0.0],
+    #     [0.5, 0.0, 0.0],
+    # ]
+
+    # # # trying more manually specified random  poses
+    # gripper_euler_angles = [
+    #     [0.1, 0, 0.5],
+    #     [0.2, 0.1, 0.6],
+    #     [0.3, 0.2, 0.9],
+    #     [0.3, 0.5, 0.6],
+    #     [0.4, 0.2, 0.7],
+    #     [0.6, 0.7, 0.9],
+    # ]
+    # # if I only changed rolls then we get nice expected effects
+    # gripper_translations = [
+    #     [0.3, 0.0, 0.0],
+    #     [0.4, 0.5, 0.6],
+    #     [0.5, 0.7, 0.2],
+    #     [0.5, 0.4, 0.2],
+    #     [0.7, 0.1, 0.0],
+    #     [0.5, 0.3, 0.4],
+    # ]
+
+    # random poses of gripper
+    # TODO could soon add noise
+    # TODO could soon add an arbitrary distance from aruco marker and gripper
+    num_poses = 3
+    gripper_euler_angles = []
+    gripper_translations = []
+    size_of_random_vecs = (3,)
+    for i in range(num_poses):
+        gripper_euler_angles.append(np.random.uniform(size=size_of_random_vecs).tolist())
+        gripper_translations.append(np.random.uniform(size=size_of_random_vecs).tolist())
+
+    return gripper_euler_angles, gripper_translations
+
+
+def get_gripper_frames_and_transformations(gripper_euler_angles, gripper_translations):
+
+    # Calculate all gripper frames and transformations
+    coordinate_frames_o3d = []
+    all_transformations_to_gripper = []
+    all_inverse_transformations_to_gripper = []
+    for eul_angles, translate in zip(gripper_euler_angles, gripper_translations):
+        transformation = np.identity(4)
+        # transformation[:3, :3] = np.identity(3)  # no rotation
+        r = Rotation.from_euler("xyz", eul_angles, degrees=False)  # roll pitch yaw = xyz  
+        new_rotation_matrix = r.as_matrix()
+        transformation[:3, :3] = new_rotation_matrix
+        transformation[0, 3] = translate[0]
+        transformation[1, 3] = translate[1]
+        transformation[2, 3] = translate[2]
+        transformation_inverse = get_inverse_homogenous_transform(transformation)
+        all_inverse_transformations_to_gripper.append(transformation_inverse)
+
+        coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.0, 0.0, 0.0])
+        coordinate_frame.transform(transformation)
+        all_transformations_to_gripper.append(transformation)
+
+        coordinate_frames_o3d.append(coordinate_frame)
+
+    return coordinate_frames_o3d, all_transformations_to_gripper, all_inverse_transformations_to_gripper
+
+
+def get_all_camera_transformations_to_gripper(all_transformations_to_gripper, camera_inverse_transformation):
+
+    all_transformation_target2cam = []  # transforms a point expressed in the target frame to the camera frame ( cTt)
+    all_transformation_cam2target = []  # therefore transforms a point in the camera frame to the target frame
+    for transformation in all_transformations_to_gripper:
+        # Composing from camera to origin (cam2arm) and then normal transformation. 
+        transformation_from_camera_to_coord_frame = np.dot(camera_inverse_transformation, transformation)
+        # np.dot(transformation_from_camera_to_coord_frame_1, np.array([0.0, 0.0, 0.0, 1.0]))  # unituitive numbers due to rotation
+        # the above takes a point in camera frame to target frame
+        all_transformation_cam2target.append(transformation_from_camera_to_coord_frame)
+
+        inverse_transformation_from_camera_to_coord_frame = get_inverse_homogenous_transform(transformation_from_camera_to_coord_frame)
+        print('inverse tranforming origin (from coord frame to camera):', np.dot(inverse_transformation_from_camera_to_coord_frame, np.array([0.0, 0.0, 0.0, 1.0])))
+        # array([-0.3,  0.3,  0.4,  1. ])  # correct! for first frame. Yes! 
+        # the above takes a point in target frame (origin 0, 0, 0) to camera frame by going back -0.3, right 0.3 and up in z 0.4
+
+        # all_transformation_target2cam.append(inverse_transformation_from_camera_to_coord_frame)  # TODO this was wrong, my understanding of cam2target was wrong. 
+        
+        
+        
+        
+        # TODO WTF?
+        # TODO are docs correct?!?! 
+        # but i literally called it transformation_from_camera_to_coord_frame -> cam2target?
+        # so we take points in cam frame to target frame. But docs say points in target frame to camera frame, 
+        all_transformation_target2cam.append(transformation_from_camera_to_coord_frame)
+    
+    return all_transformation_target2cam, all_transformation_cam2target
+
+
+def calculate_difference_between_ground_truth_and_calculated_transformation(camera_transformation, full_homo_RT):
+    # Calculate the difference between the ground truth and the calculated transformation
+    diff_transformation = np.linalg.inv(camera_transformation) @ full_homo_RT
+    # Extract the rotation and translation differences
+    rotation_diff = diff_transformation[:3, :3]
+    translation_diff = diff_transformation[:3, 3]
+
+    # Calculate the angle of rotation difference
+    angle_of_rotation_diff = np.arccos((np.trace(rotation_diff) - 1) / 2)
+    # Convert to degrees
+    angle_of_rotation_diff_degrees = np.degrees(angle_of_rotation_diff)
+
+    # Print the results
+    print("\nDifference between ground truth and calculated transformation:")
+    print("Rotation difference (in degrees):", angle_of_rotation_diff_degrees)
+    print("Translation difference (in meters):", translation_diff)
+
+    # Check if the differences are within acceptable thresholds
+    rotation_threshold = np.radians(5)  # 5 degrees tolerance
+    translation_threshold = 0.05  # 5 cm tolerance
+
+    if angle_of_rotation_diff <= rotation_threshold and np.linalg.norm(translation_diff) <= translation_threshold:
+        print("The calculated transformation is close enough to the ground truth.")
+    else:
+        print("The calculated transformation is NOT close enough to the ground truth.")
+
+
+def extract_transformation_matrices(all_transformation_target2cam, all_transformations_to_gripper, all_inverse_transformations_to_gripper):
+    # extract R_target2cam and t_target2cam
+    R_target2cam = []
+    t_target2cam = []
+    for transformation in all_transformation_target2cam:
+        # TODO below is a source of error, double check
+        R_target2cam.append(transformation[:3, :3])
+        t_target2cam.append(transformation[:3, 3])
+
+    R_gripper2base = []
+    t_gripper2base = []
+    # TODO needs to be inverted? only for eye in hand
+    for transformation in all_transformations_to_gripper:
+        # TODO below is a source of error, double check
+        R_gripper2base.append(transformation[:3, :3])
+        t_gripper2base.append(transformation[:3, 3])
+
+    R_base2gripper = []
+    t_base2gripper = []
+    for transformation in all_inverse_transformations_to_gripper:  # inversely correctly bring [0,0,0] -> [-0.3, 0, 0] to go from gripper to base
+        # TODO below is a source of error, double check
+        R_base2gripper.append(transformation[:3, :3])
+        t_base2gripper.append(transformation[:3, 3])
+    
+    return R_target2cam, t_target2cam, R_gripper2base, t_gripper2base, R_base2gripper, t_base2gripper
+
+
+# main/run
+
 size = 0.1
 origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.0, 0.0, 0.0])
 
-# 3 points works for when no rotation in camera, but fails when there is
-# gripper_euler_angles = [
-#     [0.1, 0, 0],
-#     [0.2, 0, 0],
-#     [0.3, 0, 0],
-# ]
-# # if I only changed rolls then we get nice expected effects
-# gripper_translations = [
-#     [0.3, 0.0, 0.0],
-#     [0.4, 0.0, 0.0],
-#     [0.5, 0.0, 0.0],
-# ]
-
-# # # trying more manually specified random  poses
-# gripper_euler_angles = [
-#     [0.1, 0, 0.5],
-#     [0.2, 0.1, 0.6],
-#     [0.3, 0.2, 0.9],
-#     [0.3, 0.5, 0.6],
-#     [0.4, 0.2, 0.7],
-#     [0.6, 0.7, 0.9],
-# ]
-# # if I only changed rolls then we get nice expected effects
-# gripper_translations = [
-#     [0.3, 0.0, 0.0],
-#     [0.4, 0.5, 0.6],
-#     [0.5, 0.7, 0.2],
-#     [0.5, 0.4, 0.2],
-#     [0.7, 0.1, 0.0],
-#     [0.5, 0.3, 0.4],
-# ]
-
-# random poses
-num_poses = 10
-gripper_euler_angles = []
-gripper_translations = []
-size_of_random_vecs = (3,)
-for i in range(num_poses):
-    gripper_euler_angles.append(np.random.uniform(size=size_of_random_vecs).tolist())
-    gripper_translations.append(np.random.uniform(size=size_of_random_vecs).tolist())
-
-# Calculate all gripper frames and transformations
-coordinate_frames_o3d = []
-all_transformations_to_gripper = []
-all_inverse_transformations_to_gripper = []
-for eul_angles, translate in zip(gripper_euler_angles, gripper_translations):
-    transformation = np.identity(4)
-    # transformation[:3, :3] = np.identity(3)  # no rotation
-    r = Rotation.from_euler("xyz", eul_angles, degrees=False)  # roll pitch yaw = xyz  
-    new_rotation_matrix = r.as_matrix()
-    transformation[:3, :3] = new_rotation_matrix
-    transformation[0, 3] = translate[0]
-    transformation[1, 3] = translate[1]
-    transformation[2, 3] = translate[2]
-    transformation_inverse = get_inverse_homogenous_transform(transformation)
-    all_inverse_transformations_to_gripper.append(transformation_inverse)
-
-    coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=size, origin=[0.0, 0.0, 0.0])
-    coordinate_frame.transform(transformation)
-    all_transformations_to_gripper.append(transformation)
-
-    coordinate_frames_o3d.append(coordinate_frame)
-
+gripper_euler_angles, gripper_translations = get_gripper_translation_and_rotations()
+coordinate_frames_o3d, all_transformations_to_gripper, all_inverse_transformations_to_gripper = get_gripper_frames_and_transformations(gripper_euler_angles, gripper_translations)
 
 ####### camera transform and frame
 
@@ -123,7 +223,7 @@ for eul_angles, translate in zip(gripper_euler_angles, gripper_translations):
 # z, x, y, angle = euler_yzx_to_axis_angle(0, 0, np.pi / 2)  # rolling right 45 degrees.
 
 # I want camera to the right, pointing to the left 45 degrees left in yaw and 45 degrees down
-z, x, y, angle = euler_yzx_to_axis_angle(np.pi / 2, -np.pi / 2, 0)  # TODO shouldn't pi / 2 be 90 degrees and not 45??!?!!? yep
+# z, x, y, angle = euler_yzx_to_axis_angle(np.pi / 2, -np.pi / 2, 0)  # TODO shouldn't pi / 2 be 90 degrees and not 45??!?!!? yep
 z, x, y, angle = euler_yzx_to_axis_angle(np.pi / 2, -np.pi / 2, np.pi)  # TODO shouldn't pi / 2 be 90 degrees and not 45??!?!!? yep
 
 
@@ -145,8 +245,10 @@ rvec = np.array([x, y, z])
 # TODO wait i don't even need field of view since no camera in these experiments!!!!! It's just math and optimisation. 
 # TODO So i could chose to not rotate camera for now just to verify everything! 
 # rvec = np.array([1.0, 0.0, 0.0])
-camera_position_rel_to_origin = np.array([0.0, 0.3, 0.4])
-tvec = camera_position_rel_to_origin   # TODO why does 0.3 bring it down but 
+camera_position_rel_to_arm_origin = np.array([0.0, 0.3, 0.4])  # this is the ground truth
+
+# Since this is a simulation, we know and choose the camera position relative to arm
+tvec = camera_position_rel_to_arm_origin   # TODO why does 0.3 bring it down but 
 cam2_arm, arm2_cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
 camera_inverse_transformation = np.array(cam2_arm)
 camera_transformation = np.array(arm2_cam)  # makes more intuitive sense than cam2arm?, 0.3 tvec brings bigger coordinate frame forwards.?
@@ -165,55 +267,8 @@ camera_coordinate_frame.transform(camera_transformation)
 # TODO how? well i could just dot product. np.dot(camera_inverse_transformation, transformations[0]). 
 # TODO how to visualise though? I think it's fine
 
-all_transformation_target2cam = []  # transforms a point expressed in the target frame to the camera frame ( cTt)
-all_transformation_cam2target = []  # therefore transforms a point in the camera frame to the target frame
-for transformation in all_transformations_to_gripper:
-    # Composing from camera to origin (cam2arm) and then normal transformation. 
-    transformation_from_camera_to_coord_frame = np.dot(camera_inverse_transformation, transformation)
-    # np.dot(transformation_from_camera_to_coord_frame_1, np.array([0.0, 0.0, 0.0, 1.0]))  # unituitive numbers due to rotation
-    # the above takes a point in camera frame to target frame
-    all_transformation_cam2target.append(transformation_from_camera_to_coord_frame)
-
-    inverse_transformation_from_camera_to_coord_frame = get_inverse_homogenous_transform(transformation_from_camera_to_coord_frame)
-    print('inverse tranforming origin (from coord frame to camera):', np.dot(inverse_transformation_from_camera_to_coord_frame, np.array([0.0, 0.0, 0.0, 1.0])))
-    # array([-0.3,  0.3,  0.4,  1. ])  # correct! for first frame. Yes! 
-    # the above takes a point in target frame (origin 0, 0, 0) to camera frame by going back -0.3, right 0.3 and up in z 0.4
-
-    # all_transformation_target2cam.append(inverse_transformation_from_camera_to_coord_frame)  # TODO this was wrong, my understanding of cam2target was wrong. 
-    
-    
-    
-    
-    # TODO WTF?
-    # TODO are docs correct?!?! 
-    # but i literally called it transformation_from_camera_to_coord_frame -> cam2target?
-    # so we take points in cam frame to target frame. But docs say points in target frame to camera frame, 
-    all_transformation_target2cam.append(transformation_from_camera_to_coord_frame)
-
-# extract R_target2cam and t_target2cam
-R_target2cam = []
-t_target2cam = []
-for transformation in all_transformation_target2cam:
-    # TODO below is a source of error, double check
-    R_target2cam.append(transformation[:3, :3])
-    t_target2cam.append(transformation[:3, 3])
-
-
-R_gripper2base = []
-t_gripper2base = []
-# TODO needs to be inverted? only for eye in hand
-for transformation in all_transformations_to_gripper:
-    # TODO below is a source of error, double check
-    R_gripper2base.append(transformation[:3, :3])
-    t_gripper2base.append(transformation[:3, 3])
-
-R_base2gripper = []
-t_base2gripper = []
-for transformation in all_inverse_transformations_to_gripper:  # inversely correctly bring [0,0,0] -> [-0.3, 0, 0] to go from gripper to base
-    # TODO below is a source of error, double check
-    R_base2gripper.append(transformation[:3, :3])
-    t_base2gripper.append(transformation[:3, 3])
-
+all_transformation_target2cam, all_transformation_cam2target = get_all_camera_transformations_to_gripper(all_transformations_to_gripper, camera_inverse_transformation)
+R_target2cam, t_target2cam, R_gripper2base, t_gripper2base, R_base2gripper, t_base2gripper = extract_transformation_matrices(all_transformation_target2cam, all_transformations_to_gripper, all_inverse_transformations_to_gripper)
 
 
 # TODO now sure how to plot and prove my point since everything is origin relative?
@@ -258,6 +313,8 @@ print('Ground truth (camera_transform)')
 print(camera_transformation)
 # print('Ground truth (inverse camera_transform)')
 # print(camera_inverse_transformation)
+
+calculate_difference_between_ground_truth_and_calculated_transformation(camera_transformation, full_homo_RT)
 
 
 
