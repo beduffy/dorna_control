@@ -17,6 +17,24 @@ from dorna import Dorna
 
 from lib.dorna_kinematics import f_k, i_k, check_ground_collision
 
+"""
+Key Bindings:
+- 'p': Halts the robot's current movement.
+- 'o': Prints the current position and joint angles of the robot.
+- 'r': Attempts to reconnect to the robot if the connection is lost.
+- 'h': Homes the robot's joints sequentially from j3 to j0, then sets j4 and j3 to 0.
+- '0': Moves the robot to the origin (0,0,0) in joint coordinates.
+- 'g': Cycles through gripper states to incrementally open or close the gripper.
+- 'v': Decrements the gripper state to open or close the gripper.
+- '\\': Resets the gripper state to 0 (fully open).
+- 'z': Sets the gripper state to 2 (partially closed).
+- 'x': Sets the gripper state to 3 (more closed).
+- 'c': Calibrates the robot and saves the configuration to 'myconfig.yaml'.
+- 'b': Saves the current position to a trajectory list.
+- 'y': Runs the robot through the saved trajectory points.
+"""
+
+
 def go_to_joint_angles(joint_angles):
 	command = generate_command(joint_angles, movement=0, coord_sys='joint')
 	# command = generate_command(joint_angles, movement=0, coord_sys='xyz')  # big collision mistake
@@ -169,14 +187,18 @@ def activate_gripper(gripper_state):
 		robot.servo(40)
 	elif gripper_state == 1:
 		robot.servo(200)
-		# microsecond_delay = 1000
 	elif gripper_state == 2:
-		# microsecond_delay = 1400
 		robot.servo(400)
 	elif gripper_state == 3:
 		robot.servo(675)
 	elif gripper_state == 4:
 		robot.servo(800)
+	elif gripper_state == 5:
+		robot.servo(900)
+	elif gripper_state == 6:
+		robot.servo(1000)
+	elif gripper_state == 7:
+		robot.servo(1100)
 
 if __name__=="__main__":	
 	gripper_state = 0
@@ -281,7 +303,7 @@ if __name__=="__main__":
 					print("Robot at 0")
 				elif key == 'g':
 					gripper_state += 1
-					if gripper_state == 5:
+					if gripper_state == 8:
 						gripper_state = 0
 					activate_gripper(gripper_state)
 				elif key == 'v':
