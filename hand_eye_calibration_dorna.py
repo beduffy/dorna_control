@@ -58,7 +58,7 @@ from lib.aruco_image_text import OpenCvArucoImageText
 # TODO Feb 24th 2024 update:
 '''
 What do I want?
-To pick up any object to a high accuracy, even if I'm clicking to choose the object. 
+To pick up any object to a high accuracy (>65% success rate), even if I'm clicking to choose the object. 
 
 Where are we?:
 Option A: Big board of markers with solvePnP worked but still there is eyeball error of placement of board and 
@@ -162,15 +162,17 @@ def get_gripper_base_transformation(joint_angles):
 
     # TODO are things weird because of dorna's weird angle coordinate system?
     # because dorna's j1 is measure relative to ground plane, j2 is then relative to j1, j3 relative to j2. But also inverse direction right?
-    joint_angles[3] = -joint_angles[3]
-    joint_angles[2] = -joint_angles[2]
-    joint_angles[1] = -joint_angles[1]
+    
+    joint_angles_copy = joint_angles.copy()
+    joint_angles_copy[3] = -joint_angles_copy[3]
+    joint_angles_copy[2] = -joint_angles_copy[2]
+    joint_angles_copy[1] = -joint_angles_copy[1]
 
-    joint_angles_rad = [math.radians(j) for j in joint_angles]
+    joint_angles_rad = [math.radians(j) for j in joint_angles_copy]
 
-    # homo_array = np.zeros((4, 4))
     homo_array = np.identity(4)
     # arm2cam_local[:3, :3] = R_ct
+    # TODO is the below in metres? yes but in get_handeye data we convert to metres
     homo_array[0, 3] = full_toolhead_fk[0]
     homo_array[1, 3] = full_toolhead_fk[1]
     homo_array[2, 3] = full_toolhead_fk[2]
@@ -965,7 +967,6 @@ if __name__ == '__main__':
                                       coordinate_frame_arm_frame, coordinate_frame_shoulder_height_arm_frame, cam_frame_in_arm_frame]
                     plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=extra_elements)
 
-                    # TODO do proper handeye but put full big markers on gripper with cardboard. 
                     # TODO get click working now with big markers. 
                     # TODO should I transform all xyz_positions_of_all_joints
                     # TODO could I keep everything in metres until I send the final control command of dorna?
@@ -995,7 +996,6 @@ if __name__ == '__main__':
                 # later make it easy to test, visualise on any folder. In my gorey fake arm simulation, I had the order wrong in cam2target, didn't need inverse. 
                 
                 # TODO should I do open3D here too just to make sure the transform is good? Meh, I can analyse later in my test script. Remove this TODO
-
                 # TODO do I Want to keep the code to make it work on 1 marker?
                 # TODO how will i rotate the gripper with large 12 cardboard markers on the gripper? Only add after homing?, first see if it is a problem
                 # TODO only if we see markers or 12 markers?
@@ -1036,7 +1036,12 @@ if __name__ == '__main__':
                 joint_angles = get_joint_angles_from_dorna_flask()  # TODO do not forget
                 # # the below is just for testing without running arm
                 # joint_angles = [0, 0, 0, 0, 0]
-                gripper_base_transform = get_gripper_base_transformation(joint_angles)
+                gripper_base_transform = get_gripper_base_transformation(joint_angles)  # TODO is this in mm?
+
+                # TODO visualise full fk of these newly saved joint angles
+                fp = '{}/joint_angles_{}.txt'.format(full_handeye_folder_path, num_saved_handeye_transforms)
+                print('Saving joint angles at {} \n{}'.format(fp, joint_angles))
+                np.savetxt(fp, joint_angles, delimiter=' ')
                 # TODO try get inverse (actual gripper2base) just to really confirm shit
                 fp = '{}/gripper2base_{}.txt'.format(full_handeye_folder_path, num_saved_handeye_transforms)
                 print('Saving gripper2base at {} \n{}'.format(fp, gripper_base_transform))
