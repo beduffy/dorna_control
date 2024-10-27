@@ -62,6 +62,13 @@ def load_all_handeye_data(folder_name):
     R_base2gripper = np.array(all_gripper_rotation_mats_inverse)
     t_base2gripper = np.array(all_gripper_tvecs_inverse)
 
+    all_gripper2base_transforms = []
+    for R, t in zip(all_gripper_rotation_mats, all_gripper_tvecs):
+        T = np.eye(4)
+        T[:3, :3] = R
+        T[:3, 3] = t
+        all_gripper2base_transforms.append(T)
+
     all_target2cam_rotation_mats = []
     all_target2cam_tvecs = []
     all_cam2target_rotation_mats = []
@@ -125,31 +132,6 @@ def load_all_handeye_data(folder_name):
         'depth_images': depth_images,
         'all_joint_angles': all_joint_angles
     }
-    return handeye_data_dict
-
-
-def plot_all_handeye_data(handeye_data_dict):
-    all_gripper_rotation_mats = handeye_data_dict['all_gripper_rotation_mats']
-    all_gripper_tvecs = handeye_data_dict['all_gripper_tvecs']
-    R_gripper2base = handeye_data_dict['R_gripper2base']
-    t_gripper2base = handeye_data_dict['t_gripper2base']
-    R_base2gripper = handeye_data_dict['R_base2gripper']
-    t_base2gripper = handeye_data_dict['t_base2gripper']
-    all_target2cam_rotation_mats = handeye_data_dict['all_target2cam_rotation_mats']
-    all_target2cam_tvecs = handeye_data_dict['all_target2cam_tvecs']
-    R_target2cam = handeye_data_dict['R_target2cam']
-    t_target2cam = handeye_data_dict['t_target2cam']
-    saved_cam2arm = handeye_data_dict['saved_cam2arm']
-    all_joint_angles = handeye_data_dict['all_joint_angles']
-    color_images = handeye_data_dict['color_images']
-    depth_images = handeye_data_dict['depth_images']
-
-    all_gripper2base_transforms = []
-    for R, t in zip(all_gripper_rotation_mats, all_gripper_tvecs):
-        T = np.eye(4)
-        T[:3, :3] = R
-        T[:3, 3] = t
-        all_gripper2base_transforms.append(T)
 
     all_base2gripper_transforms = []
     for R, t in zip(handeye_data_dict['R_base2gripper'], handeye_data_dict['t_base2gripper']):
@@ -164,6 +146,50 @@ def plot_all_handeye_data(handeye_data_dict):
         T[:3, :3] = R
         T[:3, 3] = t
         all_target2cam_transforms.append(T)
+
+    all_cam2target_transforms = []
+    for R, t in zip(all_cam2target_rotation_mats, all_cam2target_tvecs):
+        T = np.eye(4)
+        T[:3, :3] = R
+        T[:3, 3] = t
+        all_cam2target_transforms.append(T)
+
+    handeye_data_dict['all_gripper2base_transforms'] = all_gripper2base_transforms
+    handeye_data_dict['all_base2gripper_transforms'] = all_base2gripper_transforms
+    handeye_data_dict['all_target2cam_transforms'] = all_target2cam_transforms
+    handeye_data_dict['all_cam2target_transforms'] = all_cam2target_transforms
+
+    return handeye_data_dict
+
+
+def test_transformations(handeye_data_dict):
+    # copied below to help me start testing
+    # TODO no idea why I'm doing the below
+    # combined_transform = homo_transform @ saved_cam2arm  # TODO why doesn't this work?
+    # combined_transform = saved_cam2arm @ homo_transform 
+    # coordinate_frame.transform(combined_transform)
+    # print(idx, homo_transform)
+
+    pass
+
+
+def plot_all_handeye_data(handeye_data_dict):
+    all_gripper_rotation_mats = handeye_data_dict['all_gripper_rotation_mats']
+    all_gripper_tvecs = handeye_data_dict['all_gripper_tvecs']
+    all_gripper2base_transforms = handeye_data_dict['all_gripper2base_transforms']
+    R_gripper2base = handeye_data_dict['R_gripper2base']
+    t_gripper2base = handeye_data_dict['t_gripper2base']
+    R_base2gripper = handeye_data_dict['R_base2gripper']
+    t_base2gripper = handeye_data_dict['t_base2gripper']
+    all_target2cam_rotation_mats = handeye_data_dict['all_target2cam_rotation_mats']
+    all_target2cam_tvecs = handeye_data_dict['all_target2cam_tvecs']
+    all_target2cam_transforms = handeye_data_dict['all_target2cam_transforms']
+    R_target2cam = handeye_data_dict['R_target2cam']
+    t_target2cam = handeye_data_dict['t_target2cam']
+    saved_cam2arm = handeye_data_dict['saved_cam2arm']
+    all_joint_angles = handeye_data_dict['all_joint_angles']
+    color_images = handeye_data_dict['color_images']
+    depth_images = handeye_data_dict['depth_images']
 
     saved_cam2arm = handeye_data_dict['saved_cam2arm']  # assuming handeye_calibrate_opencv has been called
 
@@ -276,7 +302,6 @@ def plot_blah(handeye_data_dict, cam_pcd_first_image_pair, saved_cam2arm):
 def plot_arm_gripper_frames(saved_cam2arm, all_gripper2base_transforms, all_joint_angles):
     # TODO clean entire function, comments etc, hard to think about
     origin_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2, origin=[0.0, 0.0, 0.0])
-    # origin_arm_frame.transform(saved_cam2arm)  # TODO do I want to see this or not?
 
     sphere_size = 0.01
     geometry_to_plot = []
@@ -286,24 +311,16 @@ def plot_arm_gripper_frames(saved_cam2arm, all_gripper2base_transforms, all_join
         coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
                                         size=0.1, origin=[0.0, 0.0, 0.0])  # TODO shouldn't be doing this, should be using from transform probably?
         coordinate_frame.transform(homo_transform)
-        # TODO no idea why I'm doing the below
-        # combined_transform = homo_transform @ saved_cam2arm  # TODO why doesn't this work?
-        # combined_transform = saved_cam2arm @ homo_transform 
-        # coordinate_frame.transform(combined_transform)
-        # print(idx, homo_transform)
 
         gripper_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_size)
         gripper_sphere.paint_uniform_color([0, 0, 1])
         gripper_sphere.transform(homo_transform)
-        # gripper_sphere.transform(combined_transform)
 
         geometry_to_plot.append(gripper_sphere)
         geometry_to_plot.append(coordinate_frame)
 
     # plot arms too
     shoulder_height_in_mm = 206.01940000000002 / 1000.0
-    coordinate_frame_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-        size=25.0, origin=[0.0, 0.0, 0.0])
     coordinate_frame_shoulder_height_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
         size=0.3, origin=[0.0, 0.0, shoulder_height_in_mm])
     for idx, joint_angles in enumerate(all_joint_angles):
@@ -312,15 +329,6 @@ def plot_arm_gripper_frames(saved_cam2arm, all_gripper2base_transforms, all_join
         full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
         print('full_toolhead_fk (in metres): ', full_toolhead_fk)
 
-        # below only makes sense if correct cam2arm right? TODO
-        # camera_color_img = handeye_data_dict['color_images'][idx]
-        # camera_depth_img = handeye_data_dict['depth_images'][idx]
-        # cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img,
-        #                         pinhole_camera_intrinsic, visualise=False)
-        # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm)
-
-        # TODO remove all pcd stuff here right?
-        # TODO I want the arm to return instead of plotting?
         arm_plot_geometry = plot_open3d_Dorna(xyz_positions_of_all_joints, 
                         #   extra_geometry_elements=[full_arm_pcd, coordinate_frame_arm_frame, coordinate_frame_shoulder_height_arm_frame])
                         #   extra_geometry_elements=[coordinate_frame_arm_frame, coordinate_frame_shoulder_height_arm_frame],
@@ -335,6 +343,7 @@ def plot_arm_gripper_frames(saved_cam2arm, all_gripper2base_transforms, all_join
 
 
 def plot_aruco_frames_in_camera_frame(all_target2cam_transforms, cam_pcd):
+    # TODO do I want to visualise how the aruco coordinate frame looks for each image? Give option and loop through all? It would prove less distortion effects?
     # TODO do the below for gripper poses as well, they should perfectly align rotation-wise to aruco poses
     # TODO ideally I'd visualise a frustum. matplotlib?
     # TODO draw mini plane of all arucos rather than coordinate frames. https://github.com/isl-org/Open3D/issues/3618
@@ -364,11 +373,12 @@ def plot_aruco_frames_in_camera_frame(all_target2cam_transforms, cam_pcd):
 
 
 
-def handeye_calibrate_opencv(handeye_data_dict, folder_name):
+def handeye_calibrate_opencv(handeye_data_dict, folder_name, eye_in_hand=True):
     '''
         Modifies handeye_data_dict with saved_cam2arm 
     '''
 
+    # TODO double check all gripper2base and etc
     # all_gripper_rotation_mats = handeye_data_dict['all_gripper_rotation_mats']
     # all_gripper_tvecs = handeye_data_dict['all_gripper_tvecs']
     R_gripper2base = handeye_data_dict['R_gripper2base']
@@ -382,9 +392,9 @@ def handeye_calibrate_opencv(handeye_data_dict, folder_name):
     R_cam2target = handeye_data_dict['R_cam2target']
     t_cam2target = handeye_data_dict['t_cam2target']
 
-    # method = cv2.CALIB_HAND_EYE_TSAI  # default
-    method = cv2.CALIB_HAND_EYE_DANIILIDIS  # tried both, they both work
-    # method = 
+    method = cv2.CALIB_HAND_EYE_TSAI  # default
+    # method = cv2.CALIB_HAND_EYE_DANIILIDIS  # tried both, they both work
+    
     # eye-in-hand (according to default opencv2 params and weak documentation. "inputting the suitable transformations to the function" for eye-to-hand)
     # first formula has b_T_c for X so that's what comes out of function. It expects b_T_g and c_T_t so gripper2base and target2cam
 
@@ -393,29 +403,33 @@ def handeye_calibrate_opencv(handeye_data_dict, folder_name):
     #                                                     t_gripper2base=t_gripper2base, 
     #                                                     R_target2cam=R_target2cam, 
     #                                                     t_target2cam=t_target2cam, method=method)
+
     # eye-to-hand
     # second formula has b_T_c for X so camera2base actually is what comes out of function. It expects g_T_b (base2gripper) and c_T_t (target2cam)
     # R_camera2base, t_camera2base = cv2.calibrateHandEye(R_base2gripper, t_base2gripper, R_target2cam, t_target2cam)
 
-    # output should be  ->	R_cam2gripper, t_cam2gripper  for eye in hand
+    # for eye-in-hand, output should be  ->	R_cam2gripper, t_cam2gripper  
     # but for eye to hand: R_cam2base_est, t_cam2base_est from unit tests in opencv
 
     # eye-to-hand
     # R_cam2base_est, t_cam2base_est = cv2.calibrateHandEye(R_base2gripper, t_base2gripper,
     #                                                       R_target2cam, t_target2cam, method=method)
     
-    # eye-in-hand
-    R_cam2base_est, t_cam2base_est = cv2.calibrateHandEye(R_gripper2base, t_gripper2base,
-                                                          R_cam2target, t_cam2target, method=method)
-    
-    
-    print('\nR and T for eye-to-hand. cam2base transform:')
+    if eye_in_hand:
+        # eye-in-hand
+        # TODO outputs below are actually R_cam2gripper, t_cam2gripper
+        R_cam2base_est, t_cam2base_est = cv2.calibrateHandEye(R_gripper2base, t_gripper2base,
+                                                              R_cam2target, t_cam2target, method=method)
+    else:
+        # eye-to-hand
+        R_cam2base_est, t_cam2base_est = cv2.calibrateHandEye(R_base2gripper, t_base2gripper,
+                                                              R_target2cam, t_target2cam, method=method)
+
     full_homo_RT = np.identity(4)
     full_homo_RT[:3, :3] = R_cam2base_est
     full_homo_RT[:3, 3] = t_cam2base_est.T
-    print(full_homo_RT)
 
-    print('Saving handeye (cv2) cam2arm \n{}'.format(full_homo_RT))
+    print('Saving handeye (cv2) transform \n{}'.format(full_homo_RT))
     np.savetxt('data/{}/latest_cv2_cam2arm.txt'.format(folder_name), full_homo_RT, delimiter=' ')
     handeye_data_dict['saved_cam2arm'] = full_homo_RT
 
