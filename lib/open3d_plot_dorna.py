@@ -15,7 +15,7 @@ def create_sphere_at_pos(pos, radius=4, color=[1.0, 0.0, 0.0]):
 
 
 def plot_open3d_Dorna(joint_and_link_positions, extra_geometry_elements=None, do_plot=True):
-    print("Drawing Open3D model of arm with lines")
+    # print("Drawing Open3D model of arm with lines")
     # TODO how to make more accurate 3d model? URDF/meshes?
 
     # starting_x = joint_and_link_positions["starting_x"]
@@ -34,19 +34,6 @@ def plot_open3d_Dorna(joint_and_link_positions, extra_geometry_elements=None, do
     x4 = joint_and_link_positions["toolhead"][0]
     y4 = joint_and_link_positions["toolhead"][1]
     z4 = joint_and_link_positions["toolhead"][2]
-
-    # x1 = joint_and_link_positions["shoulder"][0] / 1000.0
-    # y1 = joint_and_link_positions["shoulder"][1] / 1000.0
-    # z1 = joint_and_link_positions["shoulder"][2] / 1000.0
-    # x2 = joint_and_link_positions["elbow"][0] / 1000.0
-    # y2 = joint_and_link_positions["elbow"][1] / 1000.0
-    # z2 = joint_and_link_positions["elbow"][2] / 1000.0
-    # x3 = joint_and_link_positions["wrist"][0] / 1000.0
-    # y3 = joint_and_link_positions["wrist"][1] / 1000.0
-    # z3 = joint_and_link_positions["wrist"][2] / 1000.0
-    # x4 = joint_and_link_positions["toolhead"][0] / 1000.0
-    # y4 = joint_and_link_positions["toolhead"][1] / 1000.0
-    # z4 = joint_and_link_positions["toolhead"][2] / 1000.0
 
     # TODO separate gripper into a separate function and class. 
     # s_x = joint_and_link_positions["s_x"]
@@ -125,6 +112,7 @@ def plot_open3d_Dorna(joint_and_link_positions, extra_geometry_elements=None, do
 
     coordinate_frame_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame()
     # coordinate_frame_mesh.scale(100, center=(0, 0, 0))  # TODO which frame is this?!?! ahh it was the big one
+    # TODO try 0.01
     coordinate_frame_mesh.scale(0.1, center=(0, 0, 0))  # TODO which frame is this?!?! ahh it was the big one
     list_of_geometry_elements = [line_set, *line_mesh1_geoms] + all_spheres + [coordinate_frame_mesh]
     # list_of_geometry_elements = [line_set, *line_mesh1_geoms]

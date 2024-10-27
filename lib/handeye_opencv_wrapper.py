@@ -163,14 +163,43 @@ def load_all_handeye_data(folder_name):
 
 
 def test_transformations(handeye_data_dict):
-    # copied below to help me start testing
-    # TODO no idea why I'm doing the below
-    # combined_transform = homo_transform @ saved_cam2arm  # TODO why doesn't this work?
-    # combined_transform = saved_cam2arm @ homo_transform 
-    # coordinate_frame.transform(combined_transform)
-    # print(idx, homo_transform)
+    '''
+        Tests:
+        - loop through all gripper2base and base2gripper and confirm the transfrom has its inverse correctly set by checking if output is identity
+        - same for cam2target
+        - ?
+    '''
 
-    pass
+    all_gripper2base_transforms = handeye_data_dict['all_gripper2base_transforms']
+    all_base2gripper_transforms = handeye_data_dict['all_base2gripper_transforms']
+    all_target2cam_transforms = handeye_data_dict['all_target2cam_transforms']
+    all_cam2target_transforms = handeye_data_dict['all_cam2target_transforms']
+
+    identity_transform = np.eye(4)
+    
+    # gripper2base and base2gripper should multiply to identity
+    for idx, (transform, inverse_transform) in enumerate(zip(all_gripper2base_transforms, all_base2gripper_transforms)):
+        combined_transform = transform @ inverse_transform
+        # combined_transform = inverse_transform @ transform
+        print(combined_transform)
+        # Check if combined transform is close enough to identity
+        if np.allclose(combined_transform, identity_transform, atol=1e-5):
+            print("Combined transform is close enough to identity")
+        else:
+            print("\n\n\nCombined transform is not close enough to identity, AHHHHHHH!!!!!!\n\n\n")
+            sys.exit()
+    
+    # same with cam2target and target2cam
+    for idx, (transform, inverse_transform) in enumerate(zip(all_target2cam_transforms, all_cam2target_transforms)):
+        combined_transform = transform @ inverse_transform
+        # combined_transform = inverse_transform @ transform
+        print(combined_transform)
+        # Check if combined transform is close enough to identity
+        if np.allclose(combined_transform, identity_transform, atol=1e-5):
+            print("Combined transform is close enough to identity")
+        else:
+            print("\n\n\nCombined transform is not close enough to identity, AHHHHHHH!!!!!!\n\n\n")
+            sys.exit()
 
 
 def plot_all_handeye_data(handeye_data_dict):

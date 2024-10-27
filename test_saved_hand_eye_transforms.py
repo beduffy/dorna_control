@@ -42,6 +42,7 @@ folder_name = '27_10_2024_15_50_00'  # some base rotation, then rotated wrist, t
 
 handeye_data_dict = load_all_handeye_data(folder_name)
 
+test_transformations(handeye_data_dict)
 # TODO run test cases of gripper2base and base2gripper. They should invert to identity if combined
 # TODO same for aruco
 
