@@ -40,7 +40,8 @@ def load_all_handeye_data(folder_name):
         gripper2base_rot = gripper_transform[:3, :3]
         all_gripper_rotation_mats.append(gripper2base_rot)
 
-        gripper2_base_tvec = gripper_transform[:3, 3] / 1000.0
+        # gripper2_base_tvec = gripper_transform[:3, 3] / 1000.0
+        gripper2_base_tvec = gripper_transform[:3, 3]
         # all_gripper_tvecs.append(gripper_transform[:3, 3] * 1000.0)  # TODO remove if it makes no sense
         all_gripper_tvecs.append(gripper2_base_tvec)  # TODO milimetres or not!!!!! everything should be in metres... since that is what the camera is in 1000 milimetres / 1000 is 1m
 
@@ -333,7 +334,6 @@ def plot_arm_gripper_frames(saved_cam2arm, all_gripper2base_transforms, all_join
     o3d.visualization.draw_geometries(geometry_to_plot)
 
 
-
 def plot_aruco_frames_in_camera_frame(all_target2cam_transforms, cam_pcd):
     # TODO do the below for gripper poses as well, they should perfectly align rotation-wise to aruco poses
     # TODO ideally I'd visualise a frustum. matplotlib?
@@ -365,6 +365,10 @@ def plot_aruco_frames_in_camera_frame(all_target2cam_transforms, cam_pcd):
 
 
 def handeye_calibrate_opencv(handeye_data_dict, folder_name):
+    '''
+        Modifies handeye_data_dict with saved_cam2arm 
+    '''
+
     # all_gripper_rotation_mats = handeye_data_dict['all_gripper_rotation_mats']
     # all_gripper_tvecs = handeye_data_dict['all_gripper_tvecs']
     R_gripper2base = handeye_data_dict['R_gripper2base']
@@ -380,10 +384,10 @@ def handeye_calibrate_opencv(handeye_data_dict, folder_name):
 
     # method = cv2.CALIB_HAND_EYE_TSAI  # default
     method = cv2.CALIB_HAND_EYE_DANIILIDIS  # tried both, they both work
-    # TODO try others
     # method = 
     # eye-in-hand (according to default opencv2 params and weak documentation. "inputting the suitable transformations to the function" for eye-to-hand)
     # first formula has b_T_c for X so that's what comes out of function. It expects b_T_g and c_T_t so gripper2base and target2cam
+
     # R_cam2gripper, t_cam2gripper = cv2.calibrateHandEye(R_gripper2base, t_gripper2base, R_target2cam, t_target2cam, method=method)
     # R_cam2gripper, t_cam2gripper = cv2.calibrateHandEye(R_gripper2base=R_gripper2base, 
     #                                                     t_gripper2base=t_gripper2base, 
@@ -392,22 +396,18 @@ def handeye_calibrate_opencv(handeye_data_dict, folder_name):
     # eye-to-hand
     # second formula has b_T_c for X so camera2base actually is what comes out of function. It expects g_T_b (base2gripper) and c_T_t (target2cam)
     # R_camera2base, t_camera2base = cv2.calibrateHandEye(R_base2gripper, t_base2gripper, R_target2cam, t_target2cam)
-    # TODO could rename nothing and just change inputs to be right, of course I could. 
 
     # output should be  ->	R_cam2gripper, t_cam2gripper  for eye in hand
     # but for eye to hand: R_cam2base_est, t_cam2base_est from unit tests in opencv
-
-    # R_base2gripper, t_base2gripper = R_gripper2base, t_gripper2base  # TODO nope! 
 
     # eye-to-hand
     # R_cam2base_est, t_cam2base_est = cv2.calibrateHandEye(R_base2gripper, t_base2gripper,
     #                                                       R_target2cam, t_target2cam, method=method)
     
     # eye-in-hand
-    R_cam2base_est, t_cam2base_est = cv2.calibrateHandEye(R_base2gripper, t_base2gripper,
+    R_cam2base_est, t_cam2base_est = cv2.calibrateHandEye(R_gripper2base, t_gripper2base,
                                                           R_cam2target, t_cam2target, method=method)
     
-    # R_cam2base_est, t_cam2base_est = R_cam2gripper, t_cam2gripper
     
     print('\nR and T for eye-to-hand. cam2base transform:')
     full_homo_RT = np.identity(4)
@@ -415,9 +415,6 @@ def handeye_calibrate_opencv(handeye_data_dict, folder_name):
     full_homo_RT[:3, 3] = t_cam2base_est.T
     print(full_homo_RT)
 
-    # cam2arm = np.identity(4)
-    # cam2arm[:3, :3] = R_cam2gripper
-    # cam2arm[:3, 3] = t_cam2gripper.squeeze()
     print('Saving handeye (cv2) cam2arm \n{}'.format(full_homo_RT))
     np.savetxt('data/{}/latest_cv2_cam2arm.txt'.format(folder_name), full_homo_RT, delimiter=' ')
     handeye_data_dict['saved_cam2arm'] = full_homo_RT
@@ -515,10 +512,8 @@ What I can do about it
 '''
 
 # TODO might need base2gripper, inverse of above actually
+# TODO to how many degrees are my joint angles actually close to 0? what if 0 rounding so it is 0.001 but im doing numpy suppress
 # TODO target2cam or cam2target. Ahh opencv param names according to eye-in-hand vs eye-to-hand might change
 # TODO arm2cam or cam2arm? should get to the bottom of this forever. camera coordinate in arm coordinates and the transform is the same?
 # TODO save pic or not? Save reprojection error or ambiguity or something?
-# TODO would be nice to plot all poses or coordinate frames or something
-# TODO how to avoid aruco error at range? Bigger? Board? Hold a checkerboard?
-# TODO run c key everytime here after 2? if it doesn't take too long, run it every time here?
 # TODO eventually put realsense in hand as well and do eye-in-hand. And multiple realsenses (maybe swap to handical or other? or do each one individually?)

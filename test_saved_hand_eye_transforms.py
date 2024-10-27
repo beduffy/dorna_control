@@ -34,8 +34,7 @@ from lib.aruco_image_text import OpenCvArucoImageText
 np.set_printoptions(suppress=True)
 
 
-# TODO make entire file cleaner
-# TODO could visualise color (+ maybe depth) images
+# TODO could visualise color (+ maybe depth) images. no need since we have pointcloud. remove TODO
 
 # folder_name = 'handeye_jan_10th'
 # folder_name = '24_02_2024_14_13_53'
