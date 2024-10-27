@@ -132,7 +132,7 @@ def calculate_pnp_12_markers(ids, all_rvec, all_tvec):
 
 
 def get_joint_angles_from_dorna_flask():
-    r = requests.get('http://localhost:8080/get_xyz_joint')
+    r = requests.get('http://localhost:8081/get_xyz_joint')
     robot_data = r.json()
     joint_angles = robot_data['robot_joint_angles']
 
@@ -586,7 +586,9 @@ if __name__ == '__main__':
     opencv_aruco_image_text = OpenCvArucoImageText()
 
     handeye_data_folder_name = datetime.now().strftime('%d_%m_%Y_%H_%M_%S')
-    print('handeye_data_folder_name for all saved transforms: ', handeye_data_folder_name)
+    print('handeye_data_folder_name for all saved transforms (not created yet): ', handeye_data_folder_name)
+
+    # get_joint_angles_from_dorna_flask()
 
     prev_arm_xyz = np.array([0., 0., 0.])
     cam2arm = np.identity(4)
@@ -777,8 +779,8 @@ if __name__ == '__main__':
             #     print('estimate_pose set to: {}'.format(estimate_pose))
 
 
+            # Saves current cam2arm, arm2cam, rvec, tvec from chosen marker ID # TODO but that doesn't make too much sense
             if k == ord('s'):
-                # Saves current cam2arm, arm2cam, rvec, tvec from chosen marker ID # TODO but that doesn't make too much sense
                 # print('Saving best optimised aruco cam2arm with error {}\n{}'.format(
                 #             lowest_optimised_error, cam2arm))
                 if cam2arm is not None:
@@ -793,8 +795,8 @@ if __name__ == '__main__':
                     # TODO maybe for clicking i should only used saved cam2arm rather than it changing...
 
 
+            # Go to saved xyz position from click, but first pre-grasp pose right above.
             if k == ord('p'):
-                # Go to saved xyz position from click, but first pre-grasp pose right above.
                 if curr_arm_xyz is not None:
                     x, y, z = curr_arm_xyz
                     # if z < 10:
@@ -810,7 +812,7 @@ if __name__ == '__main__':
                     # TODO do chicken head dance with gripper in same xyz but wrist pitch changing
                     print('Going to pre-pick pose')
                     wrist_pitch = -42.0
-                    dorna_url = 'http://localhost:8080/go_to_xyz'
+                    dorna_url = 'http://localhost:8081/go_to_xyz'
                     # dorna_full_url = '{}?x={}&y={}&z={}'.format(dorna_url, x, y, pre_grasp_z)
                     dorna_full_url = '{}?x={}&y={}&z={}&wrist_pitch={}'.format(dorna_url, x, y, pre_grasp_z, wrist_pitch)
                     r = requests.get(url=dorna_full_url)
@@ -825,7 +827,7 @@ if __name__ == '__main__':
                         if r.status_code == 200 and r.text == 'success':
                             print('Sleeping before closing gripper')
                             time.sleep(4)
-                            dorna_grasp_full_url = 'http://localhost:8080/gripper?gripper_state=3'  # TODO different objects and do my conversion of object width to gripper close width 
+                            dorna_grasp_full_url = 'http://localhost:8081/gripper?gripper_state=3'  # TODO different objects and do my conversion of object width to gripper close width 
                             r = requests.get(url=dorna_grasp_full_url)
                             print('r.status_code: {}. r.text: {}'.format(r.status_code, r.text))
                             if r.status_code == 200 and r.text == 'success':
@@ -837,15 +839,15 @@ if __name__ == '__main__':
                                 print('r.status_code: {}. r.text: {}'.format(r.status_code, r.text))
 
                             # Optional or not, let go
-                            dorna_grasp_full_url = 'http://localhost:8080/gripper?gripper_state=0'  # TODO could pass state for different objects and do my conversion of object width to gripper close width 
+                            dorna_grasp_full_url = 'http://localhost:8081/gripper?gripper_state=0'  # TODO could pass state for different objects and do my conversion of object width to gripper close width 
                             r = requests.get(url=dorna_grasp_full_url)
                             print('r.status_code: {}. r.text: {}'.format(r.status_code, r.text))
                 else:
                     print('curr_arm_xyz is None')
 
 
+            # Visualise how dorna stick/line mesh arm in pointcloud would look like picking up chosen click position
             if k == ord('i'):
-                # Visualise how dorna stick/line mesh arm in pointcloud would look like picking up chosen click position
                 if curr_arm_xyz is not None:
                     x, y, z = curr_arm_xyz
                     # z = 200  # pre pick
@@ -986,8 +988,8 @@ if __name__ == '__main__':
                     print('No saved cam2arm!')
 
 
+            # get and save calibration target transformation (target2cam) and gripper2base
             if k == ord('h'):  # save hand-eye calibration needed transforms
-                # get and save calibration target transformation (target2cam) and gripper2base
 
                 # What I want 'h' to do:
                 # Calculate, visualise and save cam2target and gripper2base to new folder (e.g. handeye_24_02_2024_HH_MM_SS). 
@@ -1027,7 +1029,7 @@ if __name__ == '__main__':
                 if not os.path.exists(full_handeye_folder_path):
                      os.makedirs(full_handeye_folder_path)
                 
-                target2cam = arm2cam_opt  # TODO debatable and make sure!
+                target2cam = arm2cam_opt  # TODO debatable and make sure! TODO and horribly confusing fix it
                 fp = '{}/target2cam_{}.txt'.format(full_handeye_folder_path, num_saved_handeye_transforms)
                 print('Saving target2cam at {} \n{}'.format(fp, target2cam))
                 np.savetxt(fp, target2cam, delimiter=' ')
@@ -1036,7 +1038,7 @@ if __name__ == '__main__':
                 joint_angles = get_joint_angles_from_dorna_flask()  # TODO do not forget
                 # # the below is just for testing without running arm
                 # joint_angles = [0, 0, 0, 0, 0]
-                gripper_base_transform = get_gripper_base_transformation(joint_angles)  # TODO is this in mm?
+                gripper_base_transform = get_gripper_base_transformation(joint_angles)  # TODO is this in mm? yes
 
                 # TODO visualise full fk of these newly saved joint angles
                 fp = '{}/joint_angles_{}.txt'.format(full_handeye_folder_path, num_saved_handeye_transforms)
