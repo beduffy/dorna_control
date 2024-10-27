@@ -42,9 +42,10 @@ np.set_printoptions(suppress=True)
 # folder_name = '24_02_2024_14_19_13'
 # folder_name = '24_02_2024_14_35_34'
 # folder_name = '29_02_2024_16_30_07'  # finally moved real dorna 4 times only base angle with 12 aruco on cardboard
-folder_name = '31_03_2024_17_34_45'  # 24 transforms, stronger flatter mini pupper cardboard, more ducttape
+# folder_name = '31_03_2024_17_34_45'  # 24 transforms, stronger flatter mini pupper cardboard, more ducttape
 # overall goal is that I really I just want cam2arm to be similar in position to one aruco to camera?
 
+folder_name = '27_10_2024_13_59_14'  # first time realsense on gripper servo, so need to change all opencv stuff
 
 handeye_data_dict = load_all_handeye_data(folder_name)
 handeye_calibrate_opencv(handeye_data_dict, folder_name)
@@ -54,15 +55,16 @@ cam2arm = np.loadtxt('data/{}/latest_cv2_cam2arm.txt'.format(folder_name), delim
 saved_cam2arm = cam2arm
 handeye_data_dict['saved_cam2arm'] = saved_cam2arm
 
-# use color and depth images to create point clouds
+# use color and depth images to create point cloud from first color + depth pair
 if handeye_data_dict['color_images']:
     camera_color_img = handeye_data_dict['color_images'][0]
     camera_depth_img = handeye_data_dict['depth_images'][0]
-cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img, pinhole_camera_intrinsic, visualise=False)
-full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, in_milimetres=False)
+cam_pcd_first_image_pair = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img, pinhole_camera_intrinsic, visualise=False)
+full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd_first_image_pair, saved_cam2arm, in_milimetres=False)
 
-# plotting two different things in here
-plot_all_handeye_data(handeye_data_dict, cam_pcd=cam_pcd)
+# import pdb;pdb.set_trace()
+# plotting two different things in here: gripper frames in arm frame + aruco frames in camera frame
+plot_all_handeye_data(handeye_data_dict, cam_pcd=cam_pcd_first_image_pair)
 
 
 
@@ -155,6 +157,6 @@ print('Visualising origin, transformed frame and spheres and coordinate frames')
 # TODO rename transformed frame and understand which frame is which frame
 # list_of_geometry_elements = [origin_frame, transformed_frame, origin_sphere, transformed_sphere] + geometry_to_plot
 # list_of_geometry_elements = [full_arm_pcd, origin_frame, transformed_frame, origin_sphere, transformed_sphere] + geometry_to_plot
-list_of_geometry_elements = [cam_pcd, origin_frame, transformed_frame, origin_sphere, transformed_sphere] + geometry_to_plot
+list_of_geometry_elements = [cam_pcd_first_image_pair, origin_frame, transformed_frame, origin_sphere, transformed_sphere] + geometry_to_plot
 # list_of_geometry_elements = [origin_frame_transformed_from_camera_frame, camera_coordinate_frame] + arm_position_coord_frames
 o3d.visualization.draw_geometries(list_of_geometry_elements)
