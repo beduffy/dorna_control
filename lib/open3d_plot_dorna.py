@@ -14,7 +14,7 @@ def create_sphere_at_pos(pos, radius=4, color=[1.0, 0.0, 0.0]):
     return centroid_sphere
 
 
-def plot_open3d_Dorna(joint_and_link_positions, extra_geometry_elements=None):
+def plot_open3d_Dorna(joint_and_link_positions, extra_geometry_elements=None, do_plot=True):
     print("Drawing Open3D model of arm with lines")
     # TODO how to make more accurate 3d model? URDF/meshes?
 
@@ -110,7 +110,10 @@ def plot_open3d_Dorna(joint_and_link_positions, extra_geometry_elements=None):
     list_of_geometry_elements = [line_set, *line_mesh1_geoms] + all_spheres + [coordinate_frame_mesh]
     if extra_geometry_elements:
         list_of_geometry_elements.extend(extra_geometry_elements)
-    o3d.visualization.draw_geometries(list_of_geometry_elements)  # TODO eventually nonblocking version
+    if do_plot:
+        o3d.visualization.draw_geometries(list_of_geometry_elements)  # TODO eventually nonblocking version
+
+    return list_of_geometry_elements
 
 
 if  __name__ == '__main__':
