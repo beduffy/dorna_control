@@ -50,6 +50,7 @@ folder_name = '27_10_2024_13_59_14'  # first time realsense on gripper servo, so
 handeye_data_dict = load_all_handeye_data(folder_name)
 handeye_calibrate_opencv(handeye_data_dict, folder_name)
 
+# TODO could abstract the below out and make things cleaner
 # TODO why load from file again, why not just return from function?
 cam2arm = np.loadtxt('data/{}/latest_cv2_cam2arm.txt'.format(folder_name), delimiter=' ')
 saved_cam2arm = cam2arm

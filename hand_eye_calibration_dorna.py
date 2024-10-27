@@ -1036,7 +1036,7 @@ if __name__ == '__main__':
 
                 # get and save gripper transformation (gripper2base)
                 joint_angles = get_joint_angles_from_dorna_flask()  # TODO do not forget
-                # # the below is just for testing without running arm
+                # the below is just for testing without running arm
                 # joint_angles = [0, 0, 0, 0, 0]
                 gripper_base_transform = get_gripper_base_transformation(joint_angles)  # TODO is this in mm? yes
 
