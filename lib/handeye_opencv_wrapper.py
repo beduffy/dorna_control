@@ -212,6 +212,61 @@ def test_transformations(handeye_data_dict):
             sys.exit()
 
 
+def calibrate_camera_intrinsics(all_target2cam_transforms):
+    """
+    Calibrate camera intrinsics using ArUco marker poses.
+    
+    Args:
+        all_target2cam_transforms: List of 4x4 transforms from target (ArUco) to camera frame
+        
+    Returns:
+        camera_matrix: 3x3 camera intrinsic matrix
+        dist_coeffs: Distortion coefficients
+    """
+    # Extract rotation and translation from transforms
+    rvecs = []
+    tvecs = []
+    for transform in all_target2cam_transforms:
+        R = transform[:3, :3]
+        t = transform[:3, 3]
+        # Convert rotation matrix to rodrigues vector
+        rvec, _ = cv2.Rodrigues(R)
+        rvecs.append(rvec)
+        tvecs.append(t)
+
+    # Known 3D coordinates of ArUco marker corners in marker frame
+    marker_size = 0.05  # 5cm, adjust based on actual marker size
+    objp = np.array([[-marker_size/2, marker_size/2, 0],
+                     [marker_size/2, marker_size/2, 0],
+                     [marker_size/2, -marker_size/2, 0],
+                     [-marker_size/2, -marker_size/2, 0]], dtype=np.float32)
+    
+    # Project points for each pose
+    objpoints = []
+    imgpoints = []
+    
+    # Initial camera matrix guess (based on image size)
+    # TODO: Get actual image size from somewhere
+    width = 640  # Placeholder
+    height = 480  # Placeholder
+    camera_matrix = np.array([[width, 0, width/2],
+                             [0, height, height/2],
+                             [0, 0, 1]], dtype=np.float32)
+    dist_coeffs = np.zeros(5)
+
+    for rvec, tvec in zip(rvecs, tvecs):
+        objpoints.append(objp)
+        # Project 3D points to image plane
+        imgpoints_proj, _ = cv2.projectPoints(objp, rvec, tvec, camera_matrix, dist_coeffs)
+        imgpoints.append(imgpoints_proj)
+
+    # Calibrate camera
+    ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
+        objpoints, imgpoints, (width, height), None, None)
+
+    return mtx, dist
+
+
 def plot_all_handeye_data(handeye_data_dict, eye_in_hand=False):
     all_gripper_rotation_mats = handeye_data_dict['all_gripper_rotation_mats']
     all_gripper_tvecs = handeye_data_dict['all_gripper_tvecs']
@@ -476,6 +531,11 @@ def handeye_calibrate_opencv(handeye_data_dict, folder_name, eye_in_hand=True):
     t_target2cam = handeye_data_dict['t_target2cam']
     R_cam2target = handeye_data_dict['R_cam2target']
     t_cam2target = handeye_data_dict['t_cam2target']
+
+    
+    all_target2cam_transforms = handeye_data_dict['all_target2cam_transforms']
+    output = calibrate_camera_intrinsics(all_target2cam_transforms)
+    print('Camera intrinsics: \n{}'.format(output))
 
     method = cv2.CALIB_HAND_EYE_TSAI  # default
     method = cv2.CALIB_HAND_EYE_DANIILIDIS  # tried both, they both work
