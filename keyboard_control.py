@@ -11,7 +11,8 @@ import threading
 from flask import Flask, request, render_template, jsonify
 # TODO Flask or ROS???
 # import rospy
-from geometry_msgs.msg import Twist
+# from geometry_msgs.msg import Twist  # TODO i never needed to comment this  before but now I do
+# TODO port 8080 in use
 # from rosserial_arduino.srv import Test
 from dorna import Dorna
 
@@ -248,7 +249,7 @@ if __name__=="__main__":
 	last_time_command_ran = time.time()
 
 	# app.run(host='0.0.0.0', port=8080)
-	flask_thread = threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8080, use_reloader=False))
+	flask_thread = threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8081, use_reloader=False))
 	# threading.Thread(target=lambda: app.run(host='0.0.0.0', port=5005)).start()
 	flask_thread.setDaemon(True)
 	flask_thread.start()
@@ -289,6 +290,7 @@ if __name__=="__main__":
 				elif key == 'r': # try to re-connect in case of connection missing
 					robot.connect()
 				elif key == 'h':
+					print('Beginning homing')
 					for joint in ["j3", "j2", "j1", "j0"]:
 						robot.home(joint)
 						print("{} homed".format(joint))
