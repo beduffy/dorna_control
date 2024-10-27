@@ -181,11 +181,11 @@ def test_transformations(handeye_data_dict):
     for idx, (transform, inverse_transform) in enumerate(zip(all_gripper2base_transforms, all_base2gripper_transforms)):
         combined_transform = transform @ inverse_transform
         # combined_transform = inverse_transform @ transform
-        print(combined_transform)
         # Check if combined transform is close enough to identity
         if np.allclose(combined_transform, identity_transform, atol=1e-5):
             print("Combined transform is close enough to identity")
         else:
+            print(combined_transform)
             print("\n\n\nCombined transform is not close enough to identity, AHHHHHHH!!!!!!\n\n\n")
             sys.exit()
     
@@ -193,16 +193,16 @@ def test_transformations(handeye_data_dict):
     for idx, (transform, inverse_transform) in enumerate(zip(all_target2cam_transforms, all_cam2target_transforms)):
         combined_transform = transform @ inverse_transform
         # combined_transform = inverse_transform @ transform
-        print(combined_transform)
         # Check if combined transform is close enough to identity
         if np.allclose(combined_transform, identity_transform, atol=1e-5):
             print("Combined transform is close enough to identity")
         else:
+            print(combined_transform)
             print("\n\n\nCombined transform is not close enough to identity, AHHHHHHH!!!!!!\n\n\n")
             sys.exit()
 
 
-def plot_all_handeye_data(handeye_data_dict):
+def plot_all_handeye_data(handeye_data_dict, eye_in_hand=False):
     all_gripper_rotation_mats = handeye_data_dict['all_gripper_rotation_mats']
     all_gripper_tvecs = handeye_data_dict['all_gripper_tvecs']
     all_gripper2base_transforms = handeye_data_dict['all_gripper2base_transforms']
@@ -229,7 +229,7 @@ def plot_all_handeye_data(handeye_data_dict):
     cam_pcd_first_image_pair = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img, pinhole_camera_intrinsic, visualise=False)
     # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd_first_image_pair, saved_cam2arm, in_milimetres=False)
 
-    plot_arm_gripper_frames(saved_cam2arm, all_gripper2base_transforms, all_joint_angles)
+    plot_arm_gripper_frames(all_gripper2base_transforms, all_joint_angles, plot_camera_on_gripper_if_eye_in_hand=eye_in_hand, gripper2cam=saved_cam2arm)
 
     plot_aruco_frames_in_camera_frame(all_target2cam_transforms, cam_pcd_first_image_pair)
 
@@ -240,30 +240,12 @@ def plot_blah(handeye_data_dict, cam_pcd_first_image_pair, saved_cam2arm):
     '''
     Below I am visualising origin (in camera coordinates) and the arm frame.
     And pointcloud from camera transformed to arm frame... but that does not make sense?
-
+    # TODO if eye-in-hand and i manually measure it, what visualisation will show it working or not? or show problems?
+    # TODO clear english of what I want here... 
     '''
 
-    all_target2cam_rotation_mats = handeye_data_dict['all_target2cam_rotation_mats']
-    all_target2cam_tvecs = handeye_data_dict['all_target2cam_tvecs']
-
-    all_target2cam_transforms = []
-    for R, t in zip(all_target2cam_rotation_mats, all_target2cam_tvecs):
-        T = np.eye(4)
-        T[:3, :3] = R
-        T[:3, 3] = t
-        all_target2cam_transforms.append(T)
-
-    all_gripper_rotation_mats = handeye_data_dict['all_gripper_rotation_mats']
-    all_gripper_tvecs = handeye_data_dict['all_gripper_tvecs']
-
-    all_gripper2base_transforms = []
-    for R, t in zip(all_gripper_rotation_mats, all_gripper_tvecs):
-        T = np.eye(4)
-        # TODO validate that this code works
-        T[:3, :3] = R
-        T[:3, 3] = t
-        all_gripper2base_transforms.append(T)
-
+    all_gripper2base_transforms = handeye_data_dict['all_gripper2base_transforms']
+    all_target2cam_transforms = handeye_data_dict['all_target2cam_transforms']
 
     frame_size = 0.1
     sphere_size = 0.01
@@ -328,31 +310,39 @@ def plot_blah(handeye_data_dict, cam_pcd_first_image_pair, saved_cam2arm):
     o3d.visualization.draw_geometries(list_of_geometry_elements)
 
 
-def plot_arm_gripper_frames(saved_cam2arm, all_gripper2base_transforms, all_joint_angles):
+def plot_arm_gripper_frames(all_gripper2base_transforms, all_joint_angles, plot_camera_on_gripper_if_eye_in_hand=False, gripper2cam=None):
     # TODO clean entire function, comments etc, hard to think about
     origin_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2, origin=[0.0, 0.0, 0.0])
 
     sphere_size = 0.01
     geometry_to_plot = []
     geometry_to_plot.append(origin_arm_frame)
-    for idx, homo_transform in enumerate(all_gripper2base_transforms):
+    for idx, gripper_transform in enumerate(all_gripper2base_transforms[:1]):
     # for idx, homo_transform in enumerate(all_base2gripper_transforms):  # TODO why does this look so weird. I don't fully understand enough here
         coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-                                        size=0.1, origin=[0.0, 0.0, 0.0])  # TODO shouldn't be doing this, should be using from transform probably?
-        coordinate_frame.transform(homo_transform)
+                                        size=0.1, origin=[0.0, 0.0, 0.0])
+        coordinate_frame.transform(gripper_transform)
 
         gripper_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_size)
         gripper_sphere.paint_uniform_color([0, 0, 1])
-        gripper_sphere.transform(homo_transform)
+        gripper_sphere.transform(gripper_transform)
 
         geometry_to_plot.append(gripper_sphere)
         geometry_to_plot.append(coordinate_frame)
+
+        if plot_camera_on_gripper_if_eye_in_hand and gripper2cam is not None:
+            combined_transform_from_arm_to_gripper_to_camera = gripper_transform @ gripper2cam
+            camera_on_gripper_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+                                        size=0.1, origin=[0.0, 0.0, 0.0])
+            camera_on_gripper_frame.transform(combined_transform_from_arm_to_gripper_to_camera)
+            geometry_to_plot.append(camera_on_gripper_frame)
 
     # plot arms too
     shoulder_height_in_mm = 206.01940000000002 / 1000.0
     coordinate_frame_shoulder_height_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
         size=0.3, origin=[0.0, 0.0, shoulder_height_in_mm])
-    for idx, joint_angles in enumerate(all_joint_angles):
+    # import pdb;pdb.set_trace()
+    for idx, joint_angles in enumerate(all_joint_angles[:1]):
         joint_angles = joint_angles.tolist()
         
         full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
@@ -560,3 +550,4 @@ What I can do about it
 # TODO arm2cam or cam2arm? should get to the bottom of this forever. camera coordinate in arm coordinates and the transform is the same?
 # TODO save pic or not? Save reprojection error or ambiguity or something?
 # TODO eventually put realsense in hand as well and do eye-in-hand. And multiple realsenses (maybe swap to handical or other? or do each one individually?)
+# TODO maybe just measure with a ruler and see what happens with the transform and stuff and see how it works

@@ -170,12 +170,12 @@ def get_gripper_base_transformation(joint_angles):
 
     joint_angles_rad = [math.radians(j) for j in joint_angles_copy]
 
-    homo_array = np.identity(4)
+    gripper_base_transform = np.identity(4)
     # arm2cam_local[:3, :3] = R_ct
     # TODO is the below in metres? yes but in get_handeye data we convert to metres
-    homo_array[0, 3] = full_toolhead_fk[0]
-    homo_array[1, 3] = full_toolhead_fk[1]
-    homo_array[2, 3] = full_toolhead_fk[2]
+    gripper_base_transform[0, 3] = full_toolhead_fk[0]
+    gripper_base_transform[1, 3] = full_toolhead_fk[1]
+    gripper_base_transform[2, 3] = full_toolhead_fk[2]
 
     # TODO, wait it's the toolhead bottom which rotates, not the gripper tip, does this affect anything?
     wrist_pitch = np.sum(joint_angles_rad[1:4])
@@ -185,20 +185,9 @@ def get_gripper_base_transformation(joint_angles):
     # rot_mat = o3d.geometry.get_rotation_matrix_from_zyx(np.array([wrist_roll, wrist_pitch, base_yaw]))
     rot_mat = o3d.geometry.get_rotation_matrix_from_zyx(np.array([base_yaw, wrist_pitch, wrist_roll]))
     # rot_mat = o3d.geometry.get_rotation_matrix_from_zyx(np.array([wrist_pitch, base_yaw, wrist_roll]))
-    homo_array[:3, :3] = rot_mat
+    gripper_base_transform[:3, :3] = rot_mat
 
-    # # -- Now get Position and attitude f the camera respect to the marker
-    # # pos_camera = -R_tc * np.matrix(tvec).T  # TODO how could element-wise possibly work!?!?!?!?
-    # pos_camera = np.dot(-R_tc, np.matrix(tvec_in).T)
-
-    # # cam_position = np.dot(-arm2cam_rotation, tvec_arm2cam)  # .T   # arm2cam
-    # cam2arm_local = np.identity(4)
-    # cam2arm_local[:3, :3] = R_tc
-    # cam2arm_local[0, 3] = pos_camera[0]
-    # cam2arm_local[1, 3] = pos_camera[1]
-    # cam2arm_local[2, 3] = pos_camera[2]
-
-    return homo_array
+    return gripper_base_transform
 
 
 def get_rigid_transform_error(joined_input_array, cam_3d_coords):
