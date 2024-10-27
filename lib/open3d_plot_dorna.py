@@ -21,6 +21,7 @@ def plot_open3d_Dorna(joint_and_link_positions, extra_geometry_elements=None, do
     # starting_x = joint_and_link_positions["starting_x"]
     # starting_y = joint_and_link_positions["starting_y"]
     # starting_z = joint_and_link_positions["starting_z"]
+
     x1 = joint_and_link_positions["shoulder"][0]
     y1 = joint_and_link_positions["shoulder"][1]
     z1 = joint_and_link_positions["shoulder"][2]
@@ -33,6 +34,19 @@ def plot_open3d_Dorna(joint_and_link_positions, extra_geometry_elements=None, do
     x4 = joint_and_link_positions["toolhead"][0]
     y4 = joint_and_link_positions["toolhead"][1]
     z4 = joint_and_link_positions["toolhead"][2]
+
+    # x1 = joint_and_link_positions["shoulder"][0] / 1000.0
+    # y1 = joint_and_link_positions["shoulder"][1] / 1000.0
+    # z1 = joint_and_link_positions["shoulder"][2] / 1000.0
+    # x2 = joint_and_link_positions["elbow"][0] / 1000.0
+    # y2 = joint_and_link_positions["elbow"][1] / 1000.0
+    # z2 = joint_and_link_positions["elbow"][2] / 1000.0
+    # x3 = joint_and_link_positions["wrist"][0] / 1000.0
+    # y3 = joint_and_link_positions["wrist"][1] / 1000.0
+    # z3 = joint_and_link_positions["wrist"][2] / 1000.0
+    # x4 = joint_and_link_positions["toolhead"][0] / 1000.0
+    # y4 = joint_and_link_positions["toolhead"][1] / 1000.0
+    # z4 = joint_and_link_positions["toolhead"][2] / 1000.0
 
     # TODO separate gripper into a separate function and class. 
     # s_x = joint_and_link_positions["s_x"]
@@ -97,17 +111,23 @@ def plot_open3d_Dorna(joint_and_link_positions, extra_geometry_elements=None, do
     line_set.colors = o3d.utility.Vector3dVector(colors)
 
     # Create Line Mesh
-    line_mesh1 = LineMesh(points, lines, colors, radius=1.5)
+    # line_mesh1 = LineMesh(points, lines, colors, radius=1.5)
+    # line_mesh1 = LineMesh(points, lines, colors, radius=0.003)
+    line_mesh1 = LineMesh(points, lines, colors, radius=1.5 / 1000.0)
     line_mesh1_geoms = line_mesh1.cylinder_segments
 
     all_spheres = []
     for p in points:
-        mesh_sphere = create_sphere_at_pos(np.array(p), color=[0.1, 0.1, 0.7], radius=4.5)
+        # mesh_sphere = create_sphere_at_pos(np.array(p), color=[0.1, 0.1, 0.7], radius=4.5)
+        # mesh_sphere = create_sphere_at_pos(np.array(p), color=[0.1, 0.1, 0.7], radius=0.05)
+        mesh_sphere = create_sphere_at_pos(np.array(p), color=[0.1, 0.1, 0.7], radius=4.5 / 1000.0)
         all_spheres.append(mesh_sphere)
 
     coordinate_frame_mesh = o3d.geometry.TriangleMesh.create_coordinate_frame()
-    coordinate_frame_mesh.scale(100, center=(0, 0, 0))  # TODO which frame is this?!?! ahh it was the big one
+    # coordinate_frame_mesh.scale(100, center=(0, 0, 0))  # TODO which frame is this?!?! ahh it was the big one
+    coordinate_frame_mesh.scale(0.1, center=(0, 0, 0))  # TODO which frame is this?!?! ahh it was the big one
     list_of_geometry_elements = [line_set, *line_mesh1_geoms] + all_spheres + [coordinate_frame_mesh]
+    # list_of_geometry_elements = [line_set, *line_mesh1_geoms]
     if extra_geometry_elements:
         list_of_geometry_elements.extend(extra_geometry_elements)
     if do_plot:

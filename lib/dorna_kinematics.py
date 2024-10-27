@@ -98,6 +98,7 @@ forward kinematics: joint to xyz
 """
 def f_k(joint_angles_deg, toolhead_x_length=193):
     try:
+        # never use mms, converted from mms to metres at end
         # TODO change all variable names
         # TODO understand IK too
         # TODO would be awesome to do matplotlib pointcloud as well
@@ -155,11 +156,19 @@ def f_k(joint_angles_deg, toolhead_x_length=193):
         alpha = math.degrees(alpha)
         beta = math.degrees(beta)
 
-        xyz_toolhead_pos = [toolhead_x, toolhead_y, toolhead_z]
+        # xyz_toolhead_pos = [toolhead_x, toolhead_y, toolhead_z]
+        # full_toolhead_fk = xyz_toolhead_pos + [alpha, beta] + joint_angles_deg[5:]
+        # xyz_positions_of_all_joints = {'shoulder': [shoulder_x, shoulder_y, shoulder_z], 
+        #                                'elbow': [elbow_x, elbow_y, elbow_z], 
+        #                                'wrist': [wrist_x, wrist_y, wrist_z], 
+        #                                'toolhead': xyz_toolhead_pos}
+        
+        # convert to metres
+        xyz_toolhead_pos = [toolhead_x / 1000.0, toolhead_y / 1000.0, toolhead_z / 1000.0]
         full_toolhead_fk = xyz_toolhead_pos + [alpha, beta] + joint_angles_deg[5:]
-        xyz_positions_of_all_joints = {'shoulder': [shoulder_x, shoulder_y, shoulder_z], 
-                                       'elbow': [elbow_x, elbow_y, elbow_z], 
-                                       'wrist': [wrist_x, wrist_y, wrist_z], 
+        xyz_positions_of_all_joints = {'shoulder': [shoulder_x / 1000.0, shoulder_y / 1000.0, shoulder_z / 1000.0], 
+                                       'elbow': [elbow_x / 1000.0, elbow_y / 1000.0, elbow_z / 1000.0], 
+                                       'wrist': [wrist_x / 1000.0, wrist_y / 1000.0, wrist_z / 1000.0], 
                                        'toolhead': xyz_toolhead_pos}
 
         # TODO do I need to do this? What about it makes it in inches? ahh bx and all?
