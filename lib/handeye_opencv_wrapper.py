@@ -1,5 +1,6 @@
 from __future__ import print_function
 from glob import glob
+import sys
 
 import numpy as np
 import cv2
@@ -11,8 +12,8 @@ from lib.vision import get_inverse_homogenous_transform
 from lib.dorna_kinematics import i_k, f_k
 from lib.open3d_plot_dorna import plot_open3d_Dorna
 from lib.vision import get_full_pcd_from_rgbd
-from lib.vision import get_camera_coordinate, create_homogenous_transformations, convert_pixel_to_arm_coordinate, convert_cam_pcd_to_arm_pcd
-from lib.vision_config import pinhole_camera_intrinsic
+from lib.vision import get_camera_coordinate, create_homogenous_transformations, convert_pixel_to_arm_coordinate, convert_cam_pcd_to_arm_pcd, calculate_reprojection_error
+from lib.vision_config import pinhole_camera_intrinsic, camera_matrix, dist_coeffs
 from lib.aruco_helper import create_aruco_params, aruco_detect_draw_get_transforms, calculate_pnp_12_markers, find_aruco_markers
 from lib.aruco_image_text import OpenCvArucoImageText
 
@@ -214,39 +215,124 @@ def test_transformations(handeye_data_dict):
             print("\n\n\nCombined transform is not close enough to identity, AHHHHHHH!!!!!!\n\n\n")
             sys.exit()
 
+    color_images = handeye_data_dict['color_images']
+    depth_images = handeye_data_dict['depth_images']
 
+    # camera intrinsic
+    mtx, dist, mean_error, errors = calibrate_camera_intrinsics(color_images, camera_matrix, dist_coeffs)
+    # output = calibrate_camera_intrinsics(color_images[:5])
+    # TODO print better so i can copy to vision_config
+    print('Camera intrinsics: \n camera intrinsics: {}\ndist_coeffs: {}\n mean_error: {}'.format(mtx, dist, mean_error))
 
-    # TODO calibrate camera intrinsics should use full aruco pipeline
-    # TODO get mean projection and see what my pixel reprojection error is on all 12 corners or other position
-
+    # check 1 image aruco visualisation and errors testing
     opencv_aruco_image_text = OpenCvArucoImageText()
     board, parameters, aruco_dict, marker_length = create_aruco_params()
     marker_separation = 0.0065
     ids, corners, all_rvec, all_tvec = None, None, None, None  # TODO global remove
     id_on_shoulder_motor = 1
 
-
-    color_images = handeye_data_dict['color_images']
-    depth_images = handeye_data_dict['depth_images']
-
     first_color_image = color_images[0]
     first_depth_image = depth_images[0]
-
     camera_color_img_debug = first_color_image.copy()
     color_img, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(first_color_image, aruco_dict, parameters, marker_length, id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug)
-
-    cam2arm_opt, arm2cam_opt, input_obj_points_concat, input_img_points_concat = calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=marker_length, marker_separation=marker_separation)
-
-    output = calibrate_camera_intrinsics(color_images)
-    # output = calibrate_camera_intrinsics(color_images[:5])
-    print('Camera intrinsics: \n{}'.format(output))
+    cam2arm_opt, arm2cam_opt, tvec_pnp_opt, rvec_pnp_opt, input_obj_points_concat, input_img_points_concat = calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=marker_length, marker_separation=marker_separation)
 
     cv2.imshow('Camera Color Image Debug', camera_color_img_debug)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
+    # Undistort the first image using camera matrix and distortion coefficients
+    h, w = first_color_image.shape[:2]
+    newcameramtx, roi = cv2.getOptimalNewCameraMatrix(camera_matrix, dist_coeffs, (w,h), 1, (w,h))
+    undistorted_img = cv2.undistort(first_color_image, camera_matrix, dist_coeffs, None, newcameramtx)
 
-def calibrate_camera_intrinsics(images):
+    # Crop the image based on ROI
+    x, y, w, h = roi
+    undistorted_img = undistorted_img[y:y+h, x:x+w]
+
+    # Display original and undistorted images side by side
+    # comparison = np.hstack((first_color_image, undistorted_img))
+    # cv2.imshow('Original vs Undistorted', comparison)
+    cv2.imshow('Original vs Undistorted', undistorted_img)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+    # TODO could recalculate all opencv transforms, and with undistortion TODO make sure RGB and not BGR?
+    # store back into handeye_data_dict. recalculate all_target2cam_transforms, all_cam2target_transforms
+
+     # Recalculate transforms using undistorted images
+    opencv_aruco_image_text = OpenCvArucoImageText()
+    board, parameters, aruco_dict, marker_length = create_aruco_params()
+    marker_separation = 0.0065
+    id_on_shoulder_motor = 1
+
+    new_target2cam_transforms = []
+    new_cam2target_transforms = []
+    new_target2cam_rotation_mats = []
+    new_target2cam_tvecs = []
+    new_cam2target_rotation_mats = []
+    new_cam2target_tvecs = []
+
+    for img in color_images:
+        # Undistort image
+        h, w = img.shape[:2]
+        newcameramtx, roi = cv2.getOptimalNewCameraMatrix(camera_matrix, dist_coeffs, (w,h), 1, (w,h))
+        undistorted_img = cv2.undistort(img, camera_matrix, dist_coeffs, None, newcameramtx)
+        
+        # Crop the image based on ROI
+        x, y, w, h = roi
+        undistorted_img = undistorted_img[y:y+h, x:x+w]
+
+        # Find ArUco markers in undistorted image
+        camera_color_img_debug = undistorted_img.copy()
+        _, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(
+            undistorted_img, aruco_dict, parameters, marker_length, 
+            id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug
+        )
+
+        # cv2.imshow('Camera Color Image Debug undistort', camera_color_img_debug)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+
+        # Calculate transforms using undistorted image
+        cam2arm_opt, arm2cam_opt, tvec_pnp_opt, rvec_pnp_opt, _, _ = calculate_pnp_12_markers(
+            corners, ids, all_rvec, all_tvec, marker_length=marker_length, 
+            marker_separation=marker_separation
+        )
+
+        # Convert to rotation matrix
+        target2cam_rot, _ = cv2.Rodrigues(rvec_pnp_opt)
+        
+        # Create transforms
+        target2cam_transform = np.eye(4)
+        target2cam_transform[:3, :3] = target2cam_rot
+        target2cam_transform[:3, 3] = tvec_pnp_opt.reshape(3)
+        
+        cam2target_transform = get_inverse_homogenous_transform(target2cam_transform)
+        
+        # Store new transforms and components
+        new_target2cam_transforms.append(target2cam_transform)
+        new_cam2target_transforms.append(cam2target_transform)
+        new_target2cam_rotation_mats.append(target2cam_rot)
+        new_target2cam_tvecs.append(tvec_pnp_opt.reshape(3))
+        new_cam2target_rotation_mats.append(cam2target_transform[:3, :3])
+        new_cam2target_tvecs.append(cam2target_transform[:3, 3])
+
+    # Update handeye_data_dict with new transforms
+    handeye_data_dict.update({
+        'all_target2cam_transforms': new_target2cam_transforms,
+        'all_cam2target_transforms': new_cam2target_transforms,
+        'all_target2cam_rotation_mats': new_target2cam_rotation_mats,
+        'all_target2cam_tvecs': new_target2cam_tvecs,
+        'R_target2cam': np.array(new_target2cam_rotation_mats),
+        't_target2cam': np.array(new_target2cam_tvecs),
+        'R_cam2target': np.array(new_cam2target_rotation_mats),
+        't_cam2target': np.array(new_cam2target_tvecs)
+    })
+
+
+
+def calibrate_camera_intrinsics(images, camera_matrix, dist_coeffs):
     """
     Calibrate camera intrinsics using ArUco markers detected in a list of images.
     
@@ -268,8 +354,11 @@ def calibrate_camera_intrinsics(images):
     objpoints = []  # 3D points in marker coordinate system
     imgpoints = []  # 2D points in image plane
     
+    before_calibration_tvecs = []
+    before_calibration_rvecs = []
+
     for idx, img in enumerate(images):
-        print('Image no. ', idx)
+        print('Running aruco + solvepnp on image no. ', idx)
         # Use existing ArUco detection pipeline
         camera_color_img_debug = img.copy()
         color_img, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(
@@ -279,7 +368,10 @@ def calibrate_camera_intrinsics(images):
             camera_color_img_debug=camera_color_img_debug
         )
         
-        cam2arm_opt, arm2cam_opt, input_obj_points_concat, input_img_points_concat = calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=marker_length, marker_separation=marker_separation)
+        cam2arm_opt, arm2cam_opt, tvec_pnp_opt, rvec_pnp_opt, input_obj_points_concat, input_img_points_concat = calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=marker_length, marker_separation=marker_separation)
+
+        before_calibration_tvecs.append(tvec_pnp_opt)
+        before_calibration_rvecs.append(rvec_pnp_opt)
 
         # Reshape and convert types to match expected format
         obj_points = input_obj_points_concat.reshape(-1, 1, 3).astype(np.float32)
@@ -291,28 +383,25 @@ def calibrate_camera_intrinsics(images):
     print('Finished loading all object and image points. Running calibration')
     # Get image dimensions from first image
     height, width = images[0].shape[:2]
-    
-    # Initial camera matrix guess
-    camera_matrix = np.array([
-        [width, 0, width/2],
-        [0, height, height/2],
-        [0, 0, 1]
-    ], dtype=np.float32)
-    dist_coeffs = np.zeros(5)
+
+    # TODO using my own solvepnp for finding necessary rvecs and tvecs but isn't this another source of error compared to what calibrateCamera does? But...
+    mean_error, errors = calculate_reprojection_error(objpoints, imgpoints, before_calibration_rvecs, before_calibration_tvecs, camera_matrix, dist_coeffs)
+    print('before calibration:')
+    print("Mean reprojection error: {} pixels".format(mean_error))
+    print("Individual errors: {}".format(errors))
 
     # Calibrate camera
-    ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera( objpoints, imgpoints, (width, height), None, None)
+    ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
+        objpoints, 
+        imgpoints, 
+        (width, height),
+        cameraMatrix=camera_matrix,  # Add initial guess
+        distCoeffs=dist_coeffs,      # Add initial guess
+        flags=cv2.CALIB_USE_INTRINSIC_GUESS  # Add flag to use initial guess
+    )
 
-    # Calculate reprojection error
-    mean_error = 0
-    errors = []
-    for i in range(len(objpoints)):
-        imgpoints2, _ = cv2.projectPoints(objpoints[i], rvecs[i], tvecs[i], mtx, dist)
-        error = cv2.norm(imgpoints[i], imgpoints2, cv2.NORM_L2)/len(imgpoints2)
-        errors.append(error)
-        mean_error += error
-
-    mean_error = mean_error/len(objpoints)
+    mean_error, errors = calculate_reprojection_error(objpoints, imgpoints, rvecs, tvecs, mtx, dist)
+    print('after calibration:')
     print("Mean reprojection error: {} pixels".format(mean_error))
     print("Individual errors: {}".format(errors))
 
@@ -724,4 +813,6 @@ What I can do about it
 # TODO save pic or not? Save reprojection error or ambiguity or something?
 # TODO eventually put realsense in hand as well and do eye-in-hand. And multiple realsenses (maybe swap to handical or other? or do each one individually?)
 # TODO maybe just measure with a ruler and see what happens with the transform and stuff and see how it works
+
+
 
