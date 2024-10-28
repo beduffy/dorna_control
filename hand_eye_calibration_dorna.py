@@ -27,21 +27,18 @@ from lib.vision import isclose, dist, isRotationMatrix, rotationMatrixToEulerAng
 from lib.vision_config import pinhole_camera_intrinsic
 from lib.vision_config import camera_matrix, dist_coeffs
 from lib.realsense_helper import setup_start_realsense, realsense_get_frames, run_10_frames_to_wait_for_auto_exposure
-from lib.aruco_helper import create_aruco_params, aruco_detect_draw_get_transforms, calculate_pnp_12_markers
+from lib.aruco_helper import create_aruco_params, aruco_detect_draw_get_transforms, calculate_pnp_12_markers, find_aruco_markers
+from lib.aruco_image_text import OpenCvArucoImageText
 from lib.handeye_opencv_wrapper import handeye_calibrate_opencv, load_all_handeye_data, plot_all_handeye_data
 from lib.dorna_kinematics import i_k, f_k
 from lib.open3d_plot_dorna import plot_open3d_Dorna
-from lib.aruco_image_text import OpenCvArucoImageText
 
 
 # TODO seems very different to depth.intrinsics. Use depth intrinsics.....
-# TODO .translate is easy for FK, what I've been doing, then the only other angles that matter is wrist pitch, wrist roll and base? pitch, roll and yaw I suppose
-# TODO so I need to find the 4x4 matrix which will make .transform of coordinate frame onto gripper. And it's gripper to base or base 2 gripper?
 # TODO once I have 4x4, I actually only need 3x1 or 3x3 rvec and 3x1 tvec
-# TODO tvec and rvec come straight from aruco
 # TODO why do we get cam2gripper and not cam2base though? But it's the gripper expressed in base coordinates soooooo base?
 # TODO how to ensure everything is run from root directory.... Absolute paths.
-# TODO how to ensure marker/found frame is flat? the world is flattened I mean. Wrong assumption because it isn;t?
+# TODO how to ensure marker/found frame is flat? the world is flattened I mean. Wrong assumption because it isn't?
 # TODO could find relative pose transformations between multiple markers and then use them to create absolute ground truth instead of using a ruler
 # TODO stop indenting so much, fix it with classes and stuff
 # TODO im not using depth for 3D or 2D points!!!!!!?
@@ -210,65 +207,6 @@ def click_callback(event, x, y, flags, param):
     #     # IndexError: index 1258 is out of bounds for axis 0 with size 640
 
 
-def find_aruco_markers(color_img, depth_img):
-    # global ids, corners, all_rvec, all_tvec
-
-    color_img = color_img.copy()
-    depth_img = depth_img.copy()
-    bgr_color_data = cv2.cvtColor(color_img, cv2.COLOR_RGB2BGR)
-    gray_data = cv2.cvtColor(bgr_color_data, cv2.COLOR_RGB2GRAY)
-
-    corners, ids, rejectedImgPoints = aruco.detectMarkers(gray_data, aruco_dict,
-                                                                parameters=parameters)
-    frame_markers = aruco.drawDetectedMarkers(color_img, corners, ids)
-    all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
-
-    if all_rvec is not None:
-        ids_list = [l[0] for l in ids.tolist()]
-
-        if len(ids_list) >= 1:
-            # TODO am i using the below?
-            for corner_id in [1, 2, 3, 4]:
-                # TODO what am I doing below?
-                # for corner_id in [4]:  # TODO make it not crash if other aruco etc!!!
-                if corner_id in ids_list:
-                    corner_index = ids_list.index(corner_id) 
-                    # rvec_aruco, tvec_aruco = all_rvec[corner_index, 0, :], all_tvec[corner_index, 0, :]
-                    # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
-
-        found_correct_marker = False
-        if id_on_shoulder_motor in ids:
-            # TODO is this even correct?!?!?! since 1 index vs 0 index?!?!? ahh because I found correct index?
-            shoulder_motor_marker_id = [l[0] for l in ids.tolist()].index(id_on_shoulder_motor) 
-            rvec, tvec = all_rvec[shoulder_motor_marker_id, 0, :], all_tvec[shoulder_motor_marker_id, 0, :]  # get first marker
-            found_correct_marker = True
-        else:
-            print('Did not find shoulder marker, {}'.format(ids_list))
-            tvec, rvec = None, None
-            # pass
-
-        if found_correct_marker:  # TODO jan 2023 does this make any sense anymore if im using 12 markers?
-            # tvec, rvec = all_tvec[0].squeeze(), all_rvec[0].squeeze()
-
-            # TODO typo below??? WILL IT BREAK THINGS and overwrite cam2arm or not?
-            # TODO the below repeats from basic_aruco_example.py
-            cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
-            # cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
-
-            # -- Get the attitude in terms of euler 321 (Needs to be flipped first)
-            roll_marker, pitch_marker, yaw_marker = rotationMatrixToEulerAngles(opencv_aruco_image_text.R_flip * R_tc)
-            # -- Get the attitude of the camera respect to the frame
-            roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(opencv_aruco_image_text.R_flip * R_ct)  # todo no flip needed?
-
-            opencv_aruco_image_text.put_marker_text(camera_color_img_debug, tvec, roll_marker, pitch_marker, yaw_marker)
-            opencv_aruco_image_text.put_camera_text(camera_color_img_debug, pos_camera, roll_camera, pitch_camera, yaw_camera)
-            # opencv_aruco_image_text.put_avg_marker_text(camera_color_img, avg_6dof_pose)
-    else:
-        tvec, rvec = None, None
-
-    return color_img, depth_img, tvec, rvec, ids, corners, all_rvec, all_tvec
-
-
 if __name__ == '__main__':
     np.set_printoptions(precision=6, suppress=True)
     opencv_aruco_image_text = OpenCvArucoImageText()
@@ -336,8 +274,9 @@ if __name__ == '__main__':
             depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(camera_depth_img, alpha=0.03),
                                                cv2.COLORMAP_JET)  # TODO why does it look so bad, add more contrast?
 
+            # find aruco corners in images
             camera_color_img_debug = camera_color_img.copy()
-            color_img, depth_img, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(camera_color_img, camera_depth_img)
+            color_img, depth_img, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(camera_color_img, camera_depth_img, aruco_dict, parameters, marker_length, id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug)
 
             if tvec is not None and rvec is not None:
                 cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)

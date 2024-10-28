@@ -6,6 +6,7 @@ import numpy as np
 
 from lib.vision import create_homogenous_transformations
 from lib.vision_config import camera_matrix, dist_coeffs
+from lib.vision import isclose, dist, isRotationMatrix, rotationMatrixToEulerAngles
 
 
 def create_aruco_params():
@@ -90,7 +91,6 @@ def show_matplotlib_all_charuco(board):
 def calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=0.058, marker_separation=0.0065):
     half_marker_len = marker_length / 2
 
-
     ids_list = [l[0] for l in ids.tolist()]
     ids_list_with_index_key_tuple = [(idx, id_) for idx, id_ in enumerate(ids_list)]
     ids_list_sorted = sorted(ids_list_with_index_key_tuple, key=lambda x: x[1])
@@ -142,3 +142,64 @@ def calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=0.0
     cam2arm_opt, arm2cam_opt, _, _, _ = create_homogenous_transformations(tvec_pnp_opt, rvec_pnp_opt)
 
     return cam2arm_opt, arm2cam_opt
+
+
+def find_aruco_markers(color_img, depth_img, aruco_dict, parameters, marker_length, id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug):
+    # global ids, corners, all_rvec, all_tvec
+    # TODO clean all code and better var names but for now I'm taking it out of here to avoid globals and begin this process
+    # TODO less output and less params
+
+    color_img = color_img.copy()
+    depth_img = depth_img.copy()
+    bgr_color_data = cv2.cvtColor(color_img, cv2.COLOR_RGB2BGR)
+    gray_data = cv2.cvtColor(bgr_color_data, cv2.COLOR_RGB2GRAY)
+
+    corners, ids, rejectedImgPoints = aruco.detectMarkers(gray_data, aruco_dict,
+                                                                parameters=parameters)
+    frame_markers = aruco.drawDetectedMarkers(camera_color_img_debug, corners, ids)  # TODO debug image? just changed, testing
+    all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
+
+    if all_rvec is not None:
+        ids_list = [l[0] for l in ids.tolist()]
+
+        if len(ids_list) >= 1:
+            # TODO am i using the below?
+            for corner_id in [1, 2, 3, 4]:
+                # TODO what am I doing below?
+                # for corner_id in [4]:  # TODO make it not crash if other aruco etc!!!
+                if corner_id in ids_list:
+                    corner_index = ids_list.index(corner_id) 
+                    # rvec_aruco, tvec_aruco = all_rvec[corner_index, 0, :], all_tvec[corner_index, 0, :]
+                    # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec_aruco, tvec_aruco, marker_length)
+
+        found_correct_marker = False
+        if id_on_shoulder_motor in ids:
+            # TODO is this even correct?!?!?! since 1 index vs 0 index?!?!? ahh because I found correct index?
+            shoulder_motor_marker_id = [l[0] for l in ids.tolist()].index(id_on_shoulder_motor) 
+            rvec, tvec = all_rvec[shoulder_motor_marker_id, 0, :], all_tvec[shoulder_motor_marker_id, 0, :]  # get first marker
+            found_correct_marker = True
+        else:
+            print('Did not find shoulder marker, {}'.format(ids_list))
+            tvec, rvec = None, None
+            # pass
+
+        if found_correct_marker:  # TODO jan 2023 does this make any sense anymore if im using 12 markers?
+            # tvec, rvec = all_tvec[0].squeeze(), all_rvec[0].squeeze()
+
+            # TODO typo below??? WILL IT BREAK THINGS and overwrite cam2arm or not?
+            # TODO the below repeats from basic_aruco_example.py
+            cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
+            # cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
+
+            # -- Get the attitude in terms of euler 321 (Needs to be flipped first)
+            roll_marker, pitch_marker, yaw_marker = rotationMatrixToEulerAngles(opencv_aruco_image_text.R_flip * R_tc)
+            # -- Get the attitude of the camera respect to the frame
+            roll_camera, pitch_camera, yaw_camera = rotationMatrixToEulerAngles(opencv_aruco_image_text.R_flip * R_ct)  # todo no flip needed?
+
+            opencv_aruco_image_text.put_marker_text(camera_color_img_debug, tvec, roll_marker, pitch_marker, yaw_marker)
+            opencv_aruco_image_text.put_camera_text(camera_color_img_debug, pos_camera, roll_camera, pitch_camera, yaw_camera)
+            # opencv_aruco_image_text.put_avg_marker_text(camera_color_img, avg_6dof_pose)
+    else:
+        tvec, rvec = None, None
+
+    return color_img, depth_img, tvec, rvec, ids, corners, all_rvec, all_tvec
