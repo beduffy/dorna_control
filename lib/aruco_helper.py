@@ -144,13 +144,12 @@ def calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=0.0
     return cam2arm_opt, arm2cam_opt
 
 
-def find_aruco_markers(color_img, depth_img, aruco_dict, parameters, marker_length, id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug):
+def find_aruco_markers(color_img, aruco_dict, parameters, marker_length, id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug):
     # global ids, corners, all_rvec, all_tvec
     # TODO clean all code and better var names but for now I'm taking it out of here to avoid globals and begin this process
     # TODO less output and less params
 
     color_img = color_img.copy()
-    depth_img = depth_img.copy()
     bgr_color_data = cv2.cvtColor(color_img, cv2.COLOR_RGB2BGR)
     gray_data = cv2.cvtColor(bgr_color_data, cv2.COLOR_RGB2GRAY)
 
@@ -202,4 +201,4 @@ def find_aruco_markers(color_img, depth_img, aruco_dict, parameters, marker_leng
     else:
         tvec, rvec = None, None
 
-    return color_img, depth_img, tvec, rvec, ids, corners, all_rvec, all_tvec
+    return color_img, tvec, rvec, ids, corners, all_rvec, all_tvec

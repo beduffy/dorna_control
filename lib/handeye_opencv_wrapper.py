@@ -215,9 +215,6 @@ def test_transformations(handeye_data_dict):
             sys.exit()
 
 
-    # all_target2cam_transforms = handeye_data_dict['all_target2cam_transforms']
-    # output = calibrate_camera_intrinsics(all_target2cam_transforms)
-    # print('Camera intrinsics: \n{}'.format(output))
 
     # TODO calibrate camera intrinsics should use full aruco pipeline
     # TODO get mean projection and see what my pixel reprojection error is on all 12 corners or other position
@@ -236,10 +233,12 @@ def test_transformations(handeye_data_dict):
     first_depth_image = depth_images[0]
 
     camera_color_img_debug = first_color_image.copy()
-    color_img, depth_img, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(first_color_image, first_depth_image, aruco_dict, parameters, marker_length, id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug)
+    color_img, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(first_color_image, aruco_dict, parameters, marker_length, id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug)
 
     cam2arm_opt, arm2cam_opt = calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=marker_length, marker_separation=marker_separation)
 
+    output = calibrate_camera_intrinsics(color_images)
+    print('Camera intrinsics: \n{}'.format(output))
     cv2.imshow('Camera Color Image Debug', camera_color_img_debug)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
@@ -267,11 +266,12 @@ def calibrate_camera_intrinsics(images):
     objpoints = []  # 3D points in marker coordinate system
     imgpoints = []  # 2D points in image plane
     
-    for img in images:
+    for idx, img in enumerate(images):
+        print('Image no. ', idx)
         # Use existing ArUco detection pipeline
         camera_color_img_debug = img.copy()
-        color_img, depth_img, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(
-            img, None, aruco_dict, parameters, marker_length, 
+        color_img, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(
+            img, aruco_dict, parameters, marker_length, 
             id_on_shoulder_motor=1, 
             opencv_aruco_image_text=opencv_aruco_image_text,
             camera_color_img_debug=camera_color_img_debug

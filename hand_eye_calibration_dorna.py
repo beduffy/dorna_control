@@ -276,7 +276,7 @@ if __name__ == '__main__':
 
             # find aruco corners in images
             camera_color_img_debug = camera_color_img.copy()
-            color_img, depth_img, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(camera_color_img, camera_depth_img, aruco_dict, parameters, marker_length, id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug)
+            color_img, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(camera_color_img, aruco_dict, parameters, marker_length, id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug)
 
             if tvec is not None and rvec is not None:
                 cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
