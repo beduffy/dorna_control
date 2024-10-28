@@ -29,6 +29,25 @@ def isclose(a, b, rel_tol=1e-09, abs_tol=0.0):
 
 
 # ----------------------
+# 2D Vision
+# ----------------------
+
+def calculate_reprojection_error(objpoints, imgpoints, rvecs, tvecs, mtx, dist):
+    # Calculate reprojection error
+    mean_error = 0
+    errors = []
+    for i in range(len(objpoints)):
+        imgpoints2, _ = cv2.projectPoints(objpoints[i], rvecs[i], tvecs[i], mtx, dist)
+        error = cv2.norm(imgpoints[i], imgpoints2, cv2.NORM_L2) / len(imgpoints2)
+        errors.append(error)
+        mean_error += error
+
+    mean_error = mean_error / len(objpoints)
+
+    return mean_error, errors
+
+
+# ----------------------
 # 3D Vision
 # ----------------------
 
@@ -633,6 +652,10 @@ def find_all_clusters(pcd, eps=0.01, voxelise=True, visualise_all_pcd=False):
     return cluster_pcds
 
 
+# ----------------------
+# Object Detection
+# ----------------------
+
 def find_all_objects_from_clusters(cluster_pcds, lower_bound=100, upper_bound=1000):
     # todo don't include chassis and other big objects. How to choose (and maybe automatically) what is big for upper bound?
     # todo find other way to find objects... todo height of objects. width. whether it's touching the plane I care about. How much area of it is touching
@@ -655,10 +678,6 @@ def find_all_objects_from_clusters(cluster_pcds, lower_bound=100, upper_bound=10
         likely_object_pcds.append(c_pcd)
 
     return likely_object_pcds
-
-# ----------------------
-# Object Detection
-# ----------------------
 
 
 def maskrcnn_detect(realsense_color_image, model, device, class_names):
