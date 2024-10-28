@@ -40,13 +40,9 @@ from lib.aruco_image_text import OpenCvArucoImageText
 # TODO once I have 4x4, I actually only need 3x1 or 3x3 rvec and 3x1 tvec
 # TODO tvec and rvec come straight from aruco
 # TODO why do we get cam2gripper and not cam2base though? But it's the gripper expressed in base coordinates soooooo base?
-# TODO When estimate_pose = False I could still visualise the marker finding but only optimise and save after key a is pressed
-# TODO FileNotFoundError: [Errno 2] No such file or directory: 'data/best_aruco_cam2arm.txt'
 # TODO how to ensure everything is run from root directory.... Absolute paths.
 # TODO how to ensure marker/found frame is flat? the world is flattened I mean. Wrong assumption because it isn;t?
 # TODO could find relative pose transformations between multiple markers and then use them to create absolute ground truth instead of using a ruler
-# TODO most important: make it work from 70cm away. This is perfect. Do I need 2 extra markers?
-# TODO for this I might need to try different optimisers or parameters. Also need to understand PnP better
 # TODO stop indenting so much, fix it with classes and stuff
 # TODO im not using depth for 3D or 2D points!!!!!!?
 # TODO how to minimise eyeball error? glue and pencil?
@@ -54,7 +50,6 @@ from lib.aruco_image_text import OpenCvArucoImageText
 # TODO https://github.com/opencv/opencv_contrib/blob/master/modules/aruco/src/aruco.cpp
 # TODO could use cube!!!
 # TODO read this: https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
-
 # TODO Feb 24th 2024 update:
 '''
 What do I want?
@@ -137,111 +132,6 @@ def get_gripper_base_transformation(joint_angles):
     gripper_base_transform[:3, :3] = rot_mat
 
     return gripper_base_transform
-
-
-def get_rigid_transform_error(joined_input_array, cam_3d_coords):
-    # TODO make less global
-    tvec_opt = joined_input_array[:3].copy()  # TODO do I need to copy these?
-    rvec_opt = joined_input_array[3:].copy()
-
-    # R_ct = np.matrix(cv2.Rodrigues(rvec_opt)[0])  # TODO confirm that rvec makes sense
-    # # TODO all geometric vision, slam, pose estimation is about consistency with yourself... fundamental.
-    # # TODO Can we turn everything into optimisation? study it more
-    #
-    # # TODO replace this with homogenous transform function given tvec and rvec?
-    # arm2cam_opt = np.identity(4)
-    # arm2cam_opt[:3, :3] = R_ct
-    # arm2cam_opt[0, 3] = tvec_opt[0]
-    # arm2cam_opt[1, 3] = tvec_opt[1]
-    # arm2cam_opt[2, 3] = tvec_opt[2]
-    # pos_camera = np.dot(-R_tc, np.matrix(tvec_opt).T)
-    # cam2arm_opt = np.identity(4)
-    # cam2arm_opt[:3, :3] = R_tc
-    # cam2arm_opt[0, 3] = pos_camera[0]
-    # cam2arm_opt[1, 3] = pos_camera[1]
-    # cam2arm_opt[2, 3] = pos_camera[2]
-
-    cam2arm_opt, arm2cam_opt, \
-            R_tc, R_tc, pos_camera = create_homogenous_transformations(tvec_opt, rvec_opt)
-
-    half_marker_len = marker_length / 2
-    origin = np.array([0., 0., 0.])
-    top_left = np.array([-half_marker_len, half_marker_len, 0.])
-    top_right = np.array([half_marker_len, half_marker_len, 0.])
-    bottom_right = np.array([half_marker_len, -half_marker_len, 0.])
-    bottom_left = np.array([-half_marker_len, -half_marker_len, 0.])
-    ground_truth = [origin, top_left, top_right, bottom_right, bottom_left]
-
-    assert len(ground_truth) == cam_3d_coords.shape[0]
-
-    error = 0
-    for i in range(cam_3d_coords.shape[0]):
-        # cam_coord_opt = np.array([x_cam_input, y_cam_input, z_cam_input, 1])
-        cam_coord_opt = cam_3d_coords[i]
-        arm_coord_opt = np.dot(cam2arm_opt, cam_coord_opt)[:3]
-
-        error += dist(ground_truth[i], arm_coord_opt)
-
-    error = error / cam_3d_coords.shape[0]
-
-    # TODO could do above with nice big distance function across all array dimensions. Did this in interactive_click_fabrik.py for side view
-    # print('tvec: {}. rvec: {}. Error: {:.5f}'.format(tvec_opt, rvec_opt, error))
-    return error
-
-
-def optimise_transformation_to_origin(cam_3d_coords, init_tvec, init_rvec):  # TODO first param isn't used....
-    # TODO remove first param
-    # TODO fix params and globals and make cleaner
-    # TODO add more "world points". With 3 markers we would have 3x5=15 points and should help optimisation find correct transform from a distance
-    # TODO instead of rvec axis-angle optimise quaternions or dual quaternions or something continuous
-    # TODO remove most of below
-    # the output of np.dot(cam2arm_opt, cam_coord) should be 0, 0, 0
-    # cam2arm_opt is made from init_tvec and init_rvec which are optimised
-
-    # global cam_coords  # so get_rigid_transform_error can access it
-    #
-    # cam_coords = []
-    # for pixel in pixel_pos:
-    #     cam_coord_spec = get_camera_coordinate(camera_depth_img, pixel[0], pixel[1])
-    #     cam_coords.append(cam_coord_spec.reshape(1, 4))
-    #
-    # cam_coords = np.concatenate(cam_coords)
-
-    init_tvec = init_tvec.copy()
-    init_rvec = init_rvec.copy()
-    # global init_rvec  # TODO just for now
-
-    print('Starting optimisation with init_tvec: {}. init_rvec: {}'.format(init_tvec, init_rvec))
-
-    joined_input_array = np.hstack((init_tvec, init_rvec))
-
-    # def zero_con(t):
-    #     return t[0]
-    # cons = [{'type': 'eq', 'fun': zero_con}]  # TODO how do I specify the output of arm_coord z-axis to be 0 with constraints?
-
-    # optim_result = optimize.minimize(get_rigid_transform_error, args=(init_tvec, init_rvec),  # TODO use args?
-    # optim_result = optimize.minimize(get_rigid_transform_error, joined_input_array,
-    optim_result = optimize.minimize(get_rigid_transform_error, joined_input_array, args=(cam_3d_coords, ),
-                                     options={'max_iter': 500, 'disp': True},
-                                     method='Nelder-Mead')
-                                     # method='BFGS')
-                                     # method='Newton-CG')
-                                     # method='L-BFGS-B')
-                                     # method='SLSQP')  #constraints=cons
-    # TODO try other optimisers? Least squares? Should learn about all of them anyway!
-    # https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.minimize.html
-    # TODO will more points help or make it harder??!?!
-    # TODO could do constrained optimsation of forcing z to 0!!!!!!
-
-    tvec_opt = optim_result.x[:3]
-    rvec_opt = optim_result.x[3:]
-    print(optim_result.success)
-    print(optim_result.status)
-    print(optim_result.message)
-
-    final_optimised_error = get_rigid_transform_error(np.hstack((tvec_opt, rvec_opt)), cam_3d_coords)
-
-    return tvec_opt, rvec_opt, final_optimised_error
 
 
 def click_callback(event, x, y, flags, param):
@@ -373,10 +263,6 @@ def find_aruco_markers(color_img, depth_img):
             opencv_aruco_image_text.put_marker_text(camera_color_img_debug, tvec, roll_marker, pitch_marker, yaw_marker)
             opencv_aruco_image_text.put_camera_text(camera_color_img_debug, pos_camera, roll_camera, pitch_camera, yaw_camera)
             # opencv_aruco_image_text.put_avg_marker_text(camera_color_img, avg_6dof_pose)
-        
-            # return rigid_body_error_local, color_img, depth_img, pixel_positions_to_optimise, tvec, rvec, cam_coords
-            # TODO what to return? and to not make it ugly?
-            # return tvec, rvec
     else:
         tvec, rvec = None, None
 
@@ -390,7 +276,7 @@ if __name__ == '__main__':
     handeye_data_folder_name = datetime.now().strftime('%d_%m_%Y_%H_%M_%S')
     print('handeye_data_folder_name for all saved transforms (not created yet): ', handeye_data_folder_name)
 
-    # get_joint_angles_from_dorna_flask()
+    # get_joint_angles_from_dorna_flask()  # TODO if failed then changed all further calls to hardcoded joint values and make it very clear no arm connected?
 
     prev_arm_xyz = np.array([0., 0., 0.])
     cam2arm = np.identity(4)
@@ -406,6 +292,7 @@ if __name__ == '__main__':
     saved_rvec = None
     saved_tvec = None
 
+    # trying to put text into open3D
     # label_3D = o3d.visualization.gui.Label3D('hey', np.array([0, 0, 0]))
     # o3d.visualization.draw_geometries([label_3D])
     # https://stackoverflow.com/questions/71959737/display-text-on-point-cloud-vertex-in-pyrender-open3d
@@ -414,10 +301,6 @@ if __name__ == '__main__':
 
     # calibration and marker params
     shoulder_height = 206.01940000000002
-    optimise_origin = False
-    # optimise_origin = True
-    # estimate_pose = True
-    estimate_pose = False
 
     board, parameters, aruco_dict, marker_length = create_aruco_params()
     half_marker_len = marker_length / 2
@@ -435,14 +318,11 @@ if __name__ == '__main__':
 
     id_on_shoulder_motor = 1
 
-    # if estimate_pose:  # TODO think about this
+    # if arm_properly_calibrated_homed:  # TODO think about this. would be nice 
     # command = '/home/beduffy/anaconda/envs/py36/bin/python control/scripts/send_arm_to_home_position.py'
     # print('Running command: {}'.format(command))
     # os.system(command)
     # time.sleep(1)
-
-    lowest_error = 1000000
-    lowest_optimised_error = 1000000
 
     run_10_frames_to_wait_for_auto_exposure(pipeline, align)
 
@@ -457,90 +337,10 @@ if __name__ == '__main__':
                                                cv2.COLORMAP_JET)  # TODO why does it look so bad, add more contrast?
 
             camera_color_img_debug = camera_color_img.copy()
-            color_img, depth_img, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(camera_color_img, camera_depth_img, estimate_pose=estimate_pose)
-
-            # TODO would optimising the transform with depth info solve most of my problems?
-            # if pixel_positions_to_optimise:
-            #     # middle_pixel = pixel_positions_to_optimise[0]  # TODO first is a numpy array, the rest are lists....
-            #     (middle_pixel, top_left_pixel, top_right_pixel,
-            #      bottom_right_pixel, bottom_left_pixel) = pixel_positions_to_optimise
-
-            #     hit_lowest_error = False
-            #     if rigid_body_error < lowest_error:  # TODO if optimise_origin works calculate lowest_error after or create 3rd cam2arm?
-            #         lowest_error = rigid_body_error
-            #         print('Saving best aruco cam2arm: \n{}'.format(cam2arm))
-            #         print('Best error so far: {}'.format(rigid_body_error))
-            #         np.savetxt('data/best_aruco_cam2arm.txt', cam2arm, delimiter=' ')
-            #         hit_lowest_error = True
-
-            #     # if optimise_origin: # TODO do this better
-            #     if hit_lowest_error:
-            #         # TODO making the assumption that the lowest error above will get the lowest possible error here!!!
-            #         # TODO why much better error when some markers are hidden? I'm closer? I don't think other markers help? prove it
-            #         # TODO do many tests!!!
-            #         # TODO since arm is in home position, we could plot in open3D right here!!!!!!!!
-            #         # TODO show pointcloud view with open3d (blocking vs non-blocking) to test how good all the frames are!!!!!!!!!!!!!!!!!!!!!!!
-            #         # TODO could do it on q key!! or every time here. Would help me visualise coordinate frame, pose and error
-            #         # TODO COULD OPTIMISE ALL MARKER CORNERS for all markers ??!?!? but we don't know exactly where they are but we could find the plane and use vectors hmmmm
-
-            #         tvec, rvec, optimised_error = optimise_transformation_to_origin(
-            #             cam_coords, tvec, rvec)
+            color_img, depth_img, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(camera_color_img, camera_depth_img)
 
             if tvec is not None and rvec is not None:
                 cam2arm, arm2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
-
-            # print('Rigid body transform error: {}'.format(optimised_error))
-
-            # if optimised_error < lowest_optimised_error:
-            #     lowest_optimised_error = optimised_error
-            #     print('Saving best optimised aruco cam2arm with error {}\n{}'.format(
-            #         lowest_optimised_error, cam2arm))
-            #     np.savetxt('data/best_optimised_aruco_cam2arm.txt', cam2arm, delimiter=' ')
-            #
-            # marker_xyz_middle = convert_pixel_to_arm_coordinate(camera_depth_img,
-            #                                                     middle_pixel[0],
-            #                                                     middle_pixel[1], cam2arm,
-            #                                                     verbose=True)
-            #
-            # # after optimisation see if everything is correct
-            # marker_xyz_top_left = convert_pixel_to_arm_coordinate(camera_depth_img,
-            #                                                         top_left_pixel[0],
-            #                                                         top_left_pixel[1], cam2arm)
-            # marker_xyz_top_right = convert_pixel_to_arm_coordinate(camera_depth_img,
-            #                                                         top_right_pixel[0],
-            #                                                         top_right_pixel[1], cam2arm)
-            # marker_xyz_bottom_right = convert_pixel_to_arm_coordinate(camera_depth_img,
-            #                                                             bottom_right_pixel[0],
-            #                                                             bottom_right_pixel[1],
-            #                                                             cam2arm)
-            # marker_xyz_bottom_left = convert_pixel_to_arm_coordinate(camera_depth_img,
-            #                                                             bottom_left_pixel[0],
-            #                                                             bottom_left_pixel[1],
-            #                                                             cam2arm)
-            #
-            # # ground truth
-            # half_marker_len = marker_length / 2
-            # origin = np.array([0., 0., 0.])
-            # top_left = np.array([-half_marker_len, half_marker_len, 0.])
-            # top_right = np.array([half_marker_len, half_marker_len, 0.])
-            # bottom_right = np.array([half_marker_len, -half_marker_len, 0.])
-            # bottom_left = np.array([-half_marker_len, -half_marker_len, 0.])
-            # ground_truth = [origin, top_left, top_right, bottom_right, bottom_left]
-            # # for gt in ground_truth:
-            # #     print(gt)
-            #
-            # # print('Middle marker xyz after optimisation: {}'.format(marker_xyz_middle))
-            # # print('Top left marker xyz after optimisation: {}'.format(marker_xyz_top_left))
-            # # print('Top Right marker xyz after optimisation: {}'.format(marker_xyz_top_right))
-            # # print('Bottom Right marker xyz after optimisation: {}'.format(marker_xyz_bottom_right))
-            # # print('Bottom Left marker xyz after optimisation: {}'.format(marker_xyz_bottom_left))
-            # # print()
-            # check_corner_frame_count += 1
-            #
-            # # TODO marker z's seem a bit wrong? Maybe it's the depth scale by 1-10cm off
-            # # will only work if we are facing it directly? Or not, because the transformation should be correct
-            #
-            # # TODO could create my own drawAxis to test the depth and once that works everything will work right?
 
             if click_pix_coord is not None:
                 cv2.circle(color_img, click_pix_coord, 5, (0, 0, 255), -1)
@@ -556,7 +356,6 @@ if __name__ == '__main__':
                 cv2.circle(color_img, FK_shoulder_projected_to_image, 5, (0, 0, 0), -1)
                 cv2.line(color_img, FK_shoulder_projected_to_image, FK_elbow_projected_to_image, (0, 0, 0), thickness=3)
 
-            # images = np.hstack((color_img, depth_colormap))
             images = np.hstack((camera_color_img_debug, depth_colormap))  # TODO to not have writing? Have better variable images
 
             cv2.imshow("image", images)
@@ -570,20 +369,9 @@ if __name__ == '__main__':
                 pipeline.stop()
                 break
 
-
-            # if k == ord('a'):
-            #     # activate estimate_pose and optimisation pipeline
-            #     estimate_pose = not estimate_pose
-            #     # reset all errors since I probably want to move the camera again
-            #     lowest_error = 1000000
-            #     lowest_optimised_error = 1000000
-            #     print('estimate_pose set to: {}'.format(estimate_pose))
-
-
             # Saves current cam2arm, arm2cam, rvec, tvec from chosen marker ID # TODO but that doesn't make too much sense
             if k == ord('s'):
-                # print('Saving best optimised aruco cam2arm with error {}\n{}'.format(
-                #             lowest_optimised_error, cam2arm))
+                # TODO can be nice to click things online but I can do offline. to remove all of this or not?
                 if cam2arm is not None:
                     saved_cam2arm = cam2arm 
                     saved_arm2cam = arm2cam  # TODO arm2cam does not exist?
