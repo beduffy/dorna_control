@@ -13,6 +13,8 @@ from lib.open3d_plot_dorna import plot_open3d_Dorna
 from lib.vision import get_full_pcd_from_rgbd
 from lib.vision import get_camera_coordinate, create_homogenous_transformations, convert_pixel_to_arm_coordinate, convert_cam_pcd_to_arm_pcd
 from lib.vision_config import pinhole_camera_intrinsic
+from lib.aruco_helper import create_aruco_params, aruco_detect_draw_get_transforms, calculate_pnp_12_markers, find_aruco_markers
+from lib.aruco_image_text import OpenCvArucoImageText
 
 
 # TODO plotting functions to another file?
@@ -133,6 +135,7 @@ def load_all_handeye_data(folder_name):
         'all_joint_angles': all_joint_angles
     }
 
+    # creating further key-value pairs
     all_base2gripper_transforms = []
     for R, t in zip(handeye_data_dict['R_base2gripper'], handeye_data_dict['t_base2gripper']):
         T = np.eye(4)
@@ -212,12 +215,40 @@ def test_transformations(handeye_data_dict):
             sys.exit()
 
 
-def calibrate_camera_intrinsics(all_target2cam_transforms):
+    # all_target2cam_transforms = handeye_data_dict['all_target2cam_transforms']
+    # output = calibrate_camera_intrinsics(all_target2cam_transforms)
+    # print('Camera intrinsics: \n{}'.format(output))
+
+    opencv_aruco_image_text = OpenCvArucoImageText()
+    board, parameters, aruco_dict, marker_length = create_aruco_params()
+    marker_separation = 0.0065
+    ids, corners, all_rvec, all_tvec = None, None, None, None  # TODO global remove
+    id_on_shoulder_motor = 1
+
+
+    color_images = handeye_data_dict['color_images']
+    depth_images = handeye_data_dict['depth_images']
+
+    first_color_image = color_images[0]
+    first_depth_image = depth_images[0]
+
+    camera_color_img_debug = first_color_image.copy()
+    color_img, depth_img, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(first_color_image, first_depth_image, aruco_dict, parameters, marker_length, id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug)
+
+    cam2arm_opt, arm2cam_opt = calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=marker_length, marker_separation=marker_separation)
+
+    cv2.imshow('Camera Color Image Debug', camera_color_img_debug)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+
+def calibrate_camera_intrinsics(all_target2cam_transforms, detected_corners):
     """
     Calibrate camera intrinsics using ArUco marker poses.
     
     Args:
         all_target2cam_transforms: List of 4x4 transforms from target (ArUco) to camera frame
+        detected_corners: List of actually detected corner points in image coordinates
         
     Returns:
         camera_matrix: 3x3 camera intrinsic matrix
@@ -225,17 +256,6 @@ def calibrate_camera_intrinsics(all_target2cam_transforms):
         mean_error: Mean reprojection error in pixels
         errors: List of reprojection errors for each point
     """
-    # Extract rotation and translation from transforms
-    rvecs = []
-    tvecs = []
-    for transform in all_target2cam_transforms:
-        R = transform[:3, :3]
-        t = transform[:3, 3]
-        # Convert rotation matrix to rodrigues vector
-        rvec, _ = cv2.Rodrigues(R)
-        rvecs.append(rvec)
-        tvecs.append(t)
-
     # Known 3D coordinates of ArUco marker corners in marker frame
     marker_size = 0.05  # 5cm, adjust based on actual marker size
     objp = np.array([[-marker_size/2, marker_size/2, 0],
@@ -243,30 +263,23 @@ def calibrate_camera_intrinsics(all_target2cam_transforms):
                      [marker_size/2, -marker_size/2, 0],
                      [-marker_size/2, -marker_size/2, 0]], dtype=np.float32)
     
-    # Project points for each pose
-    objpoints = []
-    imgpoints = []
+    # Use the actual detected corners instead of projecting
+    objpoints = [objp for _ in range(len(detected_corners))]
+    imgpoints = detected_corners
     
     # Initial camera matrix guess (based on image size)
-    # TODO: Get actual image size from somewhere
-    width = 640  # Placeholder
-    height = 480  # Placeholder
+    width = 640  # Get from actual image
+    height = 480  # Get from actual image
     camera_matrix = np.array([[width, 0, width/2],
                              [0, height, height/2],
                              [0, 0, 1]], dtype=np.float32)
     dist_coeffs = np.zeros(5)
 
-    for rvec, tvec in zip(rvecs, tvecs):
-        objpoints.append(objp)
-        # Project 3D points to image plane
-        imgpoints_proj, _ = cv2.projectPoints(objp, rvec, tvec, camera_matrix, dist_coeffs)
-        imgpoints.append(imgpoints_proj)
-
     # Calibrate camera
     ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
         objpoints, imgpoints, (width, height), None, None)
 
-    # Calculate reprojection error
+    # Calculate reprojection error using actual detected points
     mean_error = 0
     errors = []
     for i in range(len(objpoints)):
@@ -546,11 +559,6 @@ def handeye_calibrate_opencv(handeye_data_dict, folder_name, eye_in_hand=True):
     t_target2cam = handeye_data_dict['t_target2cam']
     R_cam2target = handeye_data_dict['R_cam2target']
     t_cam2target = handeye_data_dict['t_cam2target']
-
-    
-    all_target2cam_transforms = handeye_data_dict['all_target2cam_transforms']
-    output = calibrate_camera_intrinsics(all_target2cam_transforms)
-    print('Camera intrinsics: \n{}'.format(output))
 
     method = cv2.CALIB_HAND_EYE_TSAI  # default
     method = cv2.CALIB_HAND_EYE_DANIILIDIS  # tried both, they both work
