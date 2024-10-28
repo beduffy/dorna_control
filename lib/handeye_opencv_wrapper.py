@@ -222,6 +222,8 @@ def calibrate_camera_intrinsics(all_target2cam_transforms):
     Returns:
         camera_matrix: 3x3 camera intrinsic matrix
         dist_coeffs: Distortion coefficients
+        mean_error: Mean reprojection error in pixels
+        errors: List of reprojection errors for each point
     """
     # Extract rotation and translation from transforms
     rvecs = []
@@ -264,7 +266,20 @@ def calibrate_camera_intrinsics(all_target2cam_transforms):
     ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
         objpoints, imgpoints, (width, height), None, None)
 
-    return mtx, dist
+    # Calculate reprojection error
+    mean_error = 0
+    errors = []
+    for i in range(len(objpoints)):
+        imgpoints2, _ = cv2.projectPoints(objpoints[i], rvecs[i], tvecs[i], mtx, dist)
+        error = cv2.norm(imgpoints[i], imgpoints2, cv2.NORM_L2)/len(imgpoints2)
+        errors.append(error)
+        mean_error += error
+
+    mean_error = mean_error/len(objpoints)
+    print("Mean reprojection error: {} pixels".format(mean_error))
+    print("Individual errors: {}".format(errors))
+
+    return mtx, dist, mean_error, errors
 
 
 def plot_all_handeye_data(handeye_data_dict, eye_in_hand=False):
