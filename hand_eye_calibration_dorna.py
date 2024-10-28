@@ -434,7 +434,7 @@ if __name__ == '__main__':
                 # TODO first what am i doing below? first idea and then functions
                 # Calculate image points of 12 aruco markers
                 
-                cam2arm_opt, arm2cam_opt = calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=marker_length, marker_separation=marker_separation)
+                cam2arm_opt, arm2cam_opt, input_obj_points_concat, input_img_points_concat = calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=marker_length, marker_separation=marker_separation)
 
 
                 # TODO I might want to switch between option A and B. 
@@ -530,7 +530,7 @@ if __name__ == '__main__':
                 # TODO how will i rotate the gripper with large 12 cardboard markers on the gripper? Only add after homing?, first see if it is a problem
                 # TODO only if we see markers or 12 markers?
                 # if tvec is not None and rvec is not None:
-                cam2arm_opt, arm2cam_opt = calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=marker_length, marker_separation=marker_separation)
+                cam2arm_opt, arm2cam_opt, input_obj_points_concat, input_img_points_concat = calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=marker_length, marker_separation=marker_separation)
 
                 # aruco_id_on_gripper = 4
                 # bgr_color_data = cv2.cvtColor(camera_color_img, cv2.COLOR_RGB2BGR)

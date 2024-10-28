@@ -137,17 +137,20 @@ def calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=0.0
                 id_count += 1
 
     # after finding all object and image points, run PnP to get best homogenous transform
-    outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(np.concatenate(all_obj_points_found_from_id_1), np.concatenate(image_points), camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_IPPE)
+    input_obj_points_concat = np.concatenate(all_obj_points_found_from_id_1)
+    input_img_points_concat = np.concatenate(image_points)
+    outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(input_obj_points_concat, input_img_points_concat, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_IPPE)
     # TODO better understand insides of that function and have good descriptions of cam2arm vs arm2cam.
     cam2arm_opt, arm2cam_opt, _, _, _ = create_homogenous_transformations(tvec_pnp_opt, rvec_pnp_opt)
 
-    return cam2arm_opt, arm2cam_opt
+    return cam2arm_opt, arm2cam_opt, input_obj_points_concat, input_img_points_concat
 
 
 def find_aruco_markers(color_img, aruco_dict, parameters, marker_length, id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug):
     # global ids, corners, all_rvec, all_tvec
     # TODO clean all code and better var names but for now I'm taking it out of here to avoid globals and begin this process
     # TODO less output and less params
+    # TODO debug image? just changed, testing, how to avoid color and debug image params
 
     color_img = color_img.copy()
     bgr_color_data = cv2.cvtColor(color_img, cv2.COLOR_RGB2BGR)
@@ -155,7 +158,7 @@ def find_aruco_markers(color_img, aruco_dict, parameters, marker_length, id_on_s
 
     corners, ids, rejectedImgPoints = aruco.detectMarkers(gray_data, aruco_dict,
                                                                 parameters=parameters)
-    frame_markers = aruco.drawDetectedMarkers(camera_color_img_debug, corners, ids)  # TODO debug image? just changed, testing
+    frame_markers = aruco.drawDetectedMarkers(camera_color_img_debug, corners, ids)
     all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
 
     if all_rvec is not None:
@@ -175,8 +178,11 @@ def find_aruco_markers(color_img, aruco_dict, parameters, marker_length, id_on_s
         if id_on_shoulder_motor in ids:
             # TODO is this even correct?!?!?! since 1 index vs 0 index?!?!? ahh because I found correct index?
             shoulder_motor_marker_id = [l[0] for l in ids.tolist()].index(id_on_shoulder_motor) 
+            # TODO better name for rvec, tvec here e.g. shoulder rvec and then remove all mention of shoulder since that was stupid anyway
             rvec, tvec = all_rvec[shoulder_motor_marker_id, 0, :], all_tvec[shoulder_motor_marker_id, 0, :]  # get first marker
             found_correct_marker = True
+            # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec, tvec, marker_length)
+            # TODO AttributeError: module 'cv2.aruco' has no attribute 'drawAxis'. Axes tell a lot
         else:
             print('Did not find shoulder marker, {}'.format(ids_list))
             tvec, rvec = None, None
