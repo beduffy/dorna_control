@@ -219,6 +219,9 @@ def test_transformations(handeye_data_dict):
     # output = calibrate_camera_intrinsics(all_target2cam_transforms)
     # print('Camera intrinsics: \n{}'.format(output))
 
+    # TODO calibrate camera intrinsics should use full aruco pipeline
+    # TODO get mean projection and see what my pixel reprojection error is on all 12 corners or other position
+
     opencv_aruco_image_text = OpenCvArucoImageText()
     board, parameters, aruco_dict, marker_length = create_aruco_params()
     marker_separation = 0.0065
@@ -242,13 +245,12 @@ def test_transformations(handeye_data_dict):
     cv2.destroyAllWindows()
 
 
-def calibrate_camera_intrinsics(all_target2cam_transforms, detected_corners):
+def calibrate_camera_intrinsics(images):
     """
-    Calibrate camera intrinsics using ArUco marker poses.
+    Calibrate camera intrinsics using ArUco markers detected in a list of images.
     
     Args:
-        all_target2cam_transforms: List of 4x4 transforms from target (ArUco) to camera frame
-        detected_corners: List of actually detected corner points in image coordinates
+        images: List of color images containing ArUco markers
         
     Returns:
         camera_matrix: 3x3 camera intrinsic matrix
@@ -256,30 +258,55 @@ def calibrate_camera_intrinsics(all_target2cam_transforms, detected_corners):
         mean_error: Mean reprojection error in pixels
         errors: List of reprojection errors for each point
     """
-    # Known 3D coordinates of ArUco marker corners in marker frame
-    marker_size = 0.05  # 5cm, adjust based on actual marker size
-    objp = np.array([[-marker_size/2, marker_size/2, 0],
-                     [marker_size/2, marker_size/2, 0],
-                     [marker_size/2, -marker_size/2, 0],
-                     [-marker_size/2, -marker_size/2, 0]], dtype=np.float32)
+    # Create ArUco detector objects
+    opencv_aruco_image_text = OpenCvArucoImageText()
+    board, parameters, aruco_dict, marker_length = create_aruco_params()
+    marker_separation = 0.0065
     
-    # Use the actual detected corners instead of projecting
-    objpoints = [objp for _ in range(len(detected_corners))]
-    imgpoints = detected_corners
+    # Collect object and image points from all images
+    objpoints = []  # 3D points in marker coordinate system
+    imgpoints = []  # 2D points in image plane
     
-    # Initial camera matrix guess (based on image size)
-    width = 640  # Get from actual image
-    height = 480  # Get from actual image
-    camera_matrix = np.array([[width, 0, width/2],
-                             [0, height, height/2],
-                             [0, 0, 1]], dtype=np.float32)
+    for img in images:
+        # Use existing ArUco detection pipeline
+        camera_color_img_debug = img.copy()
+        color_img, depth_img, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(
+            img, None, aruco_dict, parameters, marker_length, 
+            id_on_shoulder_motor=1, 
+            opencv_aruco_image_text=opencv_aruco_image_text,
+            camera_color_img_debug=camera_color_img_debug
+        )
+        
+        if corners is not None and len(corners) > 0:
+            # Add detected corners to image points
+            for corner in corners:
+                imgpoints.append(corner.reshape(-1, 2))
+                
+                # Create corresponding 3D points (marker corners in marker frame)
+                marker_objp = np.array([
+                    [-marker_length/2, marker_length/2, 0],
+                    [marker_length/2, marker_length/2, 0],
+                    [marker_length/2, -marker_length/2, 0],
+                    [-marker_length/2, -marker_length/2, 0]
+                ], dtype=np.float32)
+                objpoints.append(marker_objp)
+    
+    # Get image dimensions from first image
+    height, width = images[0].shape[:2]
+    
+    # Initial camera matrix guess
+    camera_matrix = np.array([
+        [width, 0, width/2],
+        [0, height, height/2],
+        [0, 0, 1]
+    ], dtype=np.float32)
     dist_coeffs = np.zeros(5)
 
     # Calibrate camera
     ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
         objpoints, imgpoints, (width, height), None, None)
 
-    # Calculate reprojection error using actual detected points
+    # Calculate reprojection error
     mean_error = 0
     errors = []
     for i in range(len(objpoints)):
@@ -700,3 +727,4 @@ What I can do about it
 # TODO save pic or not? Save reprojection error or ambiguity or something?
 # TODO eventually put realsense in hand as well and do eye-in-hand. And multiple realsenses (maybe swap to handical or other? or do each one individually?)
 # TODO maybe just measure with a ruler and see what happens with the transform and stuff and see how it works
+
