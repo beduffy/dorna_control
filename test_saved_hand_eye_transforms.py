@@ -68,6 +68,7 @@ plot_all_handeye_data(handeye_data_dict, eye_in_hand=eye_in_hand)
 e.g. could I do multiple positions and fuse pointclouds somehow
 e.g. could I click aruco pose in image (automatically) and what?
 e.g. AX = XB 
+e.g. in eye in hand, ICP of 1st transform to 2nd, is the same for gripper as it is for camera?
 
 if we are eye-in-hand, and I click a point in image (e.g. aruco center), will multiplying that point by
 cam2gripper bring it to base coordinates or should it be cam2base (cam2gripper combined with gripper2base)? 

@@ -33,6 +33,13 @@ camera_matrix = np.array([[612.14801862, 0., 340.03640321],
 dist_coeffs = np.array(
     [1.80764862e-02, 1.09549436e+00, -3.38044260e-03, 4.04543459e-03, -4.26585263e+00])
 
+# october 27 2024 directly from using grippers
+# camera_matrix = np.array([[639.97875221,   0.        , 319.90874536],
+#        [  0.        , 479.91357711, 239.9565378 ],
+#        [  0.        ,   0.        ,   1.        ]])
+# dist_coeffs = np.array([[-0.00025456,  0.0004778 ,  0.00003447, -0.00002476, -0.00068842]])
+
+
 # directly from depth/color intrinsics from factory
 # camera_matrix = np.array([[depth_intrin.fx, 0., depth_intrin.ppx],
 #                           [0., depth_intrin.fy, depth_intrin.ppy],
