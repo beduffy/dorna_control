@@ -235,10 +235,12 @@ def test_transformations(handeye_data_dict):
     camera_color_img_debug = first_color_image.copy()
     color_img, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(first_color_image, aruco_dict, parameters, marker_length, id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug)
 
-    cam2arm_opt, arm2cam_opt = calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=marker_length, marker_separation=marker_separation)
+    cam2arm_opt, arm2cam_opt, input_obj_points_concat, input_img_points_concat = calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=marker_length, marker_separation=marker_separation)
 
     output = calibrate_camera_intrinsics(color_images)
+    # output = calibrate_camera_intrinsics(color_images[:5])
     print('Camera intrinsics: \n{}'.format(output))
+
     cv2.imshow('Camera Color Image Debug', camera_color_img_debug)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
@@ -277,20 +279,16 @@ def calibrate_camera_intrinsics(images):
             camera_color_img_debug=camera_color_img_debug
         )
         
-        if corners is not None and len(corners) > 0:
-            # Add detected corners to image points
-            for corner in corners:
-                imgpoints.append(corner.reshape(-1, 2))
-                
-                # Create corresponding 3D points (marker corners in marker frame)
-                marker_objp = np.array([
-                    [-marker_length/2, marker_length/2, 0],
-                    [marker_length/2, marker_length/2, 0],
-                    [marker_length/2, -marker_length/2, 0],
-                    [-marker_length/2, -marker_length/2, 0]
-                ], dtype=np.float32)
-                objpoints.append(marker_objp)
-    
+        cam2arm_opt, arm2cam_opt, input_obj_points_concat, input_img_points_concat = calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=marker_length, marker_separation=marker_separation)
+
+        # Reshape and convert types to match expected format
+        obj_points = input_obj_points_concat.reshape(-1, 1, 3).astype(np.float32)
+        img_points = input_img_points_concat.reshape(-1, 1, 2).astype(np.float32)
+        
+        objpoints.append(obj_points)
+        imgpoints.append(img_points)
+
+    print('Finished loading all object and image points. Running calibration')
     # Get image dimensions from first image
     height, width = images[0].shape[:2]
     
@@ -303,8 +301,7 @@ def calibrate_camera_intrinsics(images):
     dist_coeffs = np.zeros(5)
 
     # Calibrate camera
-    ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
-        objpoints, imgpoints, (width, height), None, None)
+    ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera( objpoints, imgpoints, (width, height), None, None)
 
     # Calculate reprojection error
     mean_error = 0
