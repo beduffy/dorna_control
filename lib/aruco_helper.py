@@ -143,7 +143,7 @@ def calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=0.0
     # TODO better understand insides of that function and have good descriptions of cam2arm vs arm2cam.
     cam2arm_opt, arm2cam_opt, _, _, _ = create_homogenous_transformations(tvec_pnp_opt, rvec_pnp_opt)
 
-    return cam2arm_opt, arm2cam_opt, input_obj_points_concat, input_img_points_concat
+    return cam2arm_opt, arm2cam_opt, tvec_pnp_opt, rvec_pnp_opt, input_obj_points_concat, input_img_points_concat
 
 
 def find_aruco_markers(color_img, aruco_dict, parameters, marker_length, id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug):
