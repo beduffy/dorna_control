@@ -40,6 +40,10 @@ folder_name = '27_10_2024_18_09_05'  # 21 images, took aruco off cardboard and t
 
 handeye_data_dict = load_all_handeye_data(folder_name)
 
+# TODO could recalculate all opencv transforms, and with undistortion TODO make sure RGB and not BGR?
+test_transformations(handeye_data_dict)  # TODO just moved above handeye but maybe should separate recalculate transformations with undistortion with new func
+
+
 handeye_calibrate_opencv(handeye_data_dict, folder_name, eye_in_hand=eye_in_hand)
 
 # # manually specified eye-in-hand transform instead of the above
@@ -50,7 +54,6 @@ handeye_calibrate_opencv(handeye_data_dict, folder_name, eye_in_hand=eye_in_hand
 # handeye_data_dict['saved_cam2arm'] = manually_measured_transform
 # print('manually measured cam2gripper \n', handeye_data_dict['saved_cam2arm'])
 
-test_transformations(handeye_data_dict)
 
 # plotting three different things in here: 
 # 1. gripper frames in arm frame
