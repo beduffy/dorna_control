@@ -36,7 +36,8 @@ eye_in_hand=True
 folder_name = '27_10_2024_13_59_14'  # first time realsense on gripper servo, so need to change all opencv stuff
 folder_name = '27_10_2024_15_50_00'  # some base rotation, then rotated wrist, then pitched wrist and more shoulder stuff
 folder_name = '27_10_2024_16_38_10'  # 10 images
-folder_name = '27_10_2024_18_09_05'  # 21 images, took aruco off cardboard and taped to ground so it is flatter
+folder_name = '27_10_2024_18_09_05'  # 22 images, took aruco off cardboard and taped to ground so it is flatter
+folder_name = '30_10_2024_11_02_54'  # 30 images, much  more dorna movement and tried to get more variation. sometimes aruco was doing axis flip thing but that was in text not visually (i'm not drawing aruco though). Also set toolhead x to 0 since wrist pitch can and innacuracies here can compound
 
 handeye_data_dict = load_all_handeye_data(folder_name)
 
@@ -53,12 +54,19 @@ t_cam2gripper = saved_cam2arm[:3, 3]
 verify_calibration(handeye_data_dict, R_cam2gripper, t_cam2gripper)
 
 # # manually specified eye-in-hand transform instead of the above
-# manually_measured_transform = np.eye(4)
-# # T[:3, :3] = R
-# # TODO reduce x by 0.1-0.2 actually im using toolhead so would be tip of gripper so servo is actually a good bit back
-# manually_measured_transform[:3, 3] = [0.0, 0.03, 0.05]  
-# handeye_data_dict['saved_cam2arm'] = manually_measured_transform
-# print('manually measured cam2gripper \n', handeye_data_dict['saved_cam2arm'])
+# TODO does this need to be rotated so z forward?
+manually_measured_transform = np.eye(4)
+# T[:3, :3] = R
+# TODO reduce x by 0.1-0.2 actually im using toolhead so would be tip of gripper so servo is actually a good bit back
+manually_measured_transform[:3, 3] = [0.0, 0.03, 0.05]  
+handeye_data_dict['saved_cam2arm'] = manually_measured_transform
+print('manually measured cam2gripper \n', handeye_data_dict['saved_cam2arm'])
+saved_cam2arm = handeye_data_dict['saved_cam2arm']
+
+R_cam2gripper_manual = saved_cam2arm[:3, :3]
+t_cam2gripper_manual = saved_cam2arm[:3, 3]
+verify_calibration(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual)
+
 
 
 # plotting three different things in here: 
