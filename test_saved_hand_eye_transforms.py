@@ -19,8 +19,10 @@ import matplotlib as mpl
 from scipy import optimize
 
 from lib.handeye_opencv_wrapper import handeye_calibrate_opencv, \
-    load_all_handeye_data, plot_all_handeye_data, test_transformations, \
+    load_all_handeye_data, test_transformations, \
         verify_calibration, optimize_cam2gripper_transform, verify_transform_chain
+from lib.handeye_plotting import plot_all_handeye_data
+
 
 np.set_printoptions(suppress=True)
 
@@ -126,7 +128,7 @@ def verify_optimise_verify_manual_calibration(handeye_data_dict, R_cam2gripper_m
     verify_calibration(handeye_data_dict, R_optimized, t_optimized)
     # TODO also verify this optimised transform
     # import pdb;pdb.set_trace()
-    
+
 verify_optimise_verify_manual_calibration(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual)
 
 #########################################
