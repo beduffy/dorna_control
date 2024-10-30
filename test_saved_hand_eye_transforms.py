@@ -60,55 +60,61 @@ verify_transform_chain(handeye_data_dict, saved_cam2arm)
 
 
 #########################################
-# # manually specified eye-in-hand transform instead of the above
-# Create rotation matrix for camera orientation (z forward, x right, y down)
-Rx = np.array([[0, 0, 1],
-               [0, -1, 0],
-               [1, 0, 0]])  # Rotate to get x right, y down, z forward
 
-# Create rotation matrix for 90 degree yaw (rotation around z axis)
-Rz = np.array([[0, -1, 0],
-               [1, 0, 0], 
-               [0, 0, 1]])
+def verify_manully_measured_transform(handeye_data_dict):
+    # TODO could I build tool in rviz or open3d and keep moving and checking AX = XB error? would help me understand everything better
+    # TODO im measuring gripper2cam but need cam2gripper, can visualisation deceive me i.e. visualisation looks good but it's wrong
 
-# R = Rx @ Ry  # Combined rotation
-R = Rx @ Rz  # Apply Rx first, then rotate 90 degrees in yaw
+    # manually specified eye-in-hand transform instead of the above
+    # Create rotation matrix for camera orientation (z forward, x right, y down)
+    Rx = np.array([[0, 0, 1],
+                [0, -1, 0],
+                [1, 0, 0]])  # Rotate to get x right, y down, z forward
 
+    # Create rotation matrix for 90 degree yaw (rotation around z axis)
+    Rz = np.array([[0, -1, 0],
+                [1, 0, 0], 
+                [0, 0, 1]])
 
-# TODO im measuring gripper2cam but need cam2gripper, can visualisation deceive me i.e. visualisation looks good but it's wrong
+    # R = Rx @ Ry  # Combined rotation
+    R = Rx @ Rz  # Apply Rx first, then rotate 90 degrees in yaw
 
+    manually_measured_transform = np.eye(4)
+    manually_measured_transform[:3, :3] = R
+    manually_measured_transform[:3, 3] = [0.025, 0.03, 0.05]  
+    # manually_measured_transform[:3, 3] = [-0.025, -0.03, -0.05]  # invert numbers
+    handeye_data_dict['saved_cam2arm'] = manually_measured_transform
+    print('manually measured cam2gripper \n', handeye_data_dict['saved_cam2arm'])
+    saved_cam2arm = handeye_data_dict['saved_cam2arm']
 
-manually_measured_transform = np.eye(4)
-manually_measured_transform[:3, :3] = R
-manually_measured_transform[:3, 3] = [0.025, 0.03, 0.05]  
-# manually_measured_transform[:3, 3] = [-0.025, -0.03, -0.05]  # invert numbers
-handeye_data_dict['saved_cam2arm'] = manually_measured_transform
-print('manually measured cam2gripper \n', handeye_data_dict['saved_cam2arm'])
-saved_cam2arm = handeye_data_dict['saved_cam2arm']
+    # R_cam2gripper_manual = saved_cam2arm[:3, :3]
+    # t_cam2gripper_manual = saved_cam2arm[:3, 3]
+    R_gripper2cam_manual = saved_cam2arm[:3, :3]
+    t_gripper2cam_manual = saved_cam2arm[:3, 3]
 
-# R_cam2gripper_manual = saved_cam2arm[:3, :3]
-# t_cam2gripper_manual = saved_cam2arm[:3, 3]
-R_gripper2cam_manual = saved_cam2arm[:3, :3]
-t_gripper2cam_manual = saved_cam2arm[:3, 3]
+    # Convert gripper2cam to cam2gripper
+    gripper2cam = np.eye(4)
+    gripper2cam[:3, :3] = R_gripper2cam_manual
+    gripper2cam[:3, 3] = t_gripper2cam_manual
 
-# Convert gripper2cam to cam2gripper
-gripper2cam = np.eye(4)
-gripper2cam[:3, :3] = R_gripper2cam_manual
-gripper2cam[:3, 3] = t_gripper2cam_manual
+    # Invert to get cam2gripper
+    cam2gripper = np.linalg.inv(gripper2cam)
+    R_cam2gripper_manual = cam2gripper[:3, :3]
+    t_cam2gripper_manual = cam2gripper[:3, 3]
+    # manually_measured_transform = cam2gripper
 
-# Invert to get cam2gripper
-cam2gripper = np.linalg.inv(gripper2cam)
-R_cam2gripper_manual = cam2gripper[:3, :3]
-t_cam2gripper_manual = cam2gripper[:3, 3]
-manually_measured_transform = cam2gripper
-#########################################
-
-
-
-#########################################
-
-def verify_optimise_verify_manual_calibration(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual):
     verify_calibration(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual)
+
+    return gripper2cam, cam2gripper, R_cam2gripper_manual, t_cam2gripper_manual
+
+gripper2cam, cam2gripper, R_cam2gripper_manual, t_cam2gripper_manual = verify_manully_measured_transform(handeye_data_dict)
+#########################################
+
+
+
+#########################################
+
+def optimise_and_verify_manual_calibration(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual):
     # TODO build_transform function since im always :3, 3 in
     # TODO my manual ruler gave 2.37 norm error whereas before is was closer to 3
     # TODO could do a random grid search or optimisation or gradient descent to find those 3 numbers
@@ -129,7 +135,7 @@ def verify_optimise_verify_manual_calibration(handeye_data_dict, R_cam2gripper_m
     # TODO also verify this optimised transform
     # import pdb;pdb.set_trace()
 
-verify_optimise_verify_manual_calibration(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual)
+optimise_and_verify_manual_calibration(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual)
 
 #########################################
 
