@@ -282,6 +282,10 @@ def test_transformations(handeye_data_dict):
     # cv2.waitKey(0)
     # cv2.destroyAllWindows()
 
+    # TODO draw all aruco axes to find instabilities
+    # TODO does aruco text below have instabilites from 1 marker or all 12?
+    # TODO loop through all pointclouds and aruco transform and then comment function, just a sanity check
+
     # Undistort the first image using camera matrix and distortion coefficients
     h, w = first_color_image.shape[:2]
     newcameramtx, roi = cv2.getOptimalNewCameraMatrix(camera_matrix, dist_coeffs, (w,h), 1, (w,h))
@@ -497,6 +501,10 @@ def verify_transform_chain(handeye_data_dict, saved_cam2arm):
     """Verify each transform in the calibration chain makes physical sense."""
     
     # 1. Verify gripper2base transforms
+    R_cam2target = handeye_data_dict['R_cam2target']
+    t_cam2target = handeye_data_dict['t_cam2target']
+    R_base2gripper = handeye_data_dict['R_base2gripper']
+    t_base2gripper = handeye_data_dict['t_base2gripper']
     R_gripper2base = handeye_data_dict['R_gripper2base']
     t_gripper2base = handeye_data_dict['t_gripper2base']
     
@@ -504,6 +512,7 @@ def verify_transform_chain(handeye_data_dict, saved_cam2arm):
     print("First gripper position in base frame:", t_gripper2base[0])
     print("Expected: Roughly 0.3-0.4m in x forward, minimal y/z if centered")
     
+    # TODO fix below
     # Check if transforms are in expected ranges
     max_expected_gripper_distance = 0.5  # 50cm - adjust based on your robot
     if np.any(np.abs(t_gripper2base) > max_expected_gripper_distance):
@@ -517,10 +526,68 @@ def verify_transform_chain(handeye_data_dict, saved_cam2arm):
     print("First marker position in camera frame:", t_target2cam[0])
     print("Expected: Z should be positive (marker in front of camera)")
     print("Expected: X,Y should be centered if marker is centered in image")
+
+    # when arm moves, pointcloud should move with it. gripper transformation from pose 1 to 2 is same as camera transformation from pose 1 to 2
+    # first just check transformation
+    print('\nt_gripper2base[0] and [1]') 
+    print(t_gripper2base[0], t_gripper2base[1])
+    distance_gripper = np.linalg.norm(t_gripper2base[0] - t_gripper2base[1])
+    print('euclidean distance between both gripper positions: {:.3f}'.format(distance_gripper))
+
+    print('\nt_base2gripper[0] and [1]') 
+    print(t_base2gripper[0], t_base2gripper[1])
+    distance_gripper = np.linalg.norm(t_base2gripper[0] - t_base2gripper[1])  # TODO euclidean distance is 0?!?!?!
+    print('euclidean distance between both gripper positions: {:.3f}'.format(distance_gripper))
+
+    print('\nt_base2gripper[1] and [2]') 
+    print(t_base2gripper[1], t_base2gripper[2])
+    distance_gripper = np.linalg.norm(t_base2gripper[1] - t_base2gripper[2])
+    print('euclidean distance between both gripper positions: {:.3f}'.format(distance_gripper))
+
+    print('\nt_target2cam[0] and [1]')  # TODO is it cam2target? the camera is moving but the target isn't
+    print(t_target2cam[0], t_target2cam[1])
+    distance_target2cam = np.linalg.norm(t_target2cam[0] - t_target2cam[1])
+    print('euclidean distance between both target2cam positions: {:.3f}'.format(distance_target2cam))
+
+    print('\nt_cam2target[0] and [1]')  # TODO is it cam2target? the camera is moving but the target isn't
+    print(t_cam2target[0], t_cam2target[1])
+    distance_cam2target = np.linalg.norm(t_cam2target[0] - t_cam2target[1])
+    print('euclidean distance between both cam2target positions: {:.3f}'.format(distance_cam2target))
+
+
+    # print('\nt_gripper2base[1] and [2]') 
+    # print(t_gripper2base[1], t_gripper2base[2])
+    # distance_gripper = np.linalg.norm(t_gripper2base[1] - t_gripper2base[2])
+    # print('euclidean distance between both gripper positions: {:.3f}'.format(distance_gripper))
+
+    # print('\nt_cam2target[1] and [2]')  # TODO is it cam2target? the camera is moving but the target isn't
+    # print(t_cam2target[1], t_cam2target[2])
+    # distance_cam2target = np.linalg.norm(t_cam2target[1] - t_cam2target[2])
+    # print('euclidean distance between both cam2target positions: {:.3f}'.format(distance_cam2target))
+
+    # nice the below outputs:
+    '''
+    From 0 to 1: gripper dist: 0.060. euclidean_dist: 0.051
+    From 1 to 2: gripper dist: 0.175. euclidean_dist: 0.208
+    From 2 to 3: gripper dist: 0.035. euclidean_dist: 0.035
+    From 3 to 4: gripper dist: 0.037. euclidean_dist: 0.041
+    From 4 to 5: gripper dist: 0.099. euclidean_dist: 0.090
+    From 5 to 6: gripper dist: 0.035. euclidean_dist: 0.036
+    From 6 to 7: gripper dist: 0.034. euclidean_dist: 0.011
+    '''
+    # TODO of course the realsense is at an angle so wrist roll/pitch angles change the distance but never too far
+    # TODO deeply understand why cam2target and not target2cam
+    for idx in range(t_gripper2base.shape[0] - 1):
+        distance_gripper = np.linalg.norm(t_gripper2base[idx] - t_gripper2base[idx + 1])
+        distance_cam2target = np.linalg.norm(t_cam2target[idx] - t_cam2target[idx + 1])
+        print('From {} to {}: gripper dist: {:.3f}. euclidean_dist: {:.3f}'.format(idx, idx + 1, distance_gripper, distance_cam2target))
     
     # Check if marker is in front of camera
     if np.any(t_target2cam[:, 2] < 0):
-        print("WARNING: Some markers appear behind camera! Check target2cam transforms")
+        # TODO deeply understand why its target to cam here
+        msg = "WARNING: Some markers appear behind camera! Check target2cam transforms"
+        print(msg)
+        sys.exit(msg)
     
     # 3. Verify final cam2gripper transform
     print("\n=== Camera to Gripper Transform Verification ===")
@@ -548,26 +615,27 @@ def verify_transform_chain(handeye_data_dict, saved_cam2arm):
     verify_rotation_matrix(R_target2cam[0], "First target2cam rotation")
     verify_rotation_matrix(R_cam2gripper, "Final cam2gripper rotation")
     
+    # TODO bring other function call here?
     # 5. Verify AX=XB equation
-    print("\n=== AX=XB Equation Verification ===")
-    for i in range(len(R_gripper2base)):
-        # Build transforms
-        A = np.eye(4)
-        A[:3, :3] = R_gripper2base[i]
-        A[:3, 3] = t_gripper2base[i]
+    # print("\n=== AX=XB Equation Verification ===")
+    # for i in range(len(R_gripper2base)):
+    #     # Build transforms
+    #     A = np.eye(4)
+    #     A[:3, :3] = R_gripper2base[i]
+    #     A[:3, 3] = t_gripper2base[i]
         
-        X = saved_cam2arm
+    #     X = saved_cam2arm
         
-        B = np.eye(4)
-        B[:3, :3] = R_target2cam[i]
-        B[:3, 3] = t_target2cam[i]
+    #     B = np.eye(4)
+    #     B[:3, :3] = R_target2cam[i]
+    #     B[:3, 3] = t_target2cam[i]
         
-        # Compare AX and XB
-        AX = np.dot(A, X)
-        XB = np.dot(X, B)
-        error = np.linalg.norm(AX - XB)
-        if error > 0.1:  # adjust threshold as needed
-            print(f"Large AX=XB error at pose {i}: {error}")
+    #     # Compare AX and XB
+    #     AX = np.dot(A, X)
+    #     XB = np.dot(X, B)
+    #     error = np.linalg.norm(AX - XB)
+    #     if error > 0.1:  # adjust threshold as needed
+    #         print(f"Large AX=XB error at pose {i}: {error}")
     
     return True
 
