@@ -19,6 +19,8 @@ from lib.aruco_image_text import OpenCvArucoImageText
 
 
 # TODO plotting functions to another file?
+# TODO I used to calculate inverse cam2arm but transformation between two transforms should be the same?
+# TODO what if gripper pose x isn't suppose to be forward? Would that change anything?
 
 
 def load_all_handeye_data(folder_name):
@@ -173,8 +175,34 @@ def test_transformations(handeye_data_dict):
         - R_target2cam and t_target2cam: The rotation and translation of the calibration target (e.g., ArUco marker) in the camera frame, i.e., the transformation from the camera to the target.
         - loop through all gripper2base and base2gripper and confirm the transfrom has its inverse correctly set by checking if output is identity
         - same for cam2target
-        - ? TODO
+        - camera calibration intrinsics and reconstruction error before and after
+        - recalculate aruco pipeline with undistorted images
+        - visualise some images
     '''
+
+    # TODO double check all gripper2base and etc
+    R_gripper2base = handeye_data_dict['R_gripper2base']
+    t_gripper2base = handeye_data_dict['t_gripper2base']
+    R_base2gripper = handeye_data_dict['R_base2gripper']
+    t_base2gripper = handeye_data_dict['t_base2gripper']
+    R_target2cam = handeye_data_dict['R_target2cam']
+    t_target2cam = handeye_data_dict['t_target2cam']
+    R_cam2target = handeye_data_dict['R_cam2target']
+    t_cam2target = handeye_data_dict['t_cam2target']
+
+    # Verify input transforms - add debug prints
+    print("Sample gripper2base transform:\n", np.vstack((R_gripper2base[0], t_gripper2base[0].reshape(1,3))))
+    print("Sample target2cam transform:\n", np.vstack((R_target2cam[0], t_target2cam[0].reshape(1,3))))
+
+    # Verify units are in meters
+    # gripper2_base_tvec = t_gripper2base[:3, 3]
+    print('t_gripper2base[0]: ', t_gripper2base[0])
+    if np.any(abs(t_gripper2base[0]) > 10):  # Assuming arm can't be >10m
+        print("Warning: Large translation values detected. Check units.")
+    else:
+        print('gripper transforms seem to be in metres since no large units above 10 (which would indicate mms)')
+
+    check_pose_distribution(R_gripper2base, t_gripper2base)
 
     all_gripper2base_transforms = handeye_data_dict['all_gripper2base_transforms']
     all_base2gripper_transforms = handeye_data_dict['all_base2gripper_transforms']
@@ -183,8 +211,6 @@ def test_transformations(handeye_data_dict):
 
     # gripper2base should bring base to gripper e.g. 0, 0, 0 to usual 0.4 metres in front
     # TODO not sure how to test but it does that since visualisation uses all_gripper2base_transforms
-
-
     # same with target2cam: transformation from the camera to the target. 0,0,0 to aruco target
     # TODO same, but visualisation works with target2cam
 
@@ -237,9 +263,9 @@ def test_transformations(handeye_data_dict):
     color_img, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(first_color_image, aruco_dict, parameters, marker_length, id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug)
     cam2arm_opt, arm2cam_opt, tvec_pnp_opt, rvec_pnp_opt, input_obj_points_concat, input_img_points_concat = calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=marker_length, marker_separation=marker_separation)
 
-    cv2.imshow('Camera Color Image Debug', camera_color_img_debug)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # cv2.imshow('Camera Color Image Debug', camera_color_img_debug)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
 
     # Undistort the first image using camera matrix and distortion coefficients
     h, w = first_color_image.shape[:2]
@@ -253,9 +279,9 @@ def test_transformations(handeye_data_dict):
     # Display original and undistorted images side by side
     # comparison = np.hstack((first_color_image, undistorted_img))
     # cv2.imshow('Original vs Undistorted', comparison)
-    cv2.imshow('Original vs Undistorted', undistorted_img)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # cv2.imshow('Original vs Undistorted', undistorted_img)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
 
     # TODO could recalculate all opencv transforms, and with undistortion TODO make sure RGB and not BGR?
     # store back into handeye_data_dict. recalculate all_target2cam_transforms, all_cam2target_transforms
@@ -330,6 +356,52 @@ def test_transformations(handeye_data_dict):
         't_cam2target': np.array(new_cam2target_tvecs)
     })
 
+
+
+def verify_calibration(handeye_data_dict, R_cam2gripper, t_cam2gripper):
+    """Verify calibration quality using AX=XB equation"""
+    for i in range(len(handeye_data_dict['R_gripper2base'])):
+        # Build transforms
+        X = np.eye(4)
+        X[:3,:3] = R_cam2gripper
+        X[:3,3] = t_cam2gripper.ravel()
+        
+        A = np.eye(4)
+        A[:3,:3] = handeye_data_dict['R_gripper2base'][i]
+        A[:3,3] = handeye_data_dict['t_gripper2base'][i]
+        
+        B = np.eye(4)
+        B[:3,:3] = handeye_data_dict['R_target2cam'][i]
+        B[:3,3] = handeye_data_dict['t_target2cam'][i]
+        
+        # AX should equal XB
+        AX = A @ X
+        XB = X @ B
+        # TODO why norm? TODO understand entire function more since it is in essense what we are optimising for
+        error = np.linalg.norm(AX - XB)
+        print(f"Transform pair {i} error: {error}")
+
+
+def check_pose_distribution(R_gripper2base, t_gripper2base):
+    """Check if calibration poses are well-distributed"""
+    # Convert rotations to euler angles
+    euler_angles = [cv2.Rodrigues(R)[0].ravel() for R in R_gripper2base]
+    euler_angles = np.array(euler_angles)
+    
+    # Check rotation variation
+    angle_range = np.ptp(euler_angles, axis=0)
+    print("Rotation ranges (rad):", angle_range)
+    
+    # Check translation variation
+    trans_range = np.ptp(t_gripper2base, axis=0)
+    print("Translation ranges (m):", trans_range)
+    
+    min_angle_range = 0.5
+    min_translation_range = 0.1
+    if np.any(angle_range < min_angle_range):  # Less than ~30 degrees
+        print("Warning: Limited rotation variation, less than: {}".format(min_angle_range))
+    if np.any(trans_range < min_translation_range):  # Less than 10cm
+        print("Warning: Limited translation variation, less than: {}".format(min_translation_range))
 
 
 def calibrate_camera_intrinsics(images, camera_matrix, dist_coeffs):
@@ -674,7 +746,7 @@ def handeye_calibrate_opencv(handeye_data_dict, folder_name, eye_in_hand=True):
     t_cam2target = handeye_data_dict['t_cam2target']
 
     method = cv2.CALIB_HAND_EYE_TSAI  # default
-    method = cv2.CALIB_HAND_EYE_DANIILIDIS  # tried both, they both work
+    method = cv2.CALIB_HAND_EYE_DANIILIDIS  # tried both, they both work in simulation
     
     # eye-in-hand (according to default opencv2 params and weak documentation. "inputting the suitable transformations to the function" for eye-to-hand)
     # first formula has b_T_c for X so that's what comes out of function. It expects b_T_g and c_T_t so gripper2base and target2cam
@@ -693,67 +765,29 @@ def handeye_calibrate_opencv(handeye_data_dict, folder_name, eye_in_hand=True):
     # for eye-in-hand, output should be  ->	R_cam2gripper, t_cam2gripper  
     # but for eye to hand: R_cam2base_est, t_cam2base_est from unit tests in opencv
 
-
+    full_homo_RT = np.identity(4)
     if eye_in_hand:
         # eye-in-hand
         # TODO outputs below are actually R_cam2gripper, t_cam2gripper
-        R_cam2base_est, t_cam2base_est = cv2.calibrateHandEye(R_gripper2base, t_gripper2base,
+        # R_cam2base_est, t_cam2base_est = cv2.calibrateHandEye(R_gripper2base, t_gripper2base,
+        R_cam2gripper, t_cam2gripper = cv2.calibrateHandEye(R_gripper2base, t_gripper2base,
                                                             #   R_cam2target, t_cam2target, method=method)
                                                               R_target2cam, t_target2cam, method=method)  # this was so much better to above? and also more correct according to transforms
+        full_homo_RT[:3, :3] = R_cam2gripper
+        full_homo_RT[:3, 3] = t_cam2gripper.T
     else:
         # eye-to-hand
         R_cam2base_est, t_cam2base_est = cv2.calibrateHandEye(R_base2gripper, t_base2gripper,
                                                               R_target2cam, t_target2cam, method=method)
 
-    full_homo_RT = np.identity(4)
-    full_homo_RT[:3, :3] = R_cam2base_est
-    full_homo_RT[:3, 3] = t_cam2base_est.T
+        full_homo_RT[:3, :3] = R_cam2base_est
+        full_homo_RT[:3, 3] = t_cam2base_est.T
 
     print('Saving handeye (cv2) transform \n{}'.format(full_homo_RT))
     np.savetxt('data/{}/latest_cv2_cam2arm.txt'.format(folder_name), full_homo_RT, delimiter=' ')
-    handeye_data_dict['saved_cam2arm'] = full_homo_RT
-
-    # # pos_camera = np.dot(-R_cam2gripper, np.matrix(t_cam2gripper).T)
-    # # TODO why does pos_camera seem to have the better position and similarity to my old cam2arms?
-    # pos_camera = np.dot(-R_cam2gripper, np.matrix(t_cam2gripper))
-    # cam2arm_local = np.identity(4)
-    # cam2arm_local[:3, :3] = R_cam2gripper.T
-    # # cam2arm_local[:3, :3] = R_cam2gripper
-    # cam2arm_local[0, 3] = pos_camera[0]
-    # cam2arm_local[1, 3] = pos_camera[1]
-    # cam2arm_local[2, 3] = pos_camera[2]
-    # # print('cam2arm inverse:\n{}'.format(cam2arm_local))
-    # print('handeye (cv2) cam2arm inverse \n{}'.format(cam2arm_local))
-    # # print('Saving handeye (cv2) cam2arm inverse \n{}'.format(cam2arm_local))
-    # # np.savetxt('data/{}/latest_cv2_cam2arm.txt'.format(folder_name), cam2arm_local, delimiter=' ')
+    handeye_data_dict['saved_cam2arm'] = full_homo_RT  # TODO gotta be careful with naming
 
 
-# Eduardo's code from here: https://forum.opencv.org/t/eye-to-hand-calibration/5690/10
-# TODO maybe it's nice to just have a param for eye-to-hand like that so I can keep everything pretty similar?
-def calibrate_eye_hand(R_gripper2base, t_gripper2base, R_target2cam, t_target2cam, eye_to_hand=True):
-    # the only that changes is gripper2base vs base2gripper
-    if eye_to_hand:
-        # change coordinates from gripper2base to base2gripper
-        R_base2gripper, t_base2gripper = [], []
-        for R, t in zip(R_gripper2base, t_gripper2base):
-            R_b2g = R.T
-            t_b2g = -R_b2g @ t
-            R_base2gripper.append(R_b2g)
-            t_base2gripper.append(t_b2g)
-        
-        # change parameters values
-        R_gripper2base = R_base2gripper
-        t_gripper2base = t_base2gripper
-
-    # calibrate
-    R, t = cv2.calibrateHandEye(
-        R_gripper2base=R_gripper2base,
-        t_gripper2base=t_gripper2base,
-        R_target2cam=R_target2cam,
-        t_target2cam=t_target2cam,
-    )
-
-    return R, t
 
 if __name__ == '__main__':
     handeye_calibrate_opencv()
@@ -786,6 +820,7 @@ What I can do about it
 - confirm target2cam and base2gripper separately
 - use rvec instead of rotation matrix?
 - read internet:
+# Eduardo's code from here: https://forum.opencv.org/t/eye-to-hand-calibration/5690/10
     - https://stackoverflow.com/questions/57008332/opencv-wrong-result-in-calibratehandeye-function
     - https://www.reddit.com/r/opencv/comments/n46qaf/question_hand_eye_calibration_bad_results/
     - https://code.ihub.org.cn/projects/729/repository/revisions/master/entry/modules/calib3d/test/test_calibration_hand_eye.cpp

@@ -19,7 +19,7 @@ import matplotlib as mpl
 from scipy import optimize
 
 from lib.handeye_opencv_wrapper import handeye_calibrate_opencv, \
-    load_all_handeye_data, plot_all_handeye_data, test_transformations
+    load_all_handeye_data, plot_all_handeye_data, test_transformations, verify_calibration
 
 np.set_printoptions(suppress=True)
 
@@ -45,6 +45,12 @@ test_transformations(handeye_data_dict)  # TODO just moved above handeye but may
 
 
 handeye_calibrate_opencv(handeye_data_dict, folder_name, eye_in_hand=eye_in_hand)
+
+saved_cam2arm = handeye_data_dict['saved_cam2arm']
+
+R_cam2gripper = saved_cam2arm[:3, :3]
+t_cam2gripper = saved_cam2arm[:3, 3]
+verify_calibration(handeye_data_dict, R_cam2gripper, t_cam2gripper)
 
 # # manually specified eye-in-hand transform instead of the above
 # manually_measured_transform = np.eye(4)
