@@ -415,7 +415,7 @@ def verify_calibration(handeye_data_dict, R_cam2gripper, t_cam2gripper):
         # TODO sum all errors and optimise myself
         
         # print(f"Transform pair {i} subtract:\n {matrix_subtract}")
-        print(f"Transform pair {i} error: {full_error:.3f}")
+        # print(f"Transform pair {i} error: {full_error:.3f}")
         print(f"Transform pair {i} rotation_error: {rotation_error:.3f}")  # TODO in radians right or in rotational matrix values?
         print(f"Transform pair {i} translation_error: {translation_error:.3f}")
 
@@ -423,13 +423,17 @@ def verify_calibration(handeye_data_dict, R_cam2gripper, t_cam2gripper):
 def optimize_cam2gripper_transform(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual):
     def error_function(params):
         # Extract rotation and translation from params
-        rx, ry, rz, tx, ty, tz = params
-        R = Rotation.from_euler('xyz', [rx, ry, rz]).as_matrix()
+        # rx, ry, rz, tx, ty, tz = params
+        # R = Rotation.from_euler('xyz', [rx, ry, rz]).as_matrix()
+        # First 9 params are rotation matrix elements (row by row)
+        R = np.array(params[:9]).reshape(3,3)
+        # Last 3 params are translation
+        t = np.array(params[9:])
         
         # Build transform
         X = np.eye(4)
         X[:3, :3] = R
-        X[:3, 3] = [tx, ty, tz]
+        X[:3, 3] = t
         
         total_error = 0
         for i in range(len(handeye_data_dict['R_gripper2base'])):
@@ -457,17 +461,36 @@ def optimize_cam2gripper_transform(handeye_data_dict, R_cam2gripper_manual, t_ca
             
             total_error += rotation_error + translation_error
             
-        return total_error
+        # Add penalty for non-orthogonal rotation matrix
+        orthogonality_error = np.linalg.norm(R @ R.T - np.eye(3))
+        det_error = abs(np.linalg.det(R) - 1.0)
+        
+        return total_error + 10.0 * (orthogonality_error + det_error)  # Weight the orthogonality constraint
     
-    # Initial guess from your measurements
-    initial_params = [0, 0, 0, -0.025, -0.03, -0.05]  # [rx,ry,rz,tx,ty,tz]
-    # initial
+    # Initial params: flatten R and concatenate with t
+    initial_params = np.concatenate([R_cam2gripper_manual.flatten(), t_cam2gripper_manual])
+    
+    # Add bounds to keep the optimization reasonable
+    bounds = [(-1, 1)] * 9 + [(-0.2, 0.2)] * 3  # rotation matrix elements between -1,1, translations ±20cm
     
     # Optimize
     result = minimize(error_function, initial_params, 
-                     method='Nelder-Mead')
+                     method='SLSQP',  # Changed to SLSQP to handle bounds
+                     bounds=bounds)
     
-    return result.x
+    if not result.success:
+        print("Warning: Optimization did not converge!")
+        print("Message:", result.message)
+    
+    # Extract and return R and t separately
+    R_optimized = result.x[:9].reshape(3,3)
+    t_optimized = result.x[9:]
+    
+    # Project rotation matrix to closest orthogonal matrix
+    U, _, Vh = np.linalg.svd(R_optimized)
+    R_optimized = U @ Vh
+    
+    return R_optimized, t_optimized
 
 
 def check_pose_distribution(R_gripper2base, t_gripper2base):
@@ -834,7 +857,7 @@ def handeye_calibrate_opencv(handeye_data_dict, folder_name, eye_in_hand=True):
     t_cam2target = handeye_data_dict['t_cam2target']
 
     method = cv2.CALIB_HAND_EYE_TSAI  # default
-    method = cv2.CALIB_HAND_EYE_DANIILIDIS  # tried both, they both work in simulation
+    # method = cv2.CALIB_HAND_EYE_DANIILIDIS  # tried both, they both work in simulation
     
     # eye-in-hand (according to default opencv2 params and weak documentation. "inputting the suitable transformations to the function" for eye-to-hand)
     # first formula has b_T_c for X so that's what comes out of function. It expects b_T_g and c_T_t so gripper2base and target2cam, read transforms backwards
