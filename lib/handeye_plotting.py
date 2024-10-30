@@ -166,39 +166,6 @@ def plot_arm_gripper_frames(all_gripper2base_transforms, all_joint_angles, plot_
 
 
 
-
-def plot_aruco_frames_in_camera_frame(all_target2cam_transforms, cam_pcd):
-    # TODO do I want to visualise how the aruco coordinate frame looks for each image? Give option and loop through all? It would prove less distortion effects?
-    # TODO do the below for gripper poses as well, they should perfectly align rotation-wise to aruco poses
-    # TODO ideally I'd visualise a frustum. matplotlib?
-    # TODO draw mini plane of all arucos rather than coordinate frames. https://github.com/isl-org/Open3D/issues/3618
-    
-    geometry_to_plot = []
-    origin_cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2, origin=[0.0, 0.0, 0.0])
-    geometry_to_plot.append(origin_cam_frame)
-
-    for idx, target2cam_transform in enumerate(all_target2cam_transforms):
-        coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-                                        # size=0.1, origin=[cam2target_tvec[0], cam2target_tvec[1], cam2target_tvec[2]])
-                                        size=0.1, origin=[0.0, 0.0, 0.0])
-        # coordinate_frame.rotate(all_target2cam_rotation_mats[idx])
-        coordinate_frame.transform(target2cam_transform)
-
-        sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.01)
-        # TODO WHY is the sphere always a bit higher than the origin of the coordinate frame?
-        # sphere.translate([cam2target_tvec[0], cam2target_tvec[1], cam2target_tvec[2]])
-        sphere.transform(target2cam_transform)
-        geometry_to_plot.append(sphere)
-        geometry_to_plot.append(coordinate_frame)
-        # TODO need better way to visualise? images? pointclouds? Origin should be different or bigger and point x outward?
-
-    if cam_pcd is not None:
-        geometry_to_plot.append(cam_pcd)
-    print('Visualising camera origin and aruco frames in camera frame (with first cam_pcd)')
-    o3d.visualization.draw_geometries(geometry_to_plot)
-
-
-
 def plot_one_arm_gripper_camera_frame_eye_in_hand(all_gripper2base_transforms, all_joint_angles, gripper2cam):
     origin_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2, origin=[0.0, 0.0, 0.0])
 
@@ -246,3 +213,62 @@ def plot_one_arm_gripper_camera_frame_eye_in_hand(all_gripper2base_transforms, a
     print('Visualising line mesh arms + gripper frames + arm origin frame in arm frame')
     o3d.visualization.draw_geometries(geometry_to_plot)
 
+
+def plot_aruco_frames_in_camera_frame(all_target2cam_transforms, cam_pcd):
+    # TODO do I want to visualise how the aruco coordinate frame looks for each image? Give option and loop through all? It would prove less distortion effects?
+    # TODO do the below for gripper poses as well, they should perfectly align rotation-wise to aruco poses
+    # TODO ideally I'd visualise a frustum. matplotlib?
+    # TODO draw mini plane of all arucos rather than coordinate frames. https://github.com/isl-org/Open3D/issues/3618
+    
+    geometry_to_plot = []
+    origin_cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2, origin=[0.0, 0.0, 0.0])
+    geometry_to_plot.append(origin_cam_frame)
+
+    for idx, target2cam_transform in enumerate(all_target2cam_transforms):
+        coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+                                        size=0.1, origin=[0.0, 0.0, 0.0])
+        coordinate_frame.transform(target2cam_transform)
+
+        sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.01)
+        # TODO WHY is the sphere always a bit higher than the origin of the coordinate frame?
+        # sphere.translate([cam2target_tvec[0], cam2target_tvec[1], cam2target_tvec[2]])
+        sphere.transform(target2cam_transform)
+        geometry_to_plot.append(sphere)
+        geometry_to_plot.append(coordinate_frame)
+        # TODO need better way to visualise? images? pointclouds? Origin should be different or bigger and point x outward?
+
+    if cam_pcd is not None:
+        geometry_to_plot.append(cam_pcd)
+    print('Visualising camera origin and aruco frames in camera frame (with first cam_pcd)')
+    o3d.visualization.draw_geometries(geometry_to_plot)
+
+
+def plot_every_cam_pcd_and_aruco_marker(color_images, depth_images, all_target2cam_transforms):
+    # TODO would love to point camera properly or even have it along coordinate transform? right now have to flip everytime
+
+    # for idx, target2cam_transform in enumerate(all_target2cam_transforms):
+    for idx, _ in enumerate(color_images):
+        target2cam_transform = all_target2cam_transforms[idx]
+        geometry_to_plot = []
+        origin_cam_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.2, origin=[0.0, 0.0, 0.0])
+        geometry_to_plot.append(origin_cam_frame)
+
+        camera_color_img = color_images[idx]
+        camera_depth_img = depth_images[idx]
+        coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+                                        size=0.1, origin=[0.0, 0.0, 0.0])
+        coordinate_frame.transform(target2cam_transform)
+
+        sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.01)
+        # TODO WHY is the sphere always a bit higher than the origin of the coordinate frame?
+        # sphere.translate([cam2target_tvec[0], cam2target_tvec[1], cam2target_tvec[2]])
+        sphere.transform(target2cam_transform)
+        geometry_to_plot.append(sphere)
+        geometry_to_plot.append(coordinate_frame)
+
+        # TODO need better way to visualise? images? pointclouds? Origin should be different or bigger and point x outward?
+
+        cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img, pinhole_camera_intrinsic, visualise=False)
+        geometry_to_plot.append(cam_pcd)
+        print('{}: Visualising camera origin and aruco frames in camera frame (with first cam_pcd)'.format(idx))
+        o3d.visualization.draw_geometries(geometry_to_plot)
