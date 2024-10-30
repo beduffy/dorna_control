@@ -19,7 +19,8 @@ import matplotlib as mpl
 from scipy import optimize
 
 from lib.handeye_opencv_wrapper import handeye_calibrate_opencv, \
-    load_all_handeye_data, plot_all_handeye_data, test_transformations, verify_calibration
+    load_all_handeye_data, plot_all_handeye_data, test_transformations, \
+        verify_calibration, optimize_cam2gripper_transform
 
 np.set_printoptions(suppress=True)
 
@@ -32,7 +33,7 @@ np.set_printoptions(suppress=True)
 # folder_name = '31_03_2024_17_34_45'  # 24 transforms, stronger flatter mini pupper cardboard, more ducttape
 # overall goal is that I really I just want cam2arm to be similar in position to one aruco to camera?
 
-eye_in_hand=True
+eye_in_hand = True
 folder_name = '27_10_2024_13_59_14'  # first time realsense on gripper servo, so need to change all opencv stuff
 folder_name = '27_10_2024_15_50_00'  # some base rotation, then rotated wrist, then pitched wrist and more shoulder stuff
 folder_name = '27_10_2024_16_38_10'  # 10 images
@@ -54,20 +55,65 @@ t_cam2gripper = saved_cam2arm[:3, 3]
 verify_calibration(handeye_data_dict, R_cam2gripper, t_cam2gripper)
 
 # # manually specified eye-in-hand transform instead of the above
-# TODO does this need to be rotated so z forward?
+# Create rotation matrix for camera orientation (z forward, x right, y down)
+Rx = np.array([[0, 0, 1],
+               [0, -1, 0],
+               [1, 0, 0]])  # Rotate to get x right, y down, z forward
+
+# Create rotation matrix for 90 degree yaw (rotation around z axis)
+Rz = np.array([[0, -1, 0],
+               [1, 0, 0], 
+               [0, 0, 1]])
+
+# R = Rx @ Ry  # Combined rotation
+R = Rx @ Rz  # Apply Rx first, then rotate 90 degrees in yaw
+
+
+# TODO im measuring gripper2cam but need cam2gripper, can visualisation deceive me i.e. visualisation looks good but it's wrong
+
+
 manually_measured_transform = np.eye(4)
-# T[:3, :3] = R
-# TODO reduce x by 0.1-0.2 actually im using toolhead so would be tip of gripper so servo is actually a good bit back
-manually_measured_transform[:3, 3] = [0.0, 0.03, 0.05]  
+manually_measured_transform[:3, :3] = R
+manually_measured_transform[:3, 3] = [0.025, 0.03, 0.05]  
+# manually_measured_transform[:3, 3] = [-0.025, -0.03, -0.05]  # invert numbers
 handeye_data_dict['saved_cam2arm'] = manually_measured_transform
 print('manually measured cam2gripper \n', handeye_data_dict['saved_cam2arm'])
 saved_cam2arm = handeye_data_dict['saved_cam2arm']
 
-R_cam2gripper_manual = saved_cam2arm[:3, :3]
-t_cam2gripper_manual = saved_cam2arm[:3, 3]
+# R_cam2gripper_manual = saved_cam2arm[:3, :3]
+# t_cam2gripper_manual = saved_cam2arm[:3, 3]
+R_gripper2cam_manual = saved_cam2arm[:3, :3]
+t_gripper2cam_manual = saved_cam2arm[:3, 3]
+
+# Convert gripper2cam to cam2gripper
+gripper2cam = np.eye(4)
+gripper2cam[:3, :3] = R_gripper2cam_manual
+gripper2cam[:3, 3] = t_gripper2cam_manual
+
+# Invert to get cam2gripper
+cam2gripper = np.linalg.inv(gripper2cam)
+R_cam2gripper_manual = cam2gripper[:3, :3]
+t_cam2gripper_manual = cam2gripper[:3, 3]
+# TODO build_transform function since im always :3, 3 in
+manually_measured_transform = cam2gripper
+
+# verify_calibration(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual)
 verify_calibration(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual)
+# TODO my manual ruler gave 2.37 norm error whereas before is was closer to 3
+# TODO could do a random grid search or optimisation or gradient descent to find those 3 numbers
+# TODO more functions above and clean whole file again
 
+R_optimized, t_optimized = optimize_cam2gripper_transform(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual)
 
+# Create final transform
+final_transform = np.eye(4)
+final_transform[:3, :3] = R_optimized
+final_transform[:3, 3] = t_optimized
+
+print("Optimization results:")
+print("Translation (metres):", t_optimized)
+print("Rotation matrix:\n", R_optimized)
+# import pdb;pdb.set_trace()
 
 # plotting three different things in here: 
 # 1. gripper frames in arm frame
