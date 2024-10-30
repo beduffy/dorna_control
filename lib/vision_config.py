@@ -19,11 +19,12 @@ with open(os.path.abspath(os.path.join(__file__, '..', '..', 'resources', 'coco_
 
 # intrinsics
 # from better calibration RMS 0.18 and mean error:  0.02500
+# OLD
 width, height, fx, fy, ppx, ppy = (640.0, 480.0, 612.14801862, 611.29345062, 340.03640321,
                                    230.06928807)
-if open3d_import_success:
-    pinhole_camera_intrinsic = o3d.camera.PinholeCameraIntrinsic(
-            int(width), int(height), fx, fy, ppx, ppy)
+# if open3d_import_success:
+#     pinhole_camera_intrinsic = o3d.camera.PinholeCameraIntrinsic(
+#             int(width), int(height), fx, fy, ppx, ppy)
     
 # TODO measure reprojection error of this. And compare why the above is so different?
 # old intrinsic calibration done by me
@@ -45,6 +46,11 @@ camera_matrix = np.array([[611.61332568  , 0.    ,     340.21606321],
                         [  0.    ,       0.      ,     1.        ]])
 dist_coeffs = np.array([ 0.09702268, -0.04537982,  0.00111311,  0.00708548, -0.5604325 ])
 
+# # TODO use proper element indices to copy above to below
+# using the below from the above intrinsics made the aruco marker position open3d visualisation go from the frame above the marker to right inside the ground, amazing!
+if open3d_import_success:
+    pinhole_camera_intrinsic = o3d.camera.PinholeCameraIntrinsic(
+            int(width), int(height), 611.61332568, 610.36491859, 340.21606321, 239.2910932)
 
 # directly from depth/color intrinsics from factory
 # camera_matrix = np.array([[depth_intrin.fx, 0., depth_intrin.ppx],
