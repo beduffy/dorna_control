@@ -279,8 +279,8 @@ if __name__=="__main__":
 					robot.halt()
 				elif key == 'o':  # check position status
 					if 'null' not in robot.position("xyz"):
-						robot_pos = [round(float(x), 3) for x in robot.position("xyz").strip('[]').split(', ')]
-						robot_joints = [round(float(x), 3) for x in robot.position("joint").strip('[]').split(', ')]
+						robot_pos = [round(float(x), 6) for x in robot.position("xyz").strip('[]').split(', ')]
+						robot_joints = [round(float(x), 6) for x in robot.position("joint").strip('[]').split(', ')]
 						print('robot_pos: ', robot_pos)
 						print('robot_joint: ', robot_joints)
 						# print([round(float(x), 3) for x in robot.position("xyz")])  # it's a string? TODO fix 
