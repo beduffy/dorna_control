@@ -102,7 +102,8 @@ def get_gripper_base_transformation(joint_angles):
     full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
 
     # TODO are things weird because of dorna's weird angle coordinate system?
-    # because dorna's j1 is measure relative to ground plane, j2 is then relative to j1, j3 relative to j2. But also inverse direction right?
+    # because dorna's j1 is measure relative to ground plane, 
+    # j2 is then relative to j1, j3 relative to j2. But also inverse direction right?
     
     joint_angles_copy = joint_angles.copy()
     joint_angles_copy[3] = -joint_angles_copy[3]
@@ -119,13 +120,11 @@ def get_gripper_base_transformation(joint_angles):
     gripper_base_transform[2, 3] = full_toolhead_fk[2]
 
     # TODO, wait it's the toolhead bottom which rotates, not the gripper tip, does this affect anything?
+    # TODO validate if rotating 45 degrees is pi / 2 in this final transformation and visualise, im mostly confident though
     wrist_pitch = np.sum(joint_angles_rad[1:4])
     wrist_roll = joint_angles_rad[4]
-    base_yaw = joint_angles_rad[0]  # and the only way we can yaw
-    # rot_mat = o3d.geometry.get_rotation_matrix_from_xyz(np.array([wrist_roll, wrist_pitch, base_yaw]))
-    # rot_mat = o3d.geometry.get_rotation_matrix_from_zyx(np.array([wrist_roll, wrist_pitch, base_yaw]))
+    base_yaw = joint_angles_rad[0]  # and the only way we can yaw but is strange
     rot_mat = o3d.geometry.get_rotation_matrix_from_zyx(np.array([base_yaw, wrist_pitch, wrist_roll]))
-    # rot_mat = o3d.geometry.get_rotation_matrix_from_zyx(np.array([wrist_pitch, base_yaw, wrist_roll]))
     gripper_base_transform[:3, :3] = rot_mat
 
     return gripper_base_transform
@@ -374,6 +373,9 @@ if __name__ == '__main__':
                     print('curr_arm_xyz is None')
 
 
+            # TODO add visualise current arm key 
+
+
             # Visualise how dorna stick/line mesh arm in pointcloud would look like picking up chosen click position
             if k == ord('i'):
                 if curr_arm_xyz is not None:
@@ -497,7 +499,7 @@ if __name__ == '__main__':
                                       coordinate_frame_arm_frame, coordinate_frame_shoulder_height_arm_frame, cam_frame_in_arm_frame]
                     plot_open3d_Dorna(xyz_positions_of_all_joints, extra_geometry_elements=extra_elements)
 
-                    # TODO get click working now with big markers. 
+                    # TODO get click working now with big markers
                     # TODO should I transform all xyz_positions_of_all_joints
                     # TODO could I keep everything in metres until I send the final control command of dorna?
                     # TODO if I create a generic transformation from marker to dorna arm origin, then I can compose transformations to pick up objects?
@@ -518,10 +520,8 @@ if __name__ == '__main__':
 
             # get and save calibration target transformation (target2cam) and gripper2base
             if k == ord('a'):  # append + save hand-eye calibration needed transforms
-
-                # What I want 'h' to do:
                 # Calculate, visualise and save cam2target and gripper2base to new folder (e.g. handeye_24_02_2024_HH_MM_SS). 
-                # But the new idea will be to use SolvePnP with 12 markers. 
+                # use SolvePnP with 12 markers. 
                 # AND Also save the RGBD images so I can visualise each transform individually but also in one pointcloud assuming camera does not move.
                 # later make it easy to test, visualise on any folder. In my gorey fake arm simulation, I had the order wrong in cam2target, didn't need inverse. 
                 
@@ -532,80 +532,38 @@ if __name__ == '__main__':
                 # if tvec is not None and rvec is not None:
                 cam2arm_opt, arm2cam_opt, tvec_pnp_opt, rvec_pnp_opt, input_obj_points_concat, input_img_points_concat = calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=marker_length, marker_separation=marker_separation)
 
-                # aruco_id_on_gripper = 4
-                # bgr_color_data = cv2.cvtColor(camera_color_img, cv2.COLOR_RGB2BGR)
-                # gray_data = cv2.cvtColor(bgr_color_data, cv2.COLOR_RGB2GRAY)
-                # corners, ids, rejectedImgPoints = aruco.detectMarkers(gray_data, aruco_dict, parameters=parameters)
-                # # frame_markers = aruco.drawDetectedMarkers(color_img, corners, ids)
-                # all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
-                # found_correct_marker = False
-                # if aruco_id_on_gripper in ids:
-                #     gripper_aruco_index = [l[0] for l in ids.tolist()].index(aruco_id_on_gripper) 
-                #     rvec, tvec = all_rvec[gripper_aruco_index, 0, :], all_tvec[gripper_aruco_index, 0, :]
-                #     # aruco.drawAxis(color_img, camera_matrix, dist_coeffs, rvec, tvec, marker_length)
-                #     found_correct_marker = True
-                # else:
-                #     tvec, rvec = None, None
-
-                # cam2target, target2cam, R_tc, R_ct, pos_camera = create_homogenous_transformations(tvec, rvec)
-
-                # assert(isRotationMatrix(R_tc))
-                # assert(isRotationMatrix(R_ct))
-
                 # TODO better variable to avoid format repetition
                 full_handeye_folder_path = 'data/{}'.format(handeye_data_folder_name)
                 if not os.path.exists(full_handeye_folder_path):
-                     os.makedirs(full_handeye_folder_path)
+                    os.makedirs(full_handeye_folder_path)
                 
-                target2cam = arm2cam_opt  # TODO debatable and make sure! TODO and horribly confusing fix it
+                # TODO debatable and make sure! TODO and horribly confusing fix it
+                # TODO october 30th, wtf is this inversion? have to validate again, think of how to never get confused by this again
+                target2cam = arm2cam_opt  
                 fp = '{}/target2cam_{}.txt'.format(full_handeye_folder_path, num_saved_handeye_transforms)
                 print('Saving target2cam at {} \n{}'.format(fp, target2cam))
                 np.savetxt(fp, target2cam, delimiter=' ')
 
                 # get and save gripper transformation (gripper2base)
-                joint_angles = get_joint_angles_from_dorna_flask()  # TODO do not forget
-                # the below is just for testing without running arm
-                # joint_angles = [0, 0, 0, 0, 0]
-                gripper_base_transform = get_gripper_base_transformation(joint_angles)  # TODO is this in mm? yes
+                joint_angles = get_joint_angles_from_dorna_flask()
+                # joint_angles = [0, 0, 0, 0, 0]  # for testing without running arm
+                gripper_base_transform = get_gripper_base_transformation(joint_angles)
 
-                # TODO visualise full fk of these newly saved joint angles
                 fp = '{}/joint_angles_{}.txt'.format(full_handeye_folder_path, num_saved_handeye_transforms)
                 print('Saving joint angles at {} \n{}'.format(fp, joint_angles))
                 np.savetxt(fp, joint_angles, delimiter=' ')
-                # TODO try get inverse (actual gripper2base) just to really confirm shit
                 fp = '{}/gripper2base_{}.txt'.format(full_handeye_folder_path, num_saved_handeye_transforms)
                 print('Saving gripper2base at {} \n{}'.format(fp, gripper_base_transform))
                 np.savetxt(fp, gripper_base_transform, delimiter=' ')
 
                 # save images so we can analyse and understand transforms better later
-                # TODO stop using camera_color_img for aruco text!!!!!
                 fp = '{}/color_img_{}.png'.format(full_handeye_folder_path, num_saved_handeye_transforms)
                 cv2.imwrite(fp, camera_color_img)
                 fp = '{}/depth_img_{}.png'.format(full_handeye_folder_path, num_saved_handeye_transforms)
                 cv2.imwrite(fp, camera_depth_img)
 
                 num_saved_handeye_transforms += 1
-                # else:
-                #     print('No tvec or rvec!')
 
-
-            if k == ord('c'):  # perform hand-eye calibration using saved transforms
-                # TODO all of the below can probably go to handeye wrapper?
-                handeye_data_dict = load_all_handeye_data(folder_name=handeye_data_folder_name)
-                # plot_all_handeye_data(handeye_data_dict)
-                handeye_calibrate_opencv(handeye_data_dict, handeye_data_folder_name)
-
-                # TODO why load from file again, why not just return from function?
-                cam2arm = np.loadtxt('data/{}/latest_cv2_cam2arm.txt'.format(handeye_data_folder_name), delimiter=' ')
-                saved_cam2arm = cam2arm
-                
-                # TODO what the hell am I doing, of course saved cam2arm is fucked up. The only way to is to use cam_pcd 
-                cam_pcd = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img, pinhole_camera_intrinsic, visualise=False)
-                # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd, saved_cam2arm, in_milimetres=False)
-
-
-                # plot_all_handeye_data(handeye_data_dict, cam_pcd=full_arm_pcd)
-                plot_all_handeye_data(handeye_data_dict, cam_pcd=cam_pcd)
 
             frame_count += 1
 
