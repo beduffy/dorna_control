@@ -517,7 +517,7 @@ if __name__ == '__main__':
 
 
             # get and save calibration target transformation (target2cam) and gripper2base
-            if k == ord('h'):  # save hand-eye calibration needed transforms
+            if k == ord('a'):  # append + save hand-eye calibration needed transforms
 
                 # What I want 'h' to do:
                 # Calculate, visualise and save cam2target and gripper2base to new folder (e.g. handeye_24_02_2024_HH_MM_SS). 

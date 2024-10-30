@@ -388,6 +388,7 @@ def verify_calibration(handeye_data_dict, R_cam2gripper, t_cam2gripper):
 
         # TODO could I build my own optimisation, beginning with ruler, then do translation and then rotation
     """
+    ## TODO less printing
     for i in range(len(handeye_data_dict['R_gripper2base'])):
         # Build transforms
         X = np.eye(4)
@@ -577,11 +578,33 @@ def verify_transform_chain(handeye_data_dict, saved_cam2arm):
     '''
     # TODO of course the realsense is at an angle so wrist roll/pitch angles change the distance but never too far
     # TODO deeply understand why cam2target and not target2cam
+    # e.g. when arm moves, pointcloud should move with it. gripper transformation from pose 1 to 2 is similar enough to camera transformation (camera can rotate with wrist pitch/roll)
+    # TODO but first first few angles I did not rotate/touch wrist. There's of course aruco error too 
+    # TODO From 16 to 17: gripper dist: 0.000. camera dist: 0.028
+    # From 17 to 18: gripper dist: 0.000. camera dist: 0.041
+    print('\nConsecutive euclidean distances for gripper2base and cam2target')
     for idx in range(t_gripper2base.shape[0] - 1):
         distance_gripper = np.linalg.norm(t_gripper2base[idx] - t_gripper2base[idx + 1])
         distance_cam2target = np.linalg.norm(t_cam2target[idx] - t_cam2target[idx + 1])
-        print('From {} to {}: gripper dist: {:.3f}. euclidean_dist: {:.3f}'.format(idx, idx + 1, distance_gripper, distance_cam2target))
+        print('From {} to {}: gripper dist: {:.3f}. camera dist: {:.3f}'.format(idx, idx + 1, distance_gripper, distance_cam2target))
     
+    # TODO also the meaning of gripper2base is strange since base is fixed
+    # TODO this sometimes returns bigger differences, sometimes very close and then sometimes 0 distance, how is that possible?
+    '''
+    From 12 to 13: gripper dist: 0.198. camera dist: 0.315
+    From 13 to 14: gripper dist: 0.035. camera dist: 0.034
+    From 14 to 15: gripper dist: 0.035. camera dist: 0.035
+    From 15 to 16: gripper dist: 0.035. camera dist: 0.038
+    From 16 to 17: gripper dist: 0.267. camera dist: 0.063
+    From 17 to 18: gripper dist: 0.516. camera dist: 0.116
+    From 18 to 19: gripper dist: 0.000. camera dist: 0.191
+    '''
+    print('\nConsecutive euclidean distances for t_base2gripper and target2cam')
+    for idx in range(t_base2gripper.shape[0] - 1):
+        distance_gripper = np.linalg.norm(t_base2gripper[idx] - t_base2gripper[idx + 1])
+        distance_target2cam = np.linalg.norm(t_target2cam[idx] - t_target2cam[idx + 1])
+        print('From {} to {}: gripper dist: {:.3f}. camera dist: {:.3f}'.format(idx, idx + 1, distance_gripper, distance_target2cam))
+
     # Check if marker is in front of camera
     if np.any(t_target2cam[:, 2] < 0):
         # TODO deeply understand why its target to cam here
