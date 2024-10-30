@@ -7,23 +7,17 @@ import cv2
 from scipy.optimize import minimize
 from scipy.spatial.transform import Rotation
 
-from lib.vision import get_inverse_homogenous_transform
-
 # TODO should i separate the below stuff or not? to different files or functions?
-from lib.dorna_kinematics import i_k, f_k
-from lib.open3d_plot_dorna import plot_open3d_Dorna
-from lib.vision import get_full_pcd_from_rgbd
-from lib.vision import get_camera_coordinate, create_homogenous_transformations, convert_pixel_to_arm_coordinate, convert_cam_pcd_to_arm_pcd, calculate_reprojection_error
-from lib.vision_config import pinhole_camera_intrinsic, camera_matrix, dist_coeffs
+from lib.vision import calculate_reprojection_error, get_inverse_homogenous_transform
+from lib.vision_config import camera_matrix, dist_coeffs
 from lib.aruco_helper import create_aruco_params, aruco_detect_draw_get_transforms, calculate_pnp_12_markers, find_aruco_markers
 from lib.aruco_image_text import OpenCvArucoImageText
+from lib.handeye_plotting import plot_every_cam_pcd_and_aruco_marker
 
-
-# TODO plotting functions to another file?
 # TODO I used to calculate inverse cam2arm but transformation between two transforms should be the same?
 # TODO what if gripper pose x isn't suppose to be forward? Would that change anything?
 # TODO another massive source of innacuracy is my kinematic calibration............. what if imade the toolhead to be 0? still rotation is a problem. less translational error though in pitch but not wrist roll
-# TODO email dorna people on why this happens
+# TODO email dorna people on why this (the above todo) happens
 # TODO read all handeye low level code and the papers accompanying them: https://github.com/opencv/opencv/blob/4.x/modules/calib3d/src/calibration_handeye.cpp
 
 
@@ -181,7 +175,6 @@ def test_transformations(handeye_data_dict):
         - visualise some images
     '''
 
-    # TODO double check all gripper2base and etc
     R_gripper2base = handeye_data_dict['R_gripper2base']
     t_gripper2base = handeye_data_dict['t_gripper2base']
     R_base2gripper = handeye_data_dict['R_base2gripper']
@@ -270,42 +263,53 @@ def test_transformations(handeye_data_dict):
     id_on_shoulder_motor = 1
 
     first_color_image = color_images[0]
-    first_depth_image = depth_images[0]
     camera_color_img_debug = first_color_image.copy()
     color_img, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(first_color_image, aruco_dict, parameters, marker_length, id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug)
     cam2target_opt, target2cam_opt, tvec_pnp_opt, rvec_pnp_opt, input_obj_points_concat, input_img_points_concat = calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=marker_length, marker_separation=marker_separation)
 
+    # plot_every_cam_pcd_and_aruco_marker(color_images, depth_images, handeye_data_dict['all_target2cam_transforms'])
 
-
-    cv2.imshow('Camera Color Image Debug', camera_color_img_debug)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # cv2.imshow('Camera Color Image Debug', camera_color_img_debug)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
 
     # TODO draw all aruco axes to find instabilities, use different library or? but before that just use open3d
     # TODO does aruco text below have instabilites from 1 marker or all 12?
     # TODO loop through all pointclouds and aruco transform and then comment function, just a sanity check
     # TODO just realised first cam_pcd in october 30 dataset does not have aruco on board!!! 
 
-    # Undistort the first image using camera matrix and distortion coefficients
-    h, w = first_color_image.shape[:2]
-    newcameramtx, roi = cv2.getOptimalNewCameraMatrix(camera_matrix, dist_coeffs, (w,h), 1, (w,h))
-    undistorted_img = cv2.undistort(first_color_image, camera_matrix, dist_coeffs, None, newcameramtx)
+    # # Undistort the first image using camera matrix and distortion coefficients
+    # h, w = first_color_image.shape[:2]
+    # newcameramtx, roi = cv2.getOptimalNewCameraMatrix(camera_matrix, dist_coeffs, (w,h), 1, (w,h))
+    # undistorted_img = cv2.undistort(first_color_image, camera_matrix, dist_coeffs, None, newcameramtx)
+    # # Crop the image based on ROI
+    # x, y, w, h = roi
+    # undistorted_img = undistorted_img[y:y+h, x:x+w]
+    # # Display original and undistorted images side by side
+    # # comparison = np.hstack((first_color_image, undistorted_img))
+    # # cv2.imshow('Original vs Undistorted', comparison)
+    # # cv2.imshow('Original vs Undistorted', undistorted_img)
+    # # cv2.waitKey(0)
+    # # cv2.destroyAllWindows()
 
-    # Crop the image based on ROI
-    x, y, w, h = roi
-    undistorted_img = undistorted_img[y:y+h, x:x+w]
 
-    # Display original and undistorted images side by side
-    # comparison = np.hstack((first_color_image, undistorted_img))
-    # cv2.imshow('Original vs Undistorted', comparison)
-    # cv2.imshow('Original vs Undistorted', undistorted_img)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
+    # print('Before undistortion, first cam_pcd and aruco marker')
+    # # TODO everything looks good even with using pinhole_camera_intrinsic even though not calibrated
+    plot_every_cam_pcd_and_aruco_marker(color_images[:1], depth_images[:1], handeye_data_dict['all_target2cam_transforms'])
+    # recalculate_transforms_with_undistorted_images(color_images, handeye_data_dict)
 
+    # print('After undistortion and recalculating all images, first cam_pcd and aruco marker')
+
+    # plot_every_cam_pcd_and_aruco_marker(color_images[:1], depth_images[:1], handeye_data_dict['all_target2cam_transforms'])
+
+    # ALL, too slow
+    # plot_every_cam_pcd_and_aruco_marker(color_images, depth_images, handeye_data_dict['all_target2cam_transforms'])
+
+
+def recalculate_transforms_with_undistorted_images(color_images, handeye_data_dict):
     # TODO could recalculate all opencv transforms, and with undistortion TODO make sure RGB and not BGR?
     # store back into handeye_data_dict. recalculate all_target2cam_transforms, all_cam2target_transforms
-
-     # Recalculate transforms using undistorted images
+    # Recalculate transforms using undistorted images
     opencv_aruco_image_text = OpenCvArucoImageText()
     board, parameters, aruco_dict, marker_length = create_aruco_params()
     marker_separation = 0.0065
@@ -363,18 +367,18 @@ def test_transformations(handeye_data_dict):
         new_cam2target_rotation_mats.append(cam2target_transform[:3, :3])
         new_cam2target_tvecs.append(cam2target_transform[:3, 3])
 
+    # TODO double check we have all the important ones
     # Update handeye_data_dict with new transforms
     handeye_data_dict.update({
         'all_target2cam_transforms': new_target2cam_transforms,
         'all_cam2target_transforms': new_cam2target_transforms,
-        'all_target2cam_rotation_mats': new_target2cam_rotation_mats,
-        'all_target2cam_tvecs': new_target2cam_tvecs,
+        # 'all_target2cam_rotation_mats': new_target2cam_rotation_mats,  # not used
+        # 'all_target2cam_tvecs': new_target2cam_tvecs,
         'R_target2cam': np.array(new_target2cam_rotation_mats),
         't_target2cam': np.array(new_target2cam_tvecs),
         'R_cam2target': np.array(new_cam2target_rotation_mats),
         't_cam2target': np.array(new_cam2target_tvecs)
     })
-
 
 
 def verify_calibration(handeye_data_dict, R_cam2gripper, t_cam2gripper):
@@ -757,7 +761,7 @@ def calibrate_camera_intrinsics(images, camera_matrix, dist_coeffs):
     mean_error, errors = calculate_reprojection_error(objpoints, imgpoints, before_calibration_rvecs, before_calibration_tvecs, camera_matrix, dist_coeffs)
     print('before calibration:')
     print("Mean reprojection error: {} pixels".format(mean_error))
-    print("Individual errors: {}".format(errors))
+    # print("Individual errors: {}".format(errors))
 
     # Calibrate camera
     ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
