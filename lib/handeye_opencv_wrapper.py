@@ -250,10 +250,10 @@ def test_transformations(handeye_data_dict):
     depth_images = handeye_data_dict['depth_images']
 
     # camera intrinsic
-    mtx, dist, mean_error, errors = calibrate_camera_intrinsics(color_images, camera_matrix, dist_coeffs)
-    # mtx, dist, mean_error, errors = calibrate_camera_intrinsics(color_images[:5])
-    # TODO print better so i can copy to vision_config
-    print('Camera intrinsics: \n camera intrinsics: {}\ndist_coeffs: {}\n mean_error: {}'.format(mtx, dist, mean_error))
+    # mtx, dist, mean_error, errors = calibrate_camera_intrinsics(color_images, camera_matrix, dist_coeffs)
+    # # mtx, dist, mean_error, errors = calibrate_camera_intrinsics(color_images[:5])
+    # # TODO print better so i can copy to vision_config
+    # print('Camera intrinsics: \n camera intrinsics: {}\ndist_coeffs: {}\n mean_error: {}'.format(mtx, dist, mean_error))
 
     # check 1 image aruco visualisation and errors testing
     opencv_aruco_image_text = OpenCvArucoImageText()
@@ -294,15 +294,14 @@ def test_transformations(handeye_data_dict):
 
 
     # print('Before undistortion, first cam_pcd and aruco marker')
-    # # TODO everything looks good even with using pinhole_camera_intrinsic even though not calibrated
-    plot_every_cam_pcd_and_aruco_marker(color_images[:1], depth_images[:1], handeye_data_dict['all_target2cam_transforms'])
+    # plot_every_cam_pcd_and_aruco_marker(color_images[:1], depth_images[:1], handeye_data_dict['all_target2cam_transforms'])
     # recalculate_transforms_with_undistorted_images(color_images, handeye_data_dict)
-
     # print('After undistortion and recalculating all images, first cam_pcd and aruco marker')
 
+    # # TODO why does undistortion show markers in wrong places?!?!? 
     # plot_every_cam_pcd_and_aruco_marker(color_images[:1], depth_images[:1], handeye_data_dict['all_target2cam_transforms'])
 
-    # ALL, too slow
+    # Show all, too slow
     # plot_every_cam_pcd_and_aruco_marker(color_images, depth_images, handeye_data_dict['all_target2cam_transforms'])
 
 
@@ -322,40 +321,71 @@ def recalculate_transforms_with_undistorted_images(color_images, handeye_data_di
     new_cam2target_rotation_mats = []
     new_cam2target_tvecs = []
 
+    # img = color_images[0]
+    # h, w = img.shape[:2]
+    # newcameramtx, roi = cv2.getOptimalNewCameraMatrix(camera_matrix, dist_coeffs, (w,h), 1, (w,h))
+    # # Adjust principal point in the new camera matrix after cropping
+    # newcameramtx[0, 2] -= x  # cx adjustment
+    # newcameramtx[1, 2] -= y  # cy adjustment
+    # # Crop the image based on ROI
+    # x, y, w, h = roi
+
     for img in color_images:
         # Undistort image
         h, w = img.shape[:2]
         newcameramtx, roi = cv2.getOptimalNewCameraMatrix(camera_matrix, dist_coeffs, (w,h), 1, (w,h))
-        undistorted_img = cv2.undistort(img, camera_matrix, dist_coeffs, None, newcameramtx)
-        
         # Crop the image based on ROI
         x, y, w, h = roi
+        # Adjust principal point in the new camera matrix after cropping
+        newcameramtx[0, 2] -= x  # cx adjustment
+        newcameramtx[1, 2] -= y  # cy adjustment
+        # print(newcameramtx)
+        
+        undistorted_img = cv2.undistort(img, camera_matrix, dist_coeffs, None, newcameramtx)
+        
+        # TODO does cropping ruin focal intrinsics?
+        # TODO change principal point
         undistorted_img = undistorted_img[y:y+h, x:x+w]
 
         # Find ArUco markers in undistorted image
         camera_color_img_debug = undistorted_img.copy()
         _, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(
             undistorted_img, aruco_dict, parameters, marker_length, 
-            id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug
+            id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug, newcameramtx
         )
-
+        
+        # TODO ahh running through images there are images that don't move which explains 0 gripper euclidean dist? need to add throttle to a key?
+        # TODO also seems like it finds it harder to find some markers? that was before using newcameramtx but check again!
         # cv2.imshow('Camera Color Image Debug undistort', camera_color_img_debug)
         # cv2.waitKey(0)
         # cv2.destroyAllWindows()
 
-        # Calculate transforms using undistorted image
-        cam2arm_opt, arm2cam_opt, tvec_pnp_opt, rvec_pnp_opt, _, _ = calculate_pnp_12_markers(
-            corners, ids, all_rvec, all_tvec, marker_length=marker_length, 
-            marker_separation=marker_separation
-        )
+        # TODO very strange bug in here that only appeared recently. id1 missing
+        try:
+            # Calculate transforms using undistorted image
+            cam2arm_opt, arm2cam_opt, tvec_pnp_opt, rvec_pnp_opt, _, _ = calculate_pnp_12_markers(
+                corners, ids, all_rvec, all_tvec, marker_length=marker_length, 
+                marker_separation=marker_separation
+            )
+        except Exception as e:
+            cv2.imshow('ERROR', undistorted_img)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+            cv2.imshow('undistort error aruco', camera_color_img_debug)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+        target2cam_transform = arm2cam_opt  # TODO same thing i did in handeye, pretty similar result to below
 
         # Convert to rotation matrix
-        target2cam_rot, _ = cv2.Rodrigues(rvec_pnp_opt)
+        # target2cam_rot, _ = cv2.Rodrigues(rvec_pnp_opt)
+        target2cam_rot = target2cam_transform[:3, :3]
         
-        # Create transforms
-        target2cam_transform = np.eye(4)
-        target2cam_transform[:3, :3] = target2cam_rot
-        target2cam_transform[:3, 3] = tvec_pnp_opt.reshape(3)
+        # # Create transforms
+        # target2cam_transform = np.eye(4)
+        # target2cam_transform[:3, :3] = target2cam_rot
+        # target2cam_transform[:3, 3] = tvec_pnp_opt.reshape(3)
         
         cam2target_transform = get_inverse_homogenous_transform(target2cam_transform)
         
@@ -372,8 +402,6 @@ def recalculate_transforms_with_undistorted_images(color_images, handeye_data_di
     handeye_data_dict.update({
         'all_target2cam_transforms': new_target2cam_transforms,
         'all_cam2target_transforms': new_cam2target_transforms,
-        # 'all_target2cam_rotation_mats': new_target2cam_rotation_mats,  # not used
-        # 'all_target2cam_tvecs': new_target2cam_tvecs,
         'R_target2cam': np.array(new_target2cam_rotation_mats),
         't_target2cam': np.array(new_target2cam_tvecs),
         'R_cam2target': np.array(new_cam2target_rotation_mats),
