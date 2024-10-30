@@ -21,6 +21,8 @@ from lib.aruco_image_text import OpenCvArucoImageText
 # TODO plotting functions to another file?
 # TODO I used to calculate inverse cam2arm but transformation between two transforms should be the same?
 # TODO what if gripper pose x isn't suppose to be forward? Would that change anything?
+# TODO another massive source of innacuracy is my kinematic calibration............. what if imade the toolhead to be 0? still rotation is a problem. less translational error though in pitch but not wrist roll
+# TODO email dorna people on why this happens
 
 
 def load_all_handeye_data(folder_name):
@@ -208,6 +210,8 @@ def test_transformations(handeye_data_dict):
     # TODO first_base2gripper_transform is showing negative 4th column translation, is it inverted? seems so
     # import pdb;pdb.set_trace()
 
+    # TODO verifying target2cam vs cam2target might be easy since z is always forward in one: probably cam2target
+
     # Verify input transforms - add debug prints
     print("Sample gripper2base transform:\n", np.vstack((R_gripper2base[0], t_gripper2base[0].reshape(1,3))))
     print("Sample target2cam transform:\n", np.vstack((R_target2cam[0], t_target2cam[0].reshape(1,3))))
@@ -367,7 +371,16 @@ def test_transformations(handeye_data_dict):
 
 
 def verify_calibration(handeye_data_dict, R_cam2gripper, t_cam2gripper):
-    """Verify calibration quality using AX=XB equation"""
+    """Verify calibration quality using AX=XB equation
+        The Equation AX = XB means:
+        gripper2base * cam2gripper = cam2gripper * target2cam
+
+        Going from target to base can be done two equivalent ways:
+        1. target -> camera -> gripper -> base
+        2. target -> camera -> gripper -> base TODO this is wrong
+
+        # TODO could I build my own optimisation, beginning with ruler, then do translation and then rotation
+    """
     for i in range(len(handeye_data_dict['R_gripper2base'])):
         # Build transforms
         X = np.eye(4)
@@ -375,8 +388,10 @@ def verify_calibration(handeye_data_dict, R_cam2gripper, t_cam2gripper):
         X[:3,3] = t_cam2gripper.ravel()
         
         A = np.eye(4)
-        A[:3,:3] = handeye_data_dict['R_gripper2base'][i]
-        A[:3,3] = handeye_data_dict['t_gripper2base'][i]
+        # A[:3,:3] = handeye_data_dict['R_gripper2base'][i]
+        # A[:3,3] = handeye_data_dict['t_gripper2base'][i]
+        A[:3,:3] = handeye_data_dict['R_base2gripper'][i]  # TODO since inverted. just fix it at the core
+        A[:3,3] = handeye_data_dict['t_base2gripper'][i]
         
         B = np.eye(4)
         B[:3,:3] = handeye_data_dict['R_target2cam'][i]
@@ -385,8 +400,10 @@ def verify_calibration(handeye_data_dict, R_cam2gripper, t_cam2gripper):
         # AX should equal XB
         AX = A @ X
         XB = X @ B
-        # TODO why norm? TODO understand entire function more since it is in essense what we are optimising for
+
+        # TODO why norm? difference between AX vs XB TODO understand entire function more since it is in essense what we are optimising for
         error = np.linalg.norm(AX - XB)
+        
         print(f"Transform pair {i} error: {error}")
 
 
@@ -407,6 +424,7 @@ def check_pose_distribution(R_gripper2base, t_gripper2base):
     min_angle_range = 0.5
     min_translation_range = 0.1
     if np.any(angle_range < min_angle_range):  # Less than ~30 degrees
+        # TODO Rotation ranges (rad): [1.41097524 0.34964032 0.46533604]. TWO WERE BElow 0.5, hmm
         print("Warning: Limited rotation variation, less than: {}".format(min_angle_range))
     if np.any(trans_range < min_translation_range):  # Less than 10cm
         print("Warning: Limited translation variation, less than: {}".format(min_translation_range))
@@ -525,6 +543,7 @@ def plot_all_handeye_data(handeye_data_dict, eye_in_hand=False):
 
 
 def plot_blah(handeye_data_dict, cam_pcd_first_image_pair, saved_cam2arm):
+    # TODO name function to what I want it to do. TODO eye in hand vs eye to hand
     '''
     Below I am visualising origin (in camera coordinates) and the arm frame.
     And pointcloud from camera transformed to arm frame... but that does not make sense?
@@ -676,6 +695,7 @@ def plot_one_arm_gripper_camera_frame_eye_in_hand(all_gripper2base_transforms, a
         geometry_to_plot.append(coordinate_frame)
 
         combined_transform_from_arm_to_gripper_to_camera = gripper_transform @ gripper2cam
+        # TODO verify again and add sphere
         camera_on_gripper_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
                                     size=0.1, origin=[0.0, 0.0, 0.0])
         camera_on_gripper_frame.transform(combined_transform_from_arm_to_gripper_to_camera)
@@ -739,15 +759,10 @@ def handeye_calibrate_opencv(handeye_data_dict, folder_name, eye_in_hand=True):
         Modifies handeye_data_dict with saved_cam2arm 
     '''
 
-    # TODO double check all gripper2base and etc
-    # all_gripper_rotation_mats = handeye_data_dict['all_gripper_rotation_mats']
-    # all_gripper_tvecs = handeye_data_dict['all_gripper_tvecs']
     R_gripper2base = handeye_data_dict['R_gripper2base']
     t_gripper2base = handeye_data_dict['t_gripper2base']
     R_base2gripper = handeye_data_dict['R_base2gripper']
     t_base2gripper = handeye_data_dict['t_base2gripper']
-    # all_target2cam_rotation_mats = handeye_data_dict['all_target2cam_rotation_mats']
-    # all_target2cam_tvecs = handeye_data_dict['all_target2cam_tvecs']
     R_target2cam = handeye_data_dict['R_target2cam']
     t_target2cam = handeye_data_dict['t_target2cam']
     R_cam2target = handeye_data_dict['R_cam2target']
@@ -757,8 +772,7 @@ def handeye_calibrate_opencv(handeye_data_dict, folder_name, eye_in_hand=True):
     method = cv2.CALIB_HAND_EYE_DANIILIDIS  # tried both, they both work in simulation
     
     # eye-in-hand (according to default opencv2 params and weak documentation. "inputting the suitable transformations to the function" for eye-to-hand)
-    # first formula has b_T_c for X so that's what comes out of function. It expects b_T_g and c_T_t so gripper2base and target2cam
-
+    # first formula has b_T_c for X so that's what comes out of function. It expects b_T_g and c_T_t so gripper2base and target2cam, read transforms backwards
     # R_cam2gripper, t_cam2gripper = cv2.calibrateHandEye(R_gripper2base, t_gripper2base, R_target2cam, t_target2cam, method=method)
     # R_cam2gripper, t_cam2gripper = cv2.calibrateHandEye(R_gripper2base=R_gripper2base, 
     #                                                     t_gripper2base=t_gripper2base, 
@@ -779,8 +793,8 @@ def handeye_calibrate_opencv(handeye_data_dict, folder_name, eye_in_hand=True):
         # R_cam2base_est, t_cam2base_est = cv2.calibrateHandEye(R_gripper2base, t_gripper2base,
         # R_cam2gripper, t_cam2gripper = cv2.calibrateHandEye(R_gripper2base, t_gripper2base,
         R_cam2gripper, t_cam2gripper = cv2.calibrateHandEye(R_base2gripper, t_base2gripper,
-                                                              R_cam2target, t_cam2target, method=method)
-                                                            #   R_target2cam, t_target2cam, method=method)  # this was so much better to above? and also more correct according to transforms
+                                                            #   R_cam2target, t_cam2target, method=method)
+                                                              R_target2cam, t_target2cam, method=method)  # this was so much better to above? and also more correct according to transforms
         full_homo_RT[:3, :3] = R_cam2gripper
         full_homo_RT[:3, 3] = t_cam2gripper.T
     else:
@@ -794,7 +808,6 @@ def handeye_calibrate_opencv(handeye_data_dict, folder_name, eye_in_hand=True):
     print('Saving handeye (cv2) transform \n{}'.format(full_homo_RT))
     np.savetxt('data/{}/latest_cv2_cam2arm.txt'.format(folder_name), full_homo_RT, delimiter=' ')
     handeye_data_dict['saved_cam2arm'] = full_homo_RT  # TODO gotta be careful with naming
-
 
 
 if __name__ == '__main__':
