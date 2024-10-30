@@ -105,24 +105,30 @@ manually_measured_transform = cam2gripper
 
 #########################################
 
-verify_calibration(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual)
-# TODO build_transform function since im always :3, 3 in
-# TODO my manual ruler gave 2.37 norm error whereas before is was closer to 3
-# TODO could do a random grid search or optimisation or gradient descent to find those 3 numbers
-# TODO more functions above and clean whole file again
+def verify_optimise_verify_manual_calibration(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual):
+    verify_calibration(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual)
+    # TODO build_transform function since im always :3, 3 in
+    # TODO my manual ruler gave 2.37 norm error whereas before is was closer to 3
+    # TODO could do a random grid search or optimisation or gradient descent to find those 3 numbers
+    # TODO more functions above and clean whole file again
 
-R_optimized, t_optimized = optimize_cam2gripper_transform(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual)
+    R_optimized, t_optimized = optimize_cam2gripper_transform(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual)
 
-# Create final transform
-final_transform = np.eye(4)
-final_transform[:3, :3] = R_optimized
-final_transform[:3, 3] = t_optimized
+    # Create final transform
+    final_transform = np.eye(4)
+    final_transform[:3, :3] = R_optimized
+    final_transform[:3, 3] = t_optimized
 
-print("Optimization results:")
-print("Translation (metres):", t_optimized)
-print("Rotation matrix:\n", R_optimized)
-# TODO also verify this optimised transform
-# import pdb;pdb.set_trace()
+    print("Optimization results:")
+    print("Translation (metres):", t_optimized)
+    print("Rotation matrix:\n", R_optimized)
+    # TODO omg the below is actually lower translation error to everything else...
+    verify_calibration(handeye_data_dict, R_optimized, t_optimized)
+    # TODO also verify this optimised transform
+    # import pdb;pdb.set_trace()
+    
+verify_optimise_verify_manual_calibration(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual)
+
 #########################################
 
 
@@ -130,7 +136,7 @@ print("Rotation matrix:\n", R_optimized)
 # 1. gripper frames in arm frame + with arm links
 # 2. aruco frames in camera frame
 # 3. transformation of things but problems, unclear TODO
-# plot_all_handeye_data(handeye_data_dict, eye_in_hand=eye_in_hand)
+plot_all_handeye_data(handeye_data_dict, eye_in_hand=eye_in_hand)
 
 # TODO function to check all aruco poses with all cam_pcds
 # TODO could do ICP between camera pointclouds to find true transformation of what?
