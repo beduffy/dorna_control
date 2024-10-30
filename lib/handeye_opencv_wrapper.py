@@ -5,6 +5,8 @@ import sys
 import numpy as np
 import cv2
 import open3d as o3d
+from scipy.optimize import minimize
+from scipy.spatial.transform import Rotation
 
 from lib.vision import get_inverse_homogenous_transform
 
@@ -23,6 +25,7 @@ from lib.aruco_image_text import OpenCvArucoImageText
 # TODO what if gripper pose x isn't suppose to be forward? Would that change anything?
 # TODO another massive source of innacuracy is my kinematic calibration............. what if imade the toolhead to be 0? still rotation is a problem. less translational error though in pitch but not wrist roll
 # TODO email dorna people on why this happens
+# TODO read all handeye low level code and the papers accompanying them: https://github.com/opencv/opencv/blob/4.x/modules/calib3d/src/calibration_handeye.cpp
 
 
 def load_all_handeye_data(folder_name):
@@ -402,9 +405,69 @@ def verify_calibration(handeye_data_dict, R_cam2gripper, t_cam2gripper):
         XB = X @ B
 
         # TODO why norm? difference between AX vs XB TODO understand entire function more since it is in essense what we are optimising for
-        error = np.linalg.norm(AX - XB)
+        matrix_subtract = AX - XB
+        # print(matrix_subtract)
+        full_error = np.linalg.norm(matrix_subtract)
+        # You might want to separate rotation and translation errors
+        rotation_error = np.linalg.norm(matrix_subtract[:3, :3])
+        translation_error = np.linalg.norm(matrix_subtract[:3, 3])
+
+        # TODO sum all errors and optimise myself
         
-        print(f"Transform pair {i} error: {error}")
+        # print(f"Transform pair {i} subtract:\n {matrix_subtract}")
+        print(f"Transform pair {i} error: {full_error:.3f}")
+        print(f"Transform pair {i} rotation_error: {rotation_error:.3f}")  # TODO in radians right or in rotational matrix values?
+        print(f"Transform pair {i} translation_error: {translation_error:.3f}")
+
+
+def optimize_cam2gripper_transform(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual):
+    def error_function(params):
+        # Extract rotation and translation from params
+        rx, ry, rz, tx, ty, tz = params
+        R = Rotation.from_euler('xyz', [rx, ry, rz]).as_matrix()
+        
+        # Build transform
+        X = np.eye(4)
+        X[:3, :3] = R
+        X[:3, 3] = [tx, ty, tz]
+        
+        total_error = 0
+        for i in range(len(handeye_data_dict['R_gripper2base'])):
+            # A = build_transform(handeye_data_dict['R_gripper2base'][i], 
+            #                   handeye_data_dict['t_gripper2base'][i])
+            # B = build_transform(handeye_data_dict['R_target2cam'][i], 
+            #                   handeye_data_dict['t_target2cam'][i])
+            
+            A = np.eye(4)
+            # A[:3,:3] = handeye_data_dict['R_gripper2base'][i]
+            # A[:3,3] = handeye_data_dict['t_gripper2base'][i]
+            A[:3,:3] = handeye_data_dict['R_base2gripper'][i]  # TODO since inverted. just fix it at the core
+            A[:3,3] = handeye_data_dict['t_base2gripper'][i]
+            
+            B = np.eye(4)
+            B[:3,:3] = handeye_data_dict['R_target2cam'][i]
+            B[:3,3] = handeye_data_dict['t_target2cam'][i]
+            
+            # Calculate AX-XB error
+            matrix_diff = A @ X - X @ B
+            
+            # Separate rotation and translation errors
+            rotation_error = np.linalg.norm(matrix_diff[:3, :3])
+            translation_error = np.linalg.norm(matrix_diff[:3, 3])
+            
+            total_error += rotation_error + translation_error
+            
+        return total_error
+    
+    # Initial guess from your measurements
+    initial_params = [0, 0, 0, -0.025, -0.03, -0.05]  # [rx,ry,rz,tx,ty,tz]
+    # initial
+    
+    # Optimize
+    result = minimize(error_function, initial_params, 
+                     method='Nelder-Mead')
+    
+    return result.x
 
 
 def check_pose_distribution(R_gripper2base, t_gripper2base):
@@ -662,7 +725,7 @@ def plot_arm_gripper_frames(all_gripper2base_transforms, all_joint_angles, plot_
         joint_angles = joint_angles.tolist()
         
         full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
-        print('full_toolhead_fk (in metres): ', full_toolhead_fk)
+        # print('full_toolhead_fk (in metres): ', full_toolhead_fk)
 
         arm_plot_geometry = plot_open3d_Dorna(xyz_positions_of_all_joints, 
                           extra_geometry_elements=[coordinate_frame_shoulder_height_arm_frame],
@@ -681,6 +744,7 @@ def plot_one_arm_gripper_camera_frame_eye_in_hand(all_gripper2base_transforms, a
     sphere_size = 0.01
     geometry_to_plot = []
     geometry_to_plot.append(origin_arm_frame)
+    # TODO wrong, base2gripper, but inverse?!??!?!
     for idx, gripper_transform in enumerate(all_gripper2base_transforms[:1]):
     # for idx, homo_transform in enumerate(all_base2gripper_transforms):  # TODO why does this look so weird. I don't fully understand enough here
         coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
@@ -694,6 +758,7 @@ def plot_one_arm_gripper_camera_frame_eye_in_hand(all_gripper2base_transforms, a
         geometry_to_plot.append(gripper_sphere)
         geometry_to_plot.append(coordinate_frame)
 
+        # TODO wrong
         combined_transform_from_arm_to_gripper_to_camera = gripper_transform @ gripper2cam
         # TODO verify again and add sphere
         camera_on_gripper_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
