@@ -493,6 +493,85 @@ def optimize_cam2gripper_transform(handeye_data_dict, R_cam2gripper_manual, t_ca
     return R_optimized, t_optimized
 
 
+def verify_transform_chain(handeye_data_dict, saved_cam2arm):
+    """Verify each transform in the calibration chain makes physical sense."""
+    
+    # 1. Verify gripper2base transforms
+    R_gripper2base = handeye_data_dict['R_gripper2base']
+    t_gripper2base = handeye_data_dict['t_gripper2base']
+    
+    print("\n=== Gripper to Base Transform Verification ===")
+    print("First gripper position in base frame:", t_gripper2base[0])
+    print("Expected: Roughly 0.3-0.4m in x forward, minimal y/z if centered")
+    
+    # Check if transforms are in expected ranges
+    max_expected_gripper_distance = 0.5  # 50cm - adjust based on your robot
+    if np.any(np.abs(t_gripper2base) > max_expected_gripper_distance):
+        print("WARNING: Gripper positions seem too far from base!")
+    
+    # 2. Verify target2cam transforms
+    R_target2cam = handeye_data_dict['R_target2cam']
+    t_target2cam = handeye_data_dict['t_target2cam']
+    
+    print("\n=== Target to Camera Transform Verification ===")
+    print("First marker position in camera frame:", t_target2cam[0])
+    print("Expected: Z should be positive (marker in front of camera)")
+    print("Expected: X,Y should be centered if marker is centered in image")
+    
+    # Check if marker is in front of camera
+    if np.any(t_target2cam[:, 2] < 0):
+        print("WARNING: Some markers appear behind camera! Check target2cam transforms")
+    
+    # 3. Verify final cam2gripper transform
+    print("\n=== Camera to Gripper Transform Verification ===")
+    R_cam2gripper = saved_cam2arm[:3, :3]
+    t_cam2gripper = saved_cam2arm[:3, 3]
+    
+    print("Final camera position in gripper frame:", t_cam2gripper)
+    print("Expected: Should match physical mounting distances (~10cm offsets)")
+    
+    # Check if transform seems reasonable
+    max_expected_camera_offset = 0.2  # 20cm - adjust based on your setup
+    if np.any(np.abs(t_cam2gripper) > max_expected_camera_offset):
+        print("WARNING: Camera offset from gripper seems too large!")
+    
+    # 4. Verify rotation matrices are valid
+    def verify_rotation_matrix(R, name):
+        # Check orthogonality
+        if not np.allclose(np.dot(R, R.T), np.eye(3), atol=1e-6):
+            print(f"WARNING: {name} is not orthogonal!")
+        # Check determinant
+        if not np.allclose(np.linalg.det(R), 1.0, atol=1e-6):
+            print(f"WARNING: {name} determinant is not 1!")
+    
+    verify_rotation_matrix(R_gripper2base[0], "First gripper2base rotation")
+    verify_rotation_matrix(R_target2cam[0], "First target2cam rotation")
+    verify_rotation_matrix(R_cam2gripper, "Final cam2gripper rotation")
+    
+    # 5. Verify AX=XB equation
+    print("\n=== AX=XB Equation Verification ===")
+    for i in range(len(R_gripper2base)):
+        # Build transforms
+        A = np.eye(4)
+        A[:3, :3] = R_gripper2base[i]
+        A[:3, 3] = t_gripper2base[i]
+        
+        X = saved_cam2arm
+        
+        B = np.eye(4)
+        B[:3, :3] = R_target2cam[i]
+        B[:3, 3] = t_target2cam[i]
+        
+        # Compare AX and XB
+        AX = np.dot(A, X)
+        XB = np.dot(X, B)
+        error = np.linalg.norm(AX - XB)
+        if error > 0.1:  # adjust threshold as needed
+            print(f"Large AX=XB error at pose {i}: {error}")
+    
+    return True
+
+
 def check_pose_distribution(R_gripper2base, t_gripper2base):
     """Check if calibration poses are well-distributed"""
     # Convert rotations to euler angles
