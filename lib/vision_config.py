@@ -52,6 +52,15 @@ if open3d_import_success:
     pinhole_camera_intrinsic = o3d.camera.PinholeCameraIntrinsic(
             int(width), int(height), 611.61332568, 610.36491859, 340.21606321, 239.2910932)
 
+
+# TODO the below did not help the visualisation
+# FOR UNDISTORTED IMAGE NUMBER 1
+# # [[595.28527832   0.         332.01177657]
+# #  [  0.         580.76373291 224.44863934]
+# #  [  0.           0.           1.        ]]
+# pinhole_camera_intrinsic = o3d.camera.PinholeCameraIntrinsic(
+#     int(width), int(height), 595.28527832, 580.76373291, 332.01177657, 224.44863934)
+
 # directly from depth/color intrinsics from factory
 # camera_matrix = np.array([[depth_intrin.fx, 0., depth_intrin.ppx],
 #                           [0., depth_intrin.fy, depth_intrin.ppy],
