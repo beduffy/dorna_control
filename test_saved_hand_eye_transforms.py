@@ -20,7 +20,7 @@ from scipy import optimize
 
 from lib.handeye_opencv_wrapper import handeye_calibrate_opencv, \
     load_all_handeye_data, plot_all_handeye_data, test_transformations, \
-        verify_calibration, optimize_cam2gripper_transform
+        verify_calibration, optimize_cam2gripper_transform, verify_transform_chain
 
 np.set_printoptions(suppress=True)
 
@@ -53,7 +53,11 @@ saved_cam2arm = handeye_data_dict['saved_cam2arm']
 R_cam2gripper = saved_cam2arm[:3, :3]
 t_cam2gripper = saved_cam2arm[:3, 3]
 verify_calibration(handeye_data_dict, R_cam2gripper, t_cam2gripper)
+verify_transform_chain(handeye_data_dict, saved_cam2arm)
 
+
+
+#########################################
 # # manually specified eye-in-hand transform instead of the above
 # Create rotation matrix for camera orientation (z forward, x right, y down)
 Rx = np.array([[0, 0, 1],
@@ -94,11 +98,15 @@ gripper2cam[:3, 3] = t_gripper2cam_manual
 cam2gripper = np.linalg.inv(gripper2cam)
 R_cam2gripper_manual = cam2gripper[:3, :3]
 t_cam2gripper_manual = cam2gripper[:3, 3]
-# TODO build_transform function since im always :3, 3 in
 manually_measured_transform = cam2gripper
+#########################################
 
-# verify_calibration(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual)
+
+
+#########################################
+
 verify_calibration(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual)
+# TODO build_transform function since im always :3, 3 in
 # TODO my manual ruler gave 2.37 norm error whereas before is was closer to 3
 # TODO could do a random grid search or optimisation or gradient descent to find those 3 numbers
 # TODO more functions above and clean whole file again
@@ -113,25 +121,29 @@ final_transform[:3, 3] = t_optimized
 print("Optimization results:")
 print("Translation (metres):", t_optimized)
 print("Rotation matrix:\n", R_optimized)
+# TODO also verify this optimised transform
 # import pdb;pdb.set_trace()
+#########################################
 
-# plotting three different things in here: 
-# 1. gripper frames in arm frame
+
+# plotting four different things in here: 
+# 1. gripper frames in arm frame + with arm links
 # 2. aruco frames in camera frame
 # 3. transformation of things but problems, unclear TODO
-plot_all_handeye_data(handeye_data_dict, eye_in_hand=eye_in_hand)
+# plot_all_handeye_data(handeye_data_dict, eye_in_hand=eye_in_hand)
 
 # TODO function to check all aruco poses with all cam_pcds
-
 # TODO could do ICP between camera pointclouds to find true transformation of what?
 # TODO could plot two cam pcds over each other but I need to transform each one based on how much we moved e.g. from ICP
-# TODO before the above two things, what can I visualise better to see how off I am?
-# TODO simultaneously do intrinsic calibration to see how wrong that is, also check reprojection error and how distorted my images are
+# TODO could I put camera and aruco board at 90 degree angles and just sanity check my aruco transformation is 90 and then camera should be at 90 degree to gripper or something?
+
+# TODO before the above two things, what can I visualise better to see how off I am? e.g.
 '''
 e.g. could I do multiple positions and fuse pointclouds somehow
 e.g. could I click aruco pose in image (automatically) and what?
-e.g. AX = XB 
+e.g. AX = XB. How can I optimise this for one image? 
 e.g. in eye in hand, ICP of 1st transform to 2nd, is the same for gripper as it is for camera?
+e.g. when arm moves, pointcloud should move with it. gripper transformation from pose 1 to 2 is same as camera transformation
 
 if we are eye-in-hand, and I click a point in image (e.g. aruco center), will multiplying that point by
 cam2gripper bring it to base coordinates or should it be cam2base (cam2gripper combined with gripper2base)? 
