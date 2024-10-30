@@ -123,27 +123,9 @@ def load_all_handeye_data(folder_name):
         img = cv2.imread(fp, cv2.IMREAD_UNCHANGED)
         depth_images.append(img)
 
-    handeye_data_dict = {
-        'all_gripper_rotation_mats': all_gripper_rotation_mats,
-        'all_gripper_tvecs': all_gripper_tvecs,
-        'R_gripper2base': R_gripper2base,
-        't_gripper2base': t_gripper2base,
-        'R_base2gripper': R_base2gripper,
-        't_base2gripper': t_base2gripper,
-        'all_target2cam_rotation_mats': all_target2cam_rotation_mats,
-        'all_target2cam_tvecs': all_target2cam_tvecs,
-        'R_target2cam': R_target2cam,
-        't_target2cam': t_target2cam,
-        'R_cam2target': R_cam2target,
-        't_cam2target': t_cam2target,
-        'color_images': color_images,
-        'depth_images': depth_images,
-        'all_joint_angles': all_joint_angles
-    }
-
     # creating further key-value pairs
     all_base2gripper_transforms = []
-    for R, t in zip(handeye_data_dict['R_base2gripper'], handeye_data_dict['t_base2gripper']):
+    for R, t in zip(R_base2gripper, t_base2gripper):
         T = np.eye(4)
         T[:3, :3] = R
         T[:3, 3] = t
@@ -163,10 +145,27 @@ def load_all_handeye_data(folder_name):
         T[:3, 3] = t
         all_cam2target_transforms.append(T)
 
-    handeye_data_dict['all_gripper2base_transforms'] = all_gripper2base_transforms
-    handeye_data_dict['all_base2gripper_transforms'] = all_base2gripper_transforms
-    handeye_data_dict['all_target2cam_transforms'] = all_target2cam_transforms
-    handeye_data_dict['all_cam2target_transforms'] = all_cam2target_transforms
+    handeye_data_dict = {
+        # 'all_gripper_rotation_mats': all_gripper_rotation_mats,
+        # 'all_gripper_tvecs': all_gripper_tvecs,
+        'R_gripper2base': R_gripper2base,
+        't_gripper2base': t_gripper2base,
+        'R_base2gripper': R_base2gripper,
+        't_base2gripper': t_base2gripper,
+        # 'all_target2cam_rotation_mats': all_target2cam_rotation_mats,
+        # 'all_target2cam_tvecs': all_target2cam_tvecs,
+        'R_target2cam': R_target2cam,
+        't_target2cam': t_target2cam,
+        'R_cam2target': R_cam2target,
+        't_cam2target': t_cam2target,
+        'all_gripper2base_transforms': all_gripper2base_transforms,
+        'all_base2gripper_transforms': all_base2gripper_transforms,
+        'all_target2cam_transforms': all_target2cam_transforms,
+        'all_cam2target_transforms': all_cam2target_transforms,
+        'color_images': color_images,
+        'depth_images': depth_images,
+        'all_joint_angles': all_joint_angles
+    }
 
     return handeye_data_dict
 
@@ -211,13 +210,12 @@ def test_transformations(handeye_data_dict):
     # assert(first_base2gripper_transform @ np.array([0.0, 0.0, 0.0, 1.0]))
     # assert(first_gripper2base_transform @ np.array([0.0, 0.0, 0.0, 1.0]))
     # TODO first_base2gripper_transform is showing negative 4th column translation, is it inverted? seems so
-    # import pdb;pdb.set_trace()
 
     # TODO verifying target2cam vs cam2target might be easy since z is always forward in one: probably cam2target
 
     # Verify input transforms - add debug prints
-    print("Sample gripper2base transform:\n", np.vstack((R_gripper2base[0], t_gripper2base[0].reshape(1,3))))
-    print("Sample target2cam transform:\n", np.vstack((R_target2cam[0], t_target2cam[0].reshape(1,3))))
+    # print("Sample gripper2base transform:\n", np.vstack((R_gripper2base[0], t_gripper2base[0].reshape(1,3))))
+    # print("Sample target2cam transform:\n", np.vstack((R_target2cam[0], t_target2cam[0].reshape(1,3))))
 
     # Verify units are in meters
     # gripper2_base_tvec = t_gripper2base[:3, 3]
@@ -285,6 +283,7 @@ def test_transformations(handeye_data_dict):
     # TODO draw all aruco axes to find instabilities
     # TODO does aruco text below have instabilites from 1 marker or all 12?
     # TODO loop through all pointclouds and aruco transform and then comment function, just a sanity check
+    # TODO just realised first cam_pcd in october 30 dataset does not have aruco on board!!! 
 
     # Undistort the first image using camera matrix and distortion coefficients
     h, w = first_color_image.shape[:2]
@@ -388,6 +387,10 @@ def verify_calibration(handeye_data_dict, R_cam2gripper, t_cam2gripper):
 
         # TODO could I build my own optimisation, beginning with ruler, then do translation and then rotation
     """
+
+    print('Verifying calibration with AX = XB')
+    all_rotation_errors = []
+    all_translation_errors = []
     ## TODO less printing
     for i in range(len(handeye_data_dict['R_gripper2base'])):
         # Build transforms
@@ -417,12 +420,22 @@ def verify_calibration(handeye_data_dict, R_cam2gripper, t_cam2gripper):
         rotation_error = np.linalg.norm(matrix_subtract[:3, :3])
         translation_error = np.linalg.norm(matrix_subtract[:3, 3])
 
+        all_rotation_errors.append(rotation_error)
+        all_translation_errors.append(translation_error)
         # TODO sum all errors and optimise myself
         
         # print(f"Transform pair {i} subtract:\n {matrix_subtract}")
         # print(f"Transform pair {i} error: {full_error:.3f}")
-        print(f"Transform pair {i} rotation_error: {rotation_error:.3f}")  # TODO in radians right or in rotational matrix values?
-        print(f"Transform pair {i} translation_error: {translation_error:.3f}")
+        # print(f"Transform pair {i} rotation_error: {rotation_error:.3f}")  # TODO in radians right or in rotational matrix values?
+        # print(f"Transform pair {i} translation_error: {translation_error:.3f}")
+
+    print(f"Min rotation error: {min(all_rotation_errors):.3f}")
+    print(f"Max rotation error: {max(all_rotation_errors):.3f}")
+    print(f"Avg rotation error: {sum(all_rotation_errors) / len(all_rotation_errors):.3f}")
+    print(f"Min translation error: {min(all_translation_errors):.3f}")
+    print(f"Max translation error: {max(all_translation_errors):.3f}")
+    print(f"Avg translation error: {sum(all_translation_errors) / len(all_translation_errors):.3f}")
+
 
 
 def optimize_cam2gripper_transform(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual):
@@ -530,30 +543,31 @@ def verify_transform_chain(handeye_data_dict, saved_cam2arm):
 
     # when arm moves, pointcloud should move with it. gripper transformation from pose 1 to 2 is same as camera transformation from pose 1 to 2
     # first just check transformation
-    print('\nt_gripper2base[0] and [1]') 
-    print(t_gripper2base[0], t_gripper2base[1])
-    distance_gripper = np.linalg.norm(t_gripper2base[0] - t_gripper2base[1])
-    print('euclidean distance between both gripper positions: {:.3f}'.format(distance_gripper))
+    # TODO should still understand correct and wrong choices below 
+    # print('\nt_gripper2base[0] and [1]') 
+    # print(t_gripper2base[0], t_gripper2base[1])
+    # distance_gripper = np.linalg.norm(t_gripper2base[0] - t_gripper2base[1])
+    # print('euclidean distance between both gripper positions: {:.3f}'.format(distance_gripper))
 
-    print('\nt_base2gripper[0] and [1]') 
-    print(t_base2gripper[0], t_base2gripper[1])
-    distance_gripper = np.linalg.norm(t_base2gripper[0] - t_base2gripper[1])  # TODO euclidean distance is 0?!?!?!
-    print('euclidean distance between both gripper positions: {:.3f}'.format(distance_gripper))
+    # print('\nt_base2gripper[0] and [1]') 
+    # print(t_base2gripper[0], t_base2gripper[1])
+    # distance_gripper = np.linalg.norm(t_base2gripper[0] - t_base2gripper[1])  # TODO euclidean distance is 0?!?!?!
+    # print('euclidean distance between both gripper positions: {:.3f}'.format(distance_gripper))
 
-    print('\nt_base2gripper[1] and [2]') 
-    print(t_base2gripper[1], t_base2gripper[2])
-    distance_gripper = np.linalg.norm(t_base2gripper[1] - t_base2gripper[2])
-    print('euclidean distance between both gripper positions: {:.3f}'.format(distance_gripper))
+    # print('\nt_base2gripper[1] and [2]') 
+    # print(t_base2gripper[1], t_base2gripper[2])
+    # distance_gripper = np.linalg.norm(t_base2gripper[1] - t_base2gripper[2])
+    # print('euclidean distance between both gripper positions: {:.3f}'.format(distance_gripper))
 
-    print('\nt_target2cam[0] and [1]')  # TODO is it cam2target? the camera is moving but the target isn't
-    print(t_target2cam[0], t_target2cam[1])
-    distance_target2cam = np.linalg.norm(t_target2cam[0] - t_target2cam[1])
-    print('euclidean distance between both target2cam positions: {:.3f}'.format(distance_target2cam))
+    # print('\nt_target2cam[0] and [1]')  # TODO is it cam2target? the camera is moving but the target isn't
+    # print(t_target2cam[0], t_target2cam[1])
+    # distance_target2cam = np.linalg.norm(t_target2cam[0] - t_target2cam[1])
+    # print('euclidean distance between both target2cam positions: {:.3f}'.format(distance_target2cam))
 
-    print('\nt_cam2target[0] and [1]')  # TODO is it cam2target? the camera is moving but the target isn't
-    print(t_cam2target[0], t_cam2target[1])
-    distance_cam2target = np.linalg.norm(t_cam2target[0] - t_cam2target[1])
-    print('euclidean distance between both cam2target positions: {:.3f}'.format(distance_cam2target))
+    # print('\nt_cam2target[0] and [1]')  # TODO is it cam2target? the camera is moving but the target isn't
+    # print(t_cam2target[0], t_cam2target[1])
+    # distance_cam2target = np.linalg.norm(t_cam2target[0] - t_cam2target[1])
+    # print('euclidean distance between both cam2target positions: {:.3f}'.format(distance_cam2target))
 
 
     # print('\nt_gripper2base[1] and [2]') 
@@ -763,18 +777,8 @@ def calibrate_camera_intrinsics(images, camera_matrix, dist_coeffs):
 
 
 def plot_all_handeye_data(handeye_data_dict, eye_in_hand=False):
-    all_gripper_rotation_mats = handeye_data_dict['all_gripper_rotation_mats']
-    all_gripper_tvecs = handeye_data_dict['all_gripper_tvecs']
     all_gripper2base_transforms = handeye_data_dict['all_gripper2base_transforms']
-    R_gripper2base = handeye_data_dict['R_gripper2base']
-    t_gripper2base = handeye_data_dict['t_gripper2base']
-    R_base2gripper = handeye_data_dict['R_base2gripper']
-    t_base2gripper = handeye_data_dict['t_base2gripper']
-    all_target2cam_rotation_mats = handeye_data_dict['all_target2cam_rotation_mats']
-    all_target2cam_tvecs = handeye_data_dict['all_target2cam_tvecs']
     all_target2cam_transforms = handeye_data_dict['all_target2cam_transforms']
-    R_target2cam = handeye_data_dict['R_target2cam']
-    t_target2cam = handeye_data_dict['t_target2cam']
     saved_cam2arm = handeye_data_dict['saved_cam2arm']
     all_joint_angles = handeye_data_dict['all_joint_angles']
     color_images = handeye_data_dict['color_images']
@@ -783,9 +787,8 @@ def plot_all_handeye_data(handeye_data_dict, eye_in_hand=False):
     saved_cam2arm = handeye_data_dict['saved_cam2arm']  # assuming handeye_calibrate_opencv has been called
 
     # use color and depth images to create point cloud from first color + depth pair
-    if handeye_data_dict['color_images']:
-        camera_color_img = handeye_data_dict['color_images'][0]
-        camera_depth_img = handeye_data_dict['depth_images'][0]
+    camera_color_img = color_images[0]
+    camera_depth_img = depth_images[0]
     cam_pcd_first_image_pair = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img, pinhole_camera_intrinsic, visualise=False)
     # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd_first_image_pair, saved_cam2arm, in_milimetres=False)
 
