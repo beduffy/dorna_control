@@ -24,7 +24,7 @@ from lib.aruco_image_text import OpenCvArucoImageText
 
 
 def load_all_handeye_data(folder_name):
-    # Open data/handeye folder and then load into dict
+    # Open data/handeye folder and then load all data into handeye_data_dict
     gripper_transform_files = sorted(glob('data/{}/gripper2base*'.format(folder_name)))
     cam2target_files = sorted(glob('data/{}/target2cam*'.format(folder_name)))
     joint_angles_files = sorted(glob('data/{}/joint_angles*'.format(folder_name)))
@@ -45,10 +45,8 @@ def load_all_handeye_data(folder_name):
         gripper2base_rot = gripper_transform[:3, :3]
         all_gripper_rotation_mats.append(gripper2base_rot)
 
-        # gripper2_base_tvec = gripper_transform[:3, 3] / 1000.0
         gripper2_base_tvec = gripper_transform[:3, 3]
-        # all_gripper_tvecs.append(gripper_transform[:3, 3] * 1000.0)  # TODO remove if it makes no sense
-        all_gripper_tvecs.append(gripper2_base_tvec)  # TODO milimetres or not!!!!! everything should be in metres... since that is what the camera is in 1000 milimetres / 1000 is 1m
+        all_gripper_tvecs.append(gripper2_base_tvec)
 
         full_homo_gripper2base = np.identity(4)
         full_homo_gripper2base[:3, :3] = gripper2base_rot
@@ -189,6 +187,26 @@ def test_transformations(handeye_data_dict):
     t_target2cam = handeye_data_dict['t_target2cam']
     R_cam2target = handeye_data_dict['R_cam2target']
     t_cam2target = handeye_data_dict['t_cam2target']
+    all_gripper2base_transforms = handeye_data_dict['all_gripper2base_transforms']
+    all_base2gripper_transforms = handeye_data_dict['all_base2gripper_transforms']
+    all_target2cam_transforms = handeye_data_dict['all_target2cam_transforms']
+    all_cam2target_transforms = handeye_data_dict['all_cam2target_transforms']
+
+    # verify base2gripper and gripper2base mean what I think they mean
+    # gripper2base should bring base to gripper e.g. 0, 0, 0 to usual 0.4 metres in front
+    # TODO not sure how to test but it does that since visualisation uses all_gripper2base_transforms
+    # same with target2cam: transformation from the camera to the target. 0,0,0 to aruco target
+    # TODO same, but visualisation works with target2cam
+    first_gripper2base_transform = all_gripper2base_transforms[0]
+    first_base2gripper_transform = all_base2gripper_transforms[0]
+    print('t_base2gripper[0] (since x forwards should show more positive t): {}'.format(t_base2gripper[0]))
+    print('t_gripper2base[0] (since x forwards should show more negative t to get back from gripper): {}'.format(t_gripper2base[0]))
+    # I thought language of bla2foo would bring points in bla to foo, but i've been bitten before e.g. this says the opposite, oh wait it doesn't:
+    # R_gripper2base	Rotation part extracted from the homogeneous matrix that transforms a point expressed in the gripper frame to the robot base frame
+    # assert(first_base2gripper_transform @ np.array([0.0, 0.0, 0.0, 1.0]))
+    # assert(first_gripper2base_transform @ np.array([0.0, 0.0, 0.0, 1.0]))
+    # TODO first_base2gripper_transform is showing negative 4th column translation, is it inverted? seems so
+    # import pdb;pdb.set_trace()
 
     # Verify input transforms - add debug prints
     print("Sample gripper2base transform:\n", np.vstack((R_gripper2base[0], t_gripper2base[0].reshape(1,3))))
@@ -203,16 +221,6 @@ def test_transformations(handeye_data_dict):
         print('gripper transforms seem to be in metres since no large units above 10 (which would indicate mms)')
 
     check_pose_distribution(R_gripper2base, t_gripper2base)
-
-    all_gripper2base_transforms = handeye_data_dict['all_gripper2base_transforms']
-    all_base2gripper_transforms = handeye_data_dict['all_base2gripper_transforms']
-    all_target2cam_transforms = handeye_data_dict['all_target2cam_transforms']
-    all_cam2target_transforms = handeye_data_dict['all_cam2target_transforms']
-
-    # gripper2base should bring base to gripper e.g. 0, 0, 0 to usual 0.4 metres in front
-    # TODO not sure how to test but it does that since visualisation uses all_gripper2base_transforms
-    # same with target2cam: transformation from the camera to the target. 0,0,0 to aruco target
-    # TODO same, but visualisation works with target2cam
 
     identity_transform = np.eye(4)    
     # gripper2base and base2gripper should multiply to identity
@@ -430,7 +438,7 @@ def calibrate_camera_intrinsics(images, camera_matrix, dist_coeffs):
     before_calibration_rvecs = []
 
     for idx, img in enumerate(images):
-        print('Running aruco + solvepnp on image no. ', idx)
+        # print('Running aruco + solvepnp on image no. ', idx)
         # Use existing ArUco detection pipeline
         camera_color_img_debug = img.copy()
         color_img, tvec, rvec, ids, corners, all_rvec, all_tvec = find_aruco_markers(
@@ -452,7 +460,7 @@ def calibrate_camera_intrinsics(images, camera_matrix, dist_coeffs):
         objpoints.append(obj_points)
         imgpoints.append(img_points)
 
-    print('Finished loading all object and image points. Running calibration')
+    print('Finished loading all object and image points. Running intrinsic calibration')
     # Get image dimensions from first image
     height, width = images[0].shape[:2]
 
@@ -768,11 +776,11 @@ def handeye_calibrate_opencv(handeye_data_dict, folder_name, eye_in_hand=True):
     full_homo_RT = np.identity(4)
     if eye_in_hand:
         # eye-in-hand
-        # TODO outputs below are actually R_cam2gripper, t_cam2gripper
         # R_cam2base_est, t_cam2base_est = cv2.calibrateHandEye(R_gripper2base, t_gripper2base,
-        R_cam2gripper, t_cam2gripper = cv2.calibrateHandEye(R_gripper2base, t_gripper2base,
-                                                            #   R_cam2target, t_cam2target, method=method)
-                                                              R_target2cam, t_target2cam, method=method)  # this was so much better to above? and also more correct according to transforms
+        # R_cam2gripper, t_cam2gripper = cv2.calibrateHandEye(R_gripper2base, t_gripper2base,
+        R_cam2gripper, t_cam2gripper = cv2.calibrateHandEye(R_base2gripper, t_base2gripper,
+                                                              R_cam2target, t_cam2target, method=method)
+                                                            #   R_target2cam, t_target2cam, method=method)  # this was so much better to above? and also more correct according to transforms
         full_homo_RT[:3, :3] = R_cam2gripper
         full_homo_RT[:3, 3] = t_cam2gripper.T
     else:
