@@ -20,7 +20,8 @@ from scipy import optimize
 
 from lib.handeye_opencv_wrapper import handeye_calibrate_opencv, \
     load_all_handeye_data, test_transformations, \
-        verify_calibration, optimize_cam2gripper_transform, verify_transform_chain
+        verify_calibration, optimize_cam2gripper_transform, \
+            optimize_cam2gripper_transform_individual, verify_transform_chain
 from lib.handeye_plotting import plot_all_handeye_data
 
 
@@ -44,25 +45,24 @@ folder_name = '30_10_2024_11_02_54'  # 30 images, much  more dorna movement and 
 
 handeye_data_dict = load_all_handeye_data(folder_name)
 
-# TODO could recalculate all opencv transforms, and with undistortion TODO make sure RGB and not BGR?
 test_transformations(handeye_data_dict)  # TODO just moved above handeye but maybe should separate recalculate transformations with undistortion with new func
-
 
 handeye_calibrate_opencv(handeye_data_dict, folder_name, eye_in_hand=eye_in_hand)
 
-saved_cam2arm = handeye_data_dict['saved_cam2arm']
+saved_cam2gripper = handeye_data_dict['saved_cam2gripper']
 
-R_cam2gripper = saved_cam2arm[:3, :3]
-t_cam2gripper = saved_cam2arm[:3, 3]
+R_cam2gripper = saved_cam2gripper[:3, :3]
+t_cam2gripper = saved_cam2gripper[:3, 3]
 verify_calibration(handeye_data_dict, R_cam2gripper, t_cam2gripper)
-verify_transform_chain(handeye_data_dict, saved_cam2arm)
+verify_transform_chain(handeye_data_dict, saved_cam2gripper)
 
-
+# TODO rename all cam2gripper vs gripper2base stuff
 
 #########################################
 
 def verify_manully_measured_transform(handeye_data_dict):
     # TODO could I build tool in rviz or open3d and keep moving and checking AX = XB error? would help me understand everything better
+    # TODO even use 6 numbers with input(). Verify + visualise everytime
     # TODO im measuring gripper2cam but need cam2gripper, can visualisation deceive me i.e. visualisation looks good but it's wrong
 
     # manually specified eye-in-hand transform instead of the above
@@ -82,15 +82,10 @@ def verify_manully_measured_transform(handeye_data_dict):
     manually_measured_transform = np.eye(4)
     manually_measured_transform[:3, :3] = R
     manually_measured_transform[:3, 3] = [0.025, 0.03, 0.05]  
-    # manually_measured_transform[:3, 3] = [-0.025, -0.03, -0.05]  # invert numbers
-    handeye_data_dict['saved_cam2arm'] = manually_measured_transform
-    print('manually measured cam2gripper \n', handeye_data_dict['saved_cam2arm'])
-    saved_cam2arm = handeye_data_dict['saved_cam2arm']
-
-    # R_cam2gripper_manual = saved_cam2arm[:3, :3]
-    # t_cam2gripper_manual = saved_cam2arm[:3, 3]
-    R_gripper2cam_manual = saved_cam2arm[:3, :3]
-    t_gripper2cam_manual = saved_cam2arm[:3, 3]
+    
+    gripper2cam = manually_measured_transform
+    R_gripper2cam_manual = gripper2cam[:3, :3]
+    t_gripper2cam_manual = gripper2cam[:3, 3]
 
     # Convert gripper2cam to cam2gripper
     gripper2cam = np.eye(4)
@@ -103,7 +98,15 @@ def verify_manully_measured_transform(handeye_data_dict):
     t_cam2gripper_manual = cam2gripper[:3, 3]
     # manually_measured_transform = cam2gripper
 
+    handeye_data_dict['saved_cam2gripper'] = cam2gripper
+    handeye_data_dict['saved_gripper2cam'] = gripper2cam
+    print('manually measured cam2gripper \n', handeye_data_dict['saved_cam2gripper'])
+    # saved_cam2gripper = handeye_data_dict['saved_cam2gripper']
+
     verify_calibration(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual)
+
+    # print('Verifying inverse: gripper2cam')
+    # verify_calibration(handeye_data_dict, R_gripper2cam_manual, t_gripper2cam_manual)
 
     return gripper2cam, cam2gripper, R_cam2gripper_manual, t_cam2gripper_manual
 
@@ -132,8 +135,21 @@ def optimise_and_verify_manual_calibration(handeye_data_dict, R_cam2gripper_manu
     print("Rotation matrix:\n", R_optimized)
     # TODO omg the below is actually lower translation error to everything else...
     verify_calibration(handeye_data_dict, R_optimized, t_optimized)
-    # TODO also verify this optimised transform
-    # import pdb;pdb.set_trace()
+
+    R_optimized, t_optimized = optimize_cam2gripper_transform_individual(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual)
+
+    # Create final transform
+    final_transform = np.eye(4)
+    final_transform[:3, :3] = R_optimized
+    final_transform[:3, 3] = t_optimized
+
+    print("Optimization results individual:")
+    print("Translation (metres):", t_optimized)
+    print("Rotation matrix:\n", R_optimized)
+    # TODO omg the below is actually lower translation error to everything else...
+    # TODO revisit nelder mead and other optimisations
+    verify_calibration(handeye_data_dict, R_optimized, t_optimized)
+
 
 optimise_and_verify_manual_calibration(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual)
 
