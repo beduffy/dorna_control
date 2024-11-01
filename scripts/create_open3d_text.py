@@ -1,5 +1,7 @@
 import open3d as o3d
+from open3d.t.geometry import TriangleMesh
 import numpy as np
+
 
 
 def create_text_visualization():
@@ -51,9 +53,6 @@ def create_text_visualization2():
     vis.destroy_window()
 
 def create_text_so():
-    import open3d as o3d
-    from open3d.t.geometry import TriangleMesh
-
     hello_open3d_mesh: TriangleMesh = o3d.t.geometry.TriangleMesh.create_text("Hello Open3D", depth=0.1).to_legacy()
     hello_open3d_mesh.paint_uniform_color((0.4, 0.1, 0.9))
 
@@ -105,9 +104,52 @@ def main():
 # if __name__ == "__main__:
 #     main()
 
+def set_camera_view(vis):
+    ctr = vis.get_view_control()
+    
+    # Set camera position/view
+    ctr.set_front([0, 0, -1])  # Camera direction
+    ctr.set_lookat([0, 0, 0])  # Point camera looks at
+    ctr.set_up([0, 1, 0])      # Camera up direction
+    ctr.set_zoom(0.7)          # Zoom level
+
+    # Other useful methods:
+    # ctr.rotate(x, y)         # Rotate camera
+    # ctr.translate(x, y)      # Pan camera
+    # ctr.set_constant_z_near(z_near)  # Set near clipping plane
+    # ctr.set_constant_z_far(z_far)  
+
+
+def visualize_with_custom_camera():
+    vis = o3d.visualization.Visualizer()
+    vis.create_window()
+    
+    # Add geometries
+    pcd = o3d.geometry.TriangleMesh.create_coordinate_frame()
+    vis.add_geometry(pcd)
+    
+    # Set initial view
+    ctr = vis.get_view_control()
+    ctr.set_front([1, 0, -1])
+    ctr.set_lookat([0, 0, 0])
+    ctr.set_up([0, 1, 0])
+    ctr.set_zoom(0.8)
+    
+    # Optional: Set render options
+    opt = vis.get_render_option()
+    opt.background_color = np.asarray([0.5, 0.5, 0.5])  # Gray background
+    opt.point_size = 2.0
+    
+    vis.run()
+    vis.destroy_window()
+
+
 if __name__ == "__main__":
     # create_text_visualization()
     # create_text_visualization2()
     # create_text_so()
+
     # https://github.com/isl-org/Open3D/issues/3894
-    main()
+    # main()
+
+    visualize_with_custom_camera()
