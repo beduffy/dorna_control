@@ -204,6 +204,7 @@ def test_transformations(handeye_data_dict):
     # TODO first_base2gripper_transform is showing negative 4th column translation, is it inverted? seems so
 
     # TODO verifying target2cam vs cam2target might be easy since z is always forward in one: probably cam2target
+    # TODO make sure RGB and not BGR?
 
     # Verify input transforms - add debug prints
     # print("Sample gripper2base transform:\n", np.vstack((R_gripper2base[0], t_gripper2base[0].reshape(1,3))))
@@ -462,12 +463,8 @@ def verify_calibration(handeye_data_dict, R_cam2gripper, t_cam2gripper):
         # print(f"Transform pair {i} rotation_error: {rotation_error:.3f}")  # TODO in radians right or in rotational matrix values?
         # print(f"Transform pair {i} translation_error: {translation_error:.3f}")
 
-    print(f"Min rotation error: {min(all_rotation_errors):.3f}")
-    print(f"Max rotation error: {max(all_rotation_errors):.3f}")
-    print(f"Avg rotation error: {sum(all_rotation_errors) / len(all_rotation_errors):.3f}")
-    print(f"Min translation error: {min(all_translation_errors):.3f}")
-    print(f"Max translation error: {max(all_translation_errors):.3f}")
-    print(f"Avg translation error: {sum(all_translation_errors) / len(all_translation_errors):.3f}")
+    print(f"Rotation error. Min: {min(all_rotation_errors):.3f} Max: {max(all_rotation_errors):.3f} Avg: {sum(all_rotation_errors) / len(all_rotation_errors):.3f}")
+    print(f"Translation error. Min {min(all_translation_errors):.3f} Max: {max(all_translation_errors):.3f}. Avg: {sum(all_translation_errors) / len(all_translation_errors):.3f}")
 
 
 
@@ -522,12 +519,16 @@ def optimize_cam2gripper_transform(handeye_data_dict, R_cam2gripper_manual, t_ca
     initial_params = np.concatenate([R_cam2gripper_manual.flatten(), t_cam2gripper_manual])
     
     # Add bounds to keep the optimization reasonable
-    bounds = [(-1, 1)] * 9 + [(-0.2, 0.2)] * 3  # rotation matrix elements between -1,1, translations ±20cm
+    # bounds = [(-1, 1)] * 9 + [(-0.2, 0.2)] * 3  # rotation matrix elements between -1,1, translations ±20cm
+    bounds = [(-1, 1)] * 9 + [(-0.1, 0.1)] * 3  # rotation matrix elements between -1,1, translations ±20cm
     
     # Optimize
+    # result = minimize(error_function, initial_params, 
+    #                  method='SLSQP',  # Changed to SLSQP to handle bounds
+    #                  bounds=bounds)
+    
     result = minimize(error_function, initial_params, 
-                     method='SLSQP',  # Changed to SLSQP to handle bounds
-                     bounds=bounds)
+                     method='Nelder-Mead')
     
     if not result.success:
         print("Warning: Optimization did not converge!")
@@ -544,7 +545,84 @@ def optimize_cam2gripper_transform(handeye_data_dict, R_cam2gripper_manual, t_ca
     return R_optimized, t_optimized
 
 
-def verify_transform_chain(handeye_data_dict, saved_cam2arm):
+def optimize_cam2gripper_transform_individual(handeye_data_dict, R_cam2gripper_manual, t_cam2gripper_manual):
+    def translation_error_function(t_params):
+        # Use fixed rotation
+        R = R_cam2gripper_manual
+        t = np.array(t_params)
+        
+        # Build transform
+        X = np.eye(4)
+        X[:3, :3] = R
+        X[:3, 3] = t
+        
+        total_error = 0
+        for i in range(len(handeye_data_dict['R_gripper2base'])):
+            A = np.eye(4)
+            A[:3, :3] = handeye_data_dict['R_base2gripper'][i]
+            A[:3, 3] = handeye_data_dict['t_base2gripper'][i]
+            
+            B = np.eye(4)
+            B[:3, :3] = handeye_data_dict['R_target2cam'][i]
+            B[:3, 3] = handeye_data_dict['t_target2cam'][i]
+            
+            # Calculate AX-XB error
+            matrix_diff = A @ X - X @ B
+            translation_error = np.linalg.norm(matrix_diff[:3, 3])
+            total_error += translation_error
+        
+        return total_error
+    
+    def rotation_error_function(r_params):
+        # Use fixed translation
+        R = np.array(r_params).reshape(3, 3)
+        t = t_cam2gripper_manual
+        
+        # Build transform
+        X = np.eye(4)
+        X[:3, :3] = R
+        X[:3, 3] = t
+        
+        total_error = 0
+        for i in range(len(handeye_data_dict['R_gripper2base'])):
+            A = np.eye(4)
+            A[:3, :3] = handeye_data_dict['R_base2gripper'][i]
+            A[:3, 3] = handeye_data_dict['t_base2gripper'][i]
+            
+            B = np.eye(4)
+            B[:3, :3] = handeye_data_dict['R_target2cam'][i]
+            B[:3, 3] = handeye_data_dict['t_target2cam'][i]
+            
+            # Calculate AX-XB error
+            matrix_diff = A @ X - X @ B
+            rotation_error = np.linalg.norm(matrix_diff[:3, :3])
+            total_error += rotation_error
+        
+        # Add penalty for non-orthogonal rotation matrix
+        orthogonality_error = np.linalg.norm(R @ R.T - np.eye(3))
+        det_error = abs(np.linalg.det(R) - 1.0)
+        
+        return total_error + 10.0 * (orthogonality_error + det_error)
+    
+    # Optimize translation first
+    translation_bounds = [(-0.1, 0.1)] * 3  # Adjust bounds based on expected translation
+    translation_result = minimize(translation_error_function, t_cam2gripper_manual, method='SLSQP', bounds=translation_bounds)
+    t_optimized = translation_result.x
+    
+    # Optimize rotation next
+    initial_rotation_params = R_cam2gripper_manual.flatten()
+    rotation_bounds = [(-1, 1)] * 9
+    rotation_result = minimize(rotation_error_function, initial_rotation_params, method='SLSQP', bounds=rotation_bounds)
+    R_optimized = rotation_result.x.reshape(3, 3)
+    
+    # Project rotation matrix to closest orthogonal matrix
+    U, _, Vh = np.linalg.svd(R_optimized)
+    R_optimized = U @ Vh
+    
+    return R_optimized, t_optimized
+
+
+def verify_transform_chain(handeye_data_dict, saved_cam2gripper):
     """Verify each transform in the calibration chain makes physical sense."""
     
     # 1. Verify gripper2base transforms
@@ -629,28 +707,28 @@ def verify_transform_chain(handeye_data_dict, saved_cam2arm):
     # TODO but first first few angles I did not rotate/touch wrist. There's of course aruco error too 
     # TODO From 16 to 17: gripper dist: 0.000. camera dist: 0.028
     # From 17 to 18: gripper dist: 0.000. camera dist: 0.041
-    print('\nConsecutive euclidean distances for gripper2base and cam2target')
-    for idx in range(t_gripper2base.shape[0] - 1):
-        distance_gripper = np.linalg.norm(t_gripper2base[idx] - t_gripper2base[idx + 1])
-        distance_cam2target = np.linalg.norm(t_cam2target[idx] - t_cam2target[idx + 1])
-        print('From {} to {}: gripper dist: {:.3f}. camera dist: {:.3f}'.format(idx, idx + 1, distance_gripper, distance_cam2target))
+    # print('\nConsecutive euclidean distances for gripper2base and cam2target')
+    # for idx in range(t_gripper2base.shape[0] - 1):
+    #     distance_gripper = np.linalg.norm(t_gripper2base[idx] - t_gripper2base[idx + 1])
+    #     distance_cam2target = np.linalg.norm(t_cam2target[idx] - t_cam2target[idx + 1])
+    #     print('From {} to {}: gripper dist: {:.3f}. camera dist: {:.3f}'.format(idx, idx + 1, distance_gripper, distance_cam2target))
     
-    # TODO also the meaning of gripper2base is strange since base is fixed
-    # TODO this sometimes returns bigger differences, sometimes very close and then sometimes 0 distance, how is that possible?
-    '''
-    From 12 to 13: gripper dist: 0.198. camera dist: 0.315
-    From 13 to 14: gripper dist: 0.035. camera dist: 0.034
-    From 14 to 15: gripper dist: 0.035. camera dist: 0.035
-    From 15 to 16: gripper dist: 0.035. camera dist: 0.038
-    From 16 to 17: gripper dist: 0.267. camera dist: 0.063
-    From 17 to 18: gripper dist: 0.516. camera dist: 0.116
-    From 18 to 19: gripper dist: 0.000. camera dist: 0.191
-    '''
-    print('\nConsecutive euclidean distances for t_base2gripper and target2cam')
-    for idx in range(t_base2gripper.shape[0] - 1):
-        distance_gripper = np.linalg.norm(t_base2gripper[idx] - t_base2gripper[idx + 1])
-        distance_target2cam = np.linalg.norm(t_target2cam[idx] - t_target2cam[idx + 1])
-        print('From {} to {}: gripper dist: {:.3f}. camera dist: {:.3f}'.format(idx, idx + 1, distance_gripper, distance_target2cam))
+    # # TODO also the meaning of gripper2base is strange since base is fixed
+    # # TODO this sometimes returns bigger differences, sometimes very close and then sometimes 0 distance, how is that possible?
+    # '''
+    # From 12 to 13: gripper dist: 0.198. camera dist: 0.315
+    # From 13 to 14: gripper dist: 0.035. camera dist: 0.034
+    # From 14 to 15: gripper dist: 0.035. camera dist: 0.035
+    # From 15 to 16: gripper dist: 0.035. camera dist: 0.038
+    # From 16 to 17: gripper dist: 0.267. camera dist: 0.063
+    # From 17 to 18: gripper dist: 0.516. camera dist: 0.116
+    # From 18 to 19: gripper dist: 0.000. camera dist: 0.191
+    # '''
+    # print('\nConsecutive euclidean distances for t_base2gripper and target2cam')
+    # for idx in range(t_base2gripper.shape[0] - 1):
+    #     distance_gripper = np.linalg.norm(t_base2gripper[idx] - t_base2gripper[idx + 1])
+    #     distance_target2cam = np.linalg.norm(t_target2cam[idx] - t_target2cam[idx + 1])
+    #     print('From {} to {}: gripper dist: {:.3f}. camera dist: {:.3f}'.format(idx, idx + 1, distance_gripper, distance_target2cam))
 
     # Check if marker is in front of camera
     if np.any(t_target2cam[:, 2] < 0):
@@ -661,8 +739,8 @@ def verify_transform_chain(handeye_data_dict, saved_cam2arm):
     
     # 3. Verify final cam2gripper transform
     print("\n=== Camera to Gripper Transform Verification ===")
-    R_cam2gripper = saved_cam2arm[:3, :3]
-    t_cam2gripper = saved_cam2arm[:3, 3]
+    R_cam2gripper = saved_cam2gripper[:3, :3]
+    t_cam2gripper = saved_cam2gripper[:3, 3]
     
     print("Final camera position in gripper frame:", t_cam2gripper)
     print("Expected: Should match physical mounting distances (~10cm offsets)")
@@ -675,11 +753,22 @@ def verify_transform_chain(handeye_data_dict, saved_cam2arm):
     # 4. Verify rotation matrices are valid
     def verify_rotation_matrix(R, name):
         # Check orthogonality
-        if not np.allclose(np.dot(R, R.T), np.eye(3), atol=1e-6):
+        # if not np.allclose(np.dot(R, R.T), np.eye(3), atol=1e-6):
+        if not np.allclose(np.dot(R, R.T), np.eye(3), atol=1e-1):
             print(f"WARNING: {name} is not orthogonal!")
+            print('name: {}. R: {}'.format(name, R))
+            print('np.dot(R, R.T): ', np.dot(R, R.T))
+            msg = 'EXITED ROTATION orthogonality failed'
+            print(msg)
+            sys.exit(msg)
         # Check determinant
         if not np.allclose(np.linalg.det(R), 1.0, atol=1e-6):
             print(f"WARNING: {name} determinant is not 1!")
+            print('name: {}. R: {}'.format(name, R))
+            print('np.linalg.det(R): {:.7f}'.format(np.linalg.det(R)))
+            # import pdb;pdb.set_trace()
+            sys.exit('EXITED ROTATION determinant failed')
+
     
     verify_rotation_matrix(R_gripper2base[0], "First gripper2base rotation")
     verify_rotation_matrix(R_target2cam[0], "First target2cam rotation")
@@ -694,7 +783,7 @@ def verify_transform_chain(handeye_data_dict, saved_cam2arm):
     #     A[:3, :3] = R_gripper2base[i]
     #     A[:3, 3] = t_gripper2base[i]
         
-    #     X = saved_cam2arm
+    #     X = saved_cam2gripper
         
     #     B = np.eye(4)
     #     B[:3, :3] = R_target2cam[i]
@@ -811,7 +900,7 @@ def calibrate_camera_intrinsics(images, camera_matrix, dist_coeffs):
 
 def handeye_calibrate_opencv(handeye_data_dict, folder_name, eye_in_hand=True):
     '''
-        Modifies handeye_data_dict with saved_cam2arm 
+        Modifies handeye_data_dict with saved_cam2gripper 
     '''
 
     R_gripper2base = handeye_data_dict['R_gripper2base']
@@ -861,8 +950,17 @@ def handeye_calibrate_opencv(handeye_data_dict, folder_name, eye_in_hand=True):
         full_homo_RT[:3, 3] = t_cam2base_est.T
 
     print('Saving handeye (cv2) transform \n{}'.format(full_homo_RT))
-    np.savetxt('data/{}/latest_cv2_cam2arm.txt'.format(folder_name), full_homo_RT, delimiter=' ')
-    handeye_data_dict['saved_cam2arm'] = full_homo_RT  # TODO gotta be careful with naming
+    np.savetxt('data/{}/latest_cv2_cam2gripper.txt'.format(folder_name), full_homo_RT, delimiter=' ')
+    handeye_data_dict['saved_cam2gripper'] = full_homo_RT  # TODO gotta be careful with naming
+    # Invert to get cam2gripper
+    gripper2cam = np.linalg.inv(full_homo_RT)
+
+    handeye_data_dict['saved_cam2gripper'] = full_homo_RT
+    handeye_data_dict['saved_gripper2cam'] = gripper2cam
+
+    if not eye_in_hand:
+        sys.exit('NOT IMPLEMENTED YET')
+        assert()
 
 
 if __name__ == '__main__':
