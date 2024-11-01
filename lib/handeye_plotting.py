@@ -10,112 +10,34 @@ from lib.vision_config import pinhole_camera_intrinsic, camera_matrix, dist_coef
 def plot_all_handeye_data(handeye_data_dict, eye_in_hand=False):
     all_gripper2base_transforms = handeye_data_dict['all_gripper2base_transforms']
     all_target2cam_transforms = handeye_data_dict['all_target2cam_transforms']
-    saved_cam2arm = handeye_data_dict['saved_cam2arm']
+    saved_cam2gripper = handeye_data_dict['saved_cam2gripper']
     all_joint_angles = handeye_data_dict['all_joint_angles']
     color_images = handeye_data_dict['color_images']
     depth_images = handeye_data_dict['depth_images']
 
-    saved_cam2arm = handeye_data_dict['saved_cam2arm']  # assuming handeye_calibrate_opencv has been called
+    saved_cam2gripper = handeye_data_dict['saved_cam2gripper']  # assuming handeye_calibrate_opencv has been called
 
     # use color and depth images to create point cloud from first color + depth pair
     camera_color_img = color_images[0]
     camera_depth_img = depth_images[0]
     cam_pcd_first_image_pair = get_full_pcd_from_rgbd(camera_color_img, camera_depth_img, pinhole_camera_intrinsic, visualise=False)
-    # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd_first_image_pair, saved_cam2arm, in_milimetres=False)
+    # full_arm_pcd, full_pcd_numpy = convert_cam_pcd_to_arm_pcd(cam_pcd_first_image_pair, saved_cam2gripper, in_milimetres=False)
 
-    plot_one_arm_gripper_camera_frame_eye_in_hand(all_gripper2base_transforms, all_joint_angles, gripper2cam=saved_cam2arm)
+
+    if eye_in_hand:
+        saved_gripper2cam = handeye_data_dict['saved_gripper2cam']
+
+    plot_one_arm_gripper_camera_frame_eye_in_hand(all_gripper2base_transforms, all_joint_angles, gripper2cam=saved_gripper2cam)
     
-    plot_arm_gripper_frames(all_gripper2base_transforms, all_joint_angles, plot_camera_on_gripper_if_eye_in_hand=eye_in_hand, gripper2cam=saved_cam2arm)
+    plot_arm_gripper_frames(all_gripper2base_transforms, all_joint_angles, plot_camera_on_gripper_if_eye_in_hand=eye_in_hand, gripper2cam=saved_cam2gripper)
 
     plot_aruco_frames_in_camera_frame(all_target2cam_transforms, cam_pcd_first_image_pair)
 
-    plot_blah(handeye_data_dict, cam_pcd_first_image_pair, saved_cam2arm)
+    plot_blah(handeye_data_dict, cam_pcd_first_image_pair, saved_cam2gripper)
 
-
-def plot_blah(handeye_data_dict, cam_pcd_first_image_pair, saved_cam2arm):
-    # TODO name function to what I want it to do. TODO eye in hand vs eye to hand
-    '''
-    Below I am visualising origin (in camera coordinates) and the arm frame.
-    And pointcloud from camera transformed to arm frame... but that does not make sense?
-    trying a better explanation:
-
-    plotting in camera frame:
-    - origin frame
-    - transformed frame by cam2arm (does not make sense in eye in hand)
-    - gripper frames first transformed by gripper2base and combined with cam2arm
-    - aruco frames but we are already in camera frame
-
-    
-
-    # TODO if eye-in-hand and i manually measure it, what visualisation will show it working or not? or show problems?
-    # TODO clear english of what I want here... 
-    '''
-
-    all_gripper2base_transforms = handeye_data_dict['all_gripper2base_transforms']
-    all_target2cam_transforms = handeye_data_dict['all_target2cam_transforms']
-
-    frame_size = 0.1
-    sphere_size = 0.01
-    # Create a red sphere at the origin frame for clear identification
-    origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=frame_size, origin=[0.0, 0.0, 0.0])
-    origin_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_size, resolution=20)
-    origin_sphere.paint_uniform_color([1, 0, 0])  # Red
-
-    # Create a green sphere at the transformed frame for clear identification
-    transformed_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=frame_size, origin=[0.0, 0.0, 0.0])
-    transformed_frame.transform(saved_cam2arm)
-    transformed_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_size, resolution=20)
-    transformed_sphere.paint_uniform_color([0, 1, 0])  # Green
-    transformed_sphere.transform(saved_cam2arm)  # TODO what am i doing here. I assume transforming origin in camera frame, brings us to arm frame so this coordinate frame should be in base of arm
-
-    geometry_to_plot = []
-    # given transformed frame, now i can also plot all gripper transformations after saved_cam2_arm to see where that frame is
-    for idx, gripper2base_transform in enumerate(all_gripper2base_transforms):
-        # Create coordinate frame for each gripper transform
-        gripper_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-                                        size=frame_size, origin=[0.0, 0.0, 0.0])
-        # combined_transform = np.dot(saved_cam2arm, homo_transform)
-        combined_transform = gripper2base_transform @ saved_cam2arm
-        gripper_coordinate_frame.transform(combined_transform)
-        # gripper_coordinate_frame.transform(saved_cam2arm)
-        # gripper_coordinate_frame.transform(homo_transform)
-
-        # Create a sphere for each gripper transform
-        gripper_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_size)
-        gripper_sphere.paint_uniform_color([0, 0, 1])  # Blue for distinction
-        # gripper_sphere.transform(saved_cam2arm)
-        # gripper_sphere.transform(gripper2base_transform)
-        gripper_sphere.transform(combined_transform)
-
-        # Add the created geometries to the list for plotting
-        geometry_to_plot.append(gripper_sphere)
-        geometry_to_plot.append(gripper_coordinate_frame)
-
-
-    for idx, target2cam_transform in enumerate(all_target2cam_transforms):
-        coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-                                        size=frame_size, origin=[0.0, 0.0, 0.0])
-        coordinate_frame.transform(target2cam_transform)
-
-        sphere = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_size)
-        sphere.transform(target2cam_transform)
-        geometry_to_plot.append(sphere)
-        geometry_to_plot.append(coordinate_frame)
-
-        # # Adding text to the plot for better identification
-        # text_position = np.array(homo_transform)[0:3, 3] + np.array([0, 0, sphere_size * 2])  # Positioning text above the sphere
-        # text = f"Frame {idx}"
-        # text_3d = o3d.geometry.Text3D(text, position=text_position, font_size=10, density=1, font_path="OpenSans-Regular.ttf")
-        # geometry_to_plot.append(text_3d)
-
-    print('Visualising origin, transformed frame and spheres and coordinate frames')  # TODO what are we doing here?
-    # TODO rename transformed frame and understand which frame is which frame
-    # list_of_geometry_elements = [origin_frame, transformed_frame, origin_sphere, transformed_sphere] + geometry_to_plot
-    # list_of_geometry_elements = [full_arm_pcd, origin_frame, transformed_frame, origin_sphere, transformed_sphere] + geometry_to_plot
-    list_of_geometry_elements = [cam_pcd_first_image_pair, origin_frame, transformed_frame, origin_sphere, transformed_sphere] + geometry_to_plot
-    # list_of_geometry_elements = [origin_frame_transformed_from_camera_frame, camera_coordinate_frame] + arm_position_coord_frames
-    o3d.visualization.draw_geometries(list_of_geometry_elements)
-
+################### 
+# Arm and gripper frame plotting
+###################
 
 def plot_arm_gripper_frames(all_gripper2base_transforms, all_joint_angles, plot_camera_on_gripper_if_eye_in_hand=False, gripper2cam=None):
     # TODO clean entire function, comments etc, hard to think about
@@ -198,11 +120,17 @@ def plot_one_arm_gripper_camera_frame_eye_in_hand(all_gripper2base_transforms, a
     shoulder_height_in_mm = 206.01940000000002 / 1000.0
     coordinate_frame_shoulder_height_arm_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
         size=0.3, origin=[0.0, 0.0, shoulder_height_in_mm])
-    for idx, joint_angles in enumerate(all_joint_angles[:1]):
+    for idx, joint_angles in enumerate(all_joint_angles[:1]):  # only first
         joint_angles = joint_angles.tolist()
         
         full_toolhead_fk, xyz_positions_of_all_joints = f_k(joint_angles)
         # print('full_toolhead_fk (in metres): ', full_toolhead_fk)
+
+        # sanity check, also plot sphere using first 3 IK xyz coordinates
+        another_gripper_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=0.01)
+        another_gripper_sphere.paint_uniform_color([0, 1, 1])
+        another_gripper_sphere.translate(full_toolhead_fk[:3])
+        geometry_to_plot.append(another_gripper_sphere)
 
         arm_plot_geometry = plot_open3d_Dorna(xyz_positions_of_all_joints, 
                           extra_geometry_elements=[coordinate_frame_shoulder_height_arm_frame],
@@ -212,6 +140,11 @@ def plot_one_arm_gripper_camera_frame_eye_in_hand(all_gripper2base_transforms, a
 
     print('Visualising line mesh arms + gripper frames + arm origin frame in arm frame')
     o3d.visualization.draw_geometries(geometry_to_plot)
+
+
+################### 
+# Aruco camera frame plotting
+###################
 
 
 def plot_aruco_frames_in_camera_frame(all_target2cam_transforms, cam_pcd):
@@ -272,3 +205,94 @@ def plot_every_cam_pcd_and_aruco_marker(color_images, depth_images, all_target2c
         geometry_to_plot.append(cam_pcd)
         print('{}: Visualising camera origin and aruco frames in camera frame (with first cam_pcd)'.format(idx))
         o3d.visualization.draw_geometries(geometry_to_plot)
+
+
+
+################### 
+# Attempt at plotting arm and camera frame with transformations
+###################
+
+
+def plot_blah(handeye_data_dict, cam_pcd_first_image_pair, saved_cam2gripper):
+    # TODO name function to what I want it to do. TODO eye in hand vs eye to hand
+    '''
+    Below I am visualising origin (in camera coordinates) and the arm frame.
+    And pointcloud from camera transformed to arm frame... but that does not make sense?
+    trying a better explanation:
+
+    plotting in camera frame:
+    - origin frame
+    - transformed frame by cam2arm (does not make sense in eye in hand)
+    - gripper frames first transformed by gripper2base and combined with cam2arm
+    - aruco frames but we are already in camera frame
+
+    
+
+    # TODO if eye-in-hand and i manually measure it, what visualisation will show it working or not? or show problems?
+    # TODO clear english of what I want here... 
+    '''
+
+    all_gripper2base_transforms = handeye_data_dict['all_gripper2base_transforms']
+    all_target2cam_transforms = handeye_data_dict['all_target2cam_transforms']
+
+    frame_size = 0.1
+    sphere_size = 0.01
+    # Create a red sphere at the origin frame for clear identification
+    origin_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=frame_size, origin=[0.0, 0.0, 0.0])
+    origin_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_size, resolution=20)
+    origin_sphere.paint_uniform_color([1, 0, 0])  # Red
+
+    # Create a green sphere at the transformed frame for clear identification
+    transformed_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=frame_size, origin=[0.0, 0.0, 0.0])
+    transformed_frame.transform(saved_cam2gripper)
+    transformed_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_size, resolution=20)
+    transformed_sphere.paint_uniform_color([0, 1, 0])  # Green
+    transformed_sphere.transform(saved_cam2gripper)  # TODO what am i doing here. I assume transforming origin in camera frame, brings us to arm frame so this coordinate frame should be in base of arm
+
+    geometry_to_plot = []
+    # given transformed frame, now i can also plot all gripper transformations after saved_cam2_arm to see where that frame is
+    for idx, gripper2base_transform in enumerate(all_gripper2base_transforms):
+        # Create coordinate frame for each gripper transform
+        gripper_coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+                                        size=frame_size, origin=[0.0, 0.0, 0.0])
+        # combined_transform = np.dot(saved_cam2gripper, homo_transform)
+        combined_transform = gripper2base_transform @ saved_cam2gripper
+        gripper_coordinate_frame.transform(combined_transform)
+        # gripper_coordinate_frame.transform(saved_cam2gripper)
+        # gripper_coordinate_frame.transform(homo_transform)
+
+        # Create a sphere for each gripper transform
+        gripper_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_size)
+        gripper_sphere.paint_uniform_color([0, 0, 1])  # Blue for distinction
+        # gripper_sphere.transform(saved_cam2gripper)
+        # gripper_sphere.transform(gripper2base_transform)
+        gripper_sphere.transform(combined_transform)
+
+        # Add the created geometries to the list for plotting
+        geometry_to_plot.append(gripper_sphere)
+        geometry_to_plot.append(gripper_coordinate_frame)
+
+
+    for idx, target2cam_transform in enumerate(all_target2cam_transforms):
+        coordinate_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+                                        size=frame_size, origin=[0.0, 0.0, 0.0])
+        coordinate_frame.transform(target2cam_transform)
+
+        sphere = o3d.geometry.TriangleMesh.create_sphere(radius=sphere_size)
+        sphere.transform(target2cam_transform)
+        geometry_to_plot.append(sphere)
+        geometry_to_plot.append(coordinate_frame)
+
+        # # Adding text to the plot for better identification
+        # text_position = np.array(homo_transform)[0:3, 3] + np.array([0, 0, sphere_size * 2])  # Positioning text above the sphere
+        # text = f"Frame {idx}"
+        # text_3d = o3d.geometry.Text3D(text, position=text_position, font_size=10, density=1, font_path="OpenSans-Regular.ttf")
+        # geometry_to_plot.append(text_3d)
+
+    print('Visualising origin, transformed frame and spheres and coordinate frames')  # TODO what are we doing here?
+    # TODO rename transformed frame and understand which frame is which frame
+    # list_of_geometry_elements = [origin_frame, transformed_frame, origin_sphere, transformed_sphere] + geometry_to_plot
+    # list_of_geometry_elements = [full_arm_pcd, origin_frame, transformed_frame, origin_sphere, transformed_sphere] + geometry_to_plot
+    list_of_geometry_elements = [cam_pcd_first_image_pair, origin_frame, transformed_frame, origin_sphere, transformed_sphere] + geometry_to_plot
+    # list_of_geometry_elements = [origin_frame_transformed_from_camera_frame, camera_coordinate_frame] + arm_position_coord_frames
+    o3d.visualization.draw_geometries(list_of_geometry_elements)
