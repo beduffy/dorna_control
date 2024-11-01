@@ -1,3 +1,5 @@
+import time
+
 import open3d as o3d
 from open3d.t.geometry import TriangleMesh
 import numpy as np
@@ -144,6 +146,101 @@ def visualize_with_custom_camera():
     vis.destroy_window()
 
 
+
+
+
+def visualize_with_custom_camera2():
+    vis = o3d.visualization.Visualizer()
+    vis.create_window()
+    
+    # Add geometries
+    pcd = o3d.geometry.TriangleMesh.create_coordinate_frame()
+    vis.add_geometry(pcd)
+    
+    # Set initial view
+    ctr = vis.get_view_control()
+    ctr.set_front([1, 0, -1])
+    ctr.set_lookat([0, 0, 0])
+    ctr.set_up([0, 1, 0])
+    ctr.set_zoom(0.8)
+    
+    # Optional: Set render options
+    opt = vis.get_render_option()
+    opt.background_color = np.asarray([0.5, 0.5, 0.5])
+    opt.point_size = 2.0
+    
+    # Animation loop
+    while True:
+        # Check if window is closed
+        if not vis.poll_events():
+            break
+            
+        # Example: Rotate camera slowly around Y axis
+        current_time = time.time()
+        angle = current_time % (2 * np.pi)  # Full rotation
+        
+        # Update camera position
+        ctr.set_front([np.sin(angle), 0, np.cos(angle)])
+        
+        # Update visualization
+        vis.update_renderer()
+        
+        # Optional: Add small delay
+        time.sleep(0.01)
+    
+    vis.destroy_window()
+
+
+def visualize_with_custom_camera3():
+    vis = o3d.visualization.Visualizer()
+    vis.create_window()
+    
+    # Add geometries
+    pcd = o3d.geometry.TriangleMesh.create_coordinate_frame()
+    vis.add_geometry(pcd)
+    
+    # Set initial view
+    ctr = vis.get_view_control()
+    initial_cam_pos = [1, 0, -1]
+    ctr.set_front(initial_cam_pos)
+    ctr.set_lookat([0, 0, 0])
+    ctr.set_up([0, 1, 0])
+    ctr.set_zoom(0.8)
+    
+    # Camera control variables
+    cam_pos = initial_cam_pos
+    rotation_speed = 0.02
+    is_rotating = False
+    
+    def key_callback(vis, action, mods):
+        nonlocal is_rotating
+        if action == ord('R'):  # Press 'R' to toggle rotation
+            is_rotating = not is_rotating
+            return True
+        return False
+    
+    def animation_callback(vis):
+        nonlocal cam_pos
+        if is_rotating:
+            # Rotate camera around Y axis
+            angle = rotation_speed
+            x, y, z = cam_pos
+            cam_pos = [
+                x * np.cos(angle) + z * np.sin(angle),
+                y,
+                -x * np.sin(angle) + z * np.cos(angle)
+            ]
+            ctr.set_front(cam_pos)
+        return False
+    
+    # Register callbacks
+    vis.register_key_callback(ord('R'), key_callback)
+    vis.register_animation_callback(animation_callback)
+    
+    # Run visualization
+    vis.run()
+    vis.destroy_window()
+
 if __name__ == "__main__":
     # create_text_visualization()
     # create_text_visualization2()
@@ -152,4 +249,5 @@ if __name__ == "__main__":
     # https://github.com/isl-org/Open3D/issues/3894
     # main()
 
-    visualize_with_custom_camera()
+    # visualize_with_custom_camera()
+    visualize_with_custom_camera2()
