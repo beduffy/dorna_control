@@ -91,6 +91,7 @@ def show_matplotlib_all_charuco(board):
 def calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=0.058, marker_separation=0.0065):
     half_marker_len = marker_length / 2
 
+    # TODO redundancy overwriting code wtf? maybe i had to do it to get something? always ways to make it cleaner though
     ids_list = [l[0] for l in ids.tolist()]
     ids_list_with_index_key_tuple = [(idx, id_) for idx, id_ in enumerate(ids_list)]
     ids_list_sorted = sorted(ids_list_with_index_key_tuple, key=lambda x: x[1])
@@ -98,6 +99,7 @@ def calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=0.0
     ids_list = [x[0] for x in ids.tolist()]
     for idx_of_marker, id_of_marker in ids_list_sorted:
         image_points.append(corners[idx_of_marker].squeeze())
+    # print(ids_list)
 
     num_ids_to_draw = 12
     id_1_rvec, id_1_tvec = None, None
@@ -139,14 +141,28 @@ def calculate_pnp_12_markers(corners, ids, all_rvec, all_tvec, marker_length=0.0
     # after finding all object and image points, run PnP to get best homogenous transform
     input_obj_points_concat = np.concatenate(all_obj_points_found_from_id_1)
     input_img_points_concat = np.concatenate(image_points)
-    outval, rvec_pnp_opt, tvec_pnp_opt = cv2.solvePnP(input_obj_points_concat, input_img_points_concat, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_IPPE)
+    outval, rvec_pnp_pnp, tvec_pnp_pnp = cv2.solvePnP(input_obj_points_concat, input_img_points_concat, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_IPPE)
     # TODO better understand insides of that function and have good descriptions of cam2arm vs arm2cam.
-    cam2arm_opt, arm2cam_opt, _, _, _ = create_homogenous_transformations(tvec_pnp_opt, rvec_pnp_opt)
+    # TODO RENAME from cam2arm etc, cam2target?
+    cam2target_opt, target2cam_opt, _, _, _ = create_homogenous_transformations(tvec_pnp_pnp, rvec_pnp_pnp)
 
-    return cam2arm_opt, arm2cam_opt, tvec_pnp_opt, rvec_pnp_opt, input_obj_points_concat, input_img_points_concat
+    # TODO i thought one of these would bring z to 0?!?!? 
+    # import pdb; pdb.set_trace()
+    # cam2target_opt @ np.array([0.0, 0.0, 0.0, 1.0])
+    # array([ 0.1297885 , -0.83078823,  0.40148635,  1.        ])
+    # target2cam_opt @ np.array([0.0, 0.0, 0.0, 1.0])
+    # array([-0.16972043,  0.15944508,  0.90222928,  1.        ])
+
+    # cam2target_opt @ target2cam_opt  # at least this works, flipping it works too
+    # array([[1., 0., 0., 0.],
+    #     [0., 1., 0., 0.],
+    #     [0., 0., 1., 0.],
+    #     [0., 0., 0., 1.]])
+
+    return cam2target_opt, target2cam_opt, tvec_pnp_pnp, rvec_pnp_pnp, input_obj_points_concat, input_img_points_concat
 
 
-def find_aruco_markers(color_img, aruco_dict, parameters, marker_length, id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug):
+def find_aruco_markers(color_img, aruco_dict, parameters, marker_length, id_on_shoulder_motor, opencv_aruco_image_text, camera_color_img_debug, newcameramtx=None):
     # global ids, corners, all_rvec, all_tvec
     # TODO clean all code and better var names but for now I'm taking it out of here to avoid globals and begin this process
     # TODO less output and less params
@@ -159,7 +175,10 @@ def find_aruco_markers(color_img, aruco_dict, parameters, marker_length, id_on_s
     corners, ids, rejectedImgPoints = aruco.detectMarkers(gray_data, aruco_dict,
                                                                 parameters=parameters)
     frame_markers = aruco.drawDetectedMarkers(camera_color_img_debug, corners, ids)
-    all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
+    if newcameramtx is not None:  # when undistorting new camera matrix has to be used
+        all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, newcameramtx, dist_coeffs)
+    else:
+        all_rvec, all_tvec, _ = aruco.estimatePoseSingleMarkers(corners, marker_length, camera_matrix, dist_coeffs)
 
     if all_rvec is not None:
         ids_list = [l[0] for l in ids.tolist()]
